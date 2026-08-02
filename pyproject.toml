@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = [
   "anyio>=4.0",
-  "mcp[cli]>=1.0.0",
+  "mcp[cli]>=2,<3",
   "numpy>=1.26",
   "osmium>=4.3,<5",
   "Pillow>=10.0",

@@ -641,8 +641,17 @@ def write_teacher_connection_plan(
                 or not _connection_edges_are_adjacent(child, patched_edge_endpoints)
             ):
                 continue
-            connected_lanes_by_source.setdefault(source, set()).add(int(child.attrib.get("fromLane", "0") or 0))
-            connected_lanes_by_target.setdefault(target, set()).add(int(child.attrib.get("toLane", "0") or 0))
+            source_lane = int(child.attrib.get("fromLane", "0") or 0)
+            target_lane = int(child.attrib.get("toLane", "0") or 0)
+            if not (
+                candidate_lane_classes.get(source, {}).get(source_lane, set())
+                & candidate_lane_classes.get(target, {}).get(target_lane, set())
+                & _sumo_allowed_classes(dict(child.attrib))
+                & ROAD_MOTORIZED_CLASSES
+            ):
+                continue
+            connected_lanes_by_source.setdefault(source, set()).add(source_lane)
+            connected_lanes_by_target.setdefault(target, set()).add(target_lane)
     structural_missing_lanes_by_source = {
         source: (
             candidate_vehicle_lane_indices.get(source, set())
@@ -650,7 +659,7 @@ def write_teacher_connection_plan(
             else set(range(candidate_lane_counts.get(source, 0)))
         )
         - connected_lanes_by_source.get(source, set())
-        for source in target_incoming_edges & set(edge_map.values())
+        for source in target_incoming_edges
     }
     structural_missing_lanes_by_source = {
         source: lanes for source, lanes in structural_missing_lanes_by_source.items() if lanes
@@ -662,7 +671,7 @@ def write_teacher_connection_plan(
             else set(range(candidate_lane_counts.get(target, 0)))
         )
         - connected_lanes_by_target.get(target, set())
-        for target in target_outgoing_edges & set(edge_map.values())
+        for target in target_outgoing_edges
     }
     structural_missing_lanes_by_target = {
         target: lanes for target, lanes in structural_missing_lanes_by_target.items() if lanes
@@ -738,10 +747,6 @@ def write_teacher_connection_plan(
             and (
                 set(patched_edge_endpoints.get(child.attrib.get("from", ""), ())) & structural_scope
                 or set(patched_edge_endpoints.get(child.attrib.get("to", ""), ())) & structural_scope
-            )
-            and (
-                child.attrib.get("from", "") not in teacher_authority_candidate_edges
-                or child.attrib.get("to", "") not in teacher_authority_candidate_edges
             )
         ):
             source_edge_id = child.attrib.get("from", "")
@@ -859,6 +864,7 @@ def write_teacher_connection_plan(
     structural_emitted_lanes_by_target: dict[str, set[int]] = {}
     lane_clamps = []
     skipped_nonadjacent_teacher_connections = []
+    skipped_incompatible_teacher_connections = []
     skipped_off_scope_internal_connections = []
     teacher_internal_scope_prefix = f":{teacher_internal_scope_id}_" if teacher_internal_scope_id else ""
     for connection in teacher_model.get("vehicle_connections", []) or []:
@@ -866,8 +872,8 @@ def write_teacher_connection_plan(
             continue
         teacher_source = str(connection.get("from", ""))
         teacher_target = str(connection.get("to", ""))
-        source = edge_map.get(teacher_source)
-        target = edge_map.get(teacher_target)
+        source = edge_map.get(teacher_source, teacher_source)
+        target = edge_map.get(teacher_target, teacher_target)
         if not source or not target:
             continue
         via = str(connection.get("via", ""))
@@ -904,6 +910,21 @@ def write_teacher_connection_plan(
             candidate_vehicle_lane_indices or {},
             candidate_lane_counts,
         )
+        if generate_structural_connections:
+            source_classes = candidate_lane_classes.get(source, {}).get(from_lane, set())
+            target_classes = candidate_lane_classes.get(target, {}).get(to_lane, set())
+            if source_classes and target_classes and not source_classes & target_classes:
+                skipped_incompatible_teacher_connections.append(
+                    {
+                        "from": source,
+                        "to": target,
+                        "fromLane": from_lane,
+                        "toLane": to_lane,
+                        "teacher_from": teacher_source,
+                        "teacher_to": teacher_target,
+                    }
+                )
+                continue
         if generate_structural_connections and not (
             from_lane in structural_missing_lanes_by_source.get(source, set())
             or to_lane in structural_missing_lanes_by_target.get(target, set())
@@ -1033,6 +1054,8 @@ def write_teacher_connection_plan(
         "skipped_off_scope_internal_connections": skipped_off_scope_internal_connections,
         "skipped_nonadjacent_teacher_connection_count": len(skipped_nonadjacent_teacher_connections),
         "skipped_nonadjacent_teacher_connections": skipped_nonadjacent_teacher_connections,
+        "skipped_incompatible_teacher_connection_count": len(skipped_incompatible_teacher_connections),
+        "skipped_incompatible_teacher_connections": skipped_incompatible_teacher_connections,
         "structural_connection_generation": generate_structural_connections,
         "structural_regenerated_source_edge_count": len(structural_regenerated_source_edges),
         "structural_regenerated_source_edge_ids": sorted(structural_regenerated_source_edges),
@@ -2027,6 +2050,7 @@ def write_teacher_target_internal_replay_net(
     preserve_mapped_boundary_endpoints: bool = False,
     preserve_unmapped_boundary_edges: bool = False,
     prune_unmapped_micro_boundary_edges: bool = False,
+    prune_strict_unmapped_outgoing_boundary_edges: bool = False,
     preserve_target_junction_shape: bool = False,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
@@ -3009,8 +3033,9 @@ def write_teacher_target_internal_replay_net(
         teacher_internal_prefix,
         internal_prefix,
     )
-    if preserve_target_junction_shape and original_target_junction_shape:
-        mapped_target_attrs["shape"] = original_target_junction_shape
+    preserved_target_shape = _safe_junction_shape(original_target_junction_shape or "")
+    if preserve_target_junction_shape and preserved_target_shape:
+        mapped_target_attrs["shape"] = preserved_target_shape
         if original_target_custom_shape is not None:
             mapped_target_attrs["customShape"] = original_target_custom_shape
         else:
@@ -3204,6 +3229,18 @@ def write_teacher_target_internal_replay_net(
             junction_id=junction_id,
             mapped_candidate_edge_ids=set(replay_edge_map.values()),
         )
+    strict_unmapped_boundary_prune_report = {
+        "status": "skipped",
+        "policy": "strict replay only: remove unmapped non-motorized outgoing boundary edges with movement evidence absent from the teacher",
+        "removed_edge_ids": [],
+        "removed_connection_count": 0,
+    }
+    if prune_strict_unmapped_outgoing_boundary_edges:
+        strict_unmapped_boundary_prune_report = _prune_strict_unmapped_outgoing_boundary_edges(
+            candidate_root,
+            junction_id=junction_id,
+            mapped_candidate_edge_ids=set(replay_edge_map.values()),
+        )
 
     unblended_geometry_anchor_edge_ids = geometry_anchor_edge_ids - set(blended_geometry_anchor_edge_ids)
     if geometry_anchor_edge_ids and not unblended_geometry_anchor_edge_ids:
@@ -3218,6 +3255,8 @@ def write_teacher_target_internal_replay_net(
             junction_id,
             unblended_geometry_anchor_edge_ids,
         )
+
+    junction_shape_sanitization = _sanitize_junction_shapes(candidate_root)
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -3236,9 +3275,11 @@ def write_teacher_target_internal_replay_net(
         "preserve_mapped_boundary_endpoints": preserve_mapped_boundary_endpoints,
         "preserve_unmapped_boundary_edges": preserve_unmapped_boundary_edges,
         "prune_unmapped_micro_boundary_edges": prune_unmapped_micro_boundary_edges,
+        "prune_strict_unmapped_outgoing_boundary_edges": prune_strict_unmapped_outgoing_boundary_edges,
         "invalid_edge_map_entry_count": len(invalid_edge_map_entries),
         "invalid_edge_map_entries": invalid_edge_map_entries,
         "micro_boundary_prune": micro_boundary_prune_report,
+        "strict_unmapped_boundary_prune": strict_unmapped_boundary_prune_report,
         "preserve_target_junction_shape": preserve_target_junction_shape,
         "skipped_unmapped_teacher_boundary_edge_count": len(skipped_unmapped_teacher_boundary_edges),
         "skipped_unmapped_teacher_boundary_edges": skipped_unmapped_teacher_boundary_edges,
@@ -3315,6 +3356,7 @@ def write_teacher_target_internal_replay_net(
         "restored_geometry_anchor_junction_count": len(restored_geometry_anchor_junctions),
         "restored_geometry_anchor_junctions": restored_geometry_anchor_junctions,
         "target_shape_anchor": target_shape_anchor_report,
+        "junction_shape_sanitization": junction_shape_sanitization,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
         "copied_boundary_junctions": copied_boundary_junctions,
         "skipped_boundary_edge_count": len(skipped_boundary_edges),
@@ -5573,7 +5615,7 @@ def restore_scoped_pedestrian_internal_semantics_after_normalize(
         target_edge_id = replacement.attrib.get("id", "")
         existing = target_edges.get(target_edge_id)
         if existing is None:
-            target_root.append(replacement)
+            target_root.insert(_first_junction_index(target_root), replacement)
             target_edges[target_edge_id] = replacement
             added_edge_ids.append(target_edge_id)
             continue
@@ -5610,6 +5652,13 @@ def restore_scoped_pedestrian_internal_semantics_after_normalize(
             connection.attrib.get(attr, "") for attr in ("from", "to", "fromLane", "toLane", "via", "tl", "linkIndex")
         )
 
+    removed_target_pedestrian_connections = []
+    for connection in list(target_root.findall("connection")):
+        if connection.attrib.get("from", "") in mapped_source_edge_ids or connection.attrib.get(
+            "to", ""
+        ) in mapped_source_edge_ids:
+            removed_target_pedestrian_connections.append(dict(connection.attrib))
+            target_root.remove(connection)
     target_connections = {connection_key(connection): connection for connection in target_root.findall("connection")}
     added_connection_count = 0
     updated_connection_count = 0
@@ -5680,6 +5729,8 @@ def restore_scoped_pedestrian_internal_semantics_after_normalize(
         "added_pedestrian_edge_ids": added_edge_ids,
         "added_pedestrian_connection_count": added_connection_count,
         "updated_pedestrian_connection_count": updated_connection_count,
+        "removed_target_pedestrian_connection_count": len(removed_target_pedestrian_connections),
+        "removed_target_pedestrian_connections": removed_target_pedestrian_connections,
         "missing_pedestrian_edge_ids": missing_edge_ids,
         "missing_pedestrian_connection_keys": missing_connection_keys,
         "missing_crossing_edge_refs": missing_crossing_edge_refs,
@@ -5706,6 +5757,7 @@ def build_teacher_guided_junction_variant(
     source_conflict_core_node_ids: list[str] | None = None,
     replay_target_internal_subgraph: bool = False,
     preserve_teacher_lane_shapes: bool = True,
+    preserve_target_junction_shape: bool = False,
     structural_osm_boundary_authority: bool = False,
     safety_junction_ids: Sequence[str] = (),
     teacher_absent_tls_junction_ids: Sequence[str] = (),
@@ -6084,6 +6136,7 @@ def build_teacher_guided_junction_variant(
         crossing_edge_overrides=crossing_edge_overrides,
     )
     target_internal_pedestrian_ring_report = None
+    structural_pedestrian_normalize_report = None
     if structural_osm_boundary_authority and not replay_target_internal_subgraph:
         target_internal_pedestrian_ring_report = restore_scoped_pedestrian_internal_semantics_after_normalize(
             source_net_file=teacher_net_file,
@@ -6092,6 +6145,43 @@ def build_teacher_guided_junction_variant(
             source_junction_id=teacher_junction_id,
             edge_map=edge_map,
         )
+        structural_pedestrian_normalize_report = _command_report(
+            command_runner(
+                [
+                    netconvert_binary,
+                    "--sumo-net-file",
+                    _command_path(pedring_net_file, output_dir),
+                    "--output-file",
+                    _command_path(target_internal_pedring_net_file, output_dir),
+                    "--offset.disable-normalization",
+                    "true",
+                ],
+                cwd=output_dir,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+        if structural_pedestrian_normalize_report.get("status") != "pass":
+            return _write_teacher_guided_report(
+                report_file,
+                {
+                    "status": "fail",
+                    "claim_status": "construction-invalid",
+                    "junction_id": junction_id,
+                    "teacher_net_file": str(teacher_net_file),
+                    "candidate_net_file": str(candidate_net_file),
+                    "pedestrian_ring": pedestrian_ring_report,
+                    "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
+                    "structural_pedestrian_normalize": structural_pedestrian_normalize_report,
+                },
+            )
+        target_internal_pedestrian_ring_report = restore_scoped_pedestrian_internal_semantics_after_normalize(
+            source_net_file=teacher_net_file,
+            target_net_file=target_internal_pedring_net_file,
+            junction_id=junction_id,
+            source_junction_id=teacher_junction_id,
+            edge_map=edge_map,
+        )
+        pedring_net_file = target_internal_pedring_net_file
     vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
         candidate_net_file=pedring_net_file,
         output_file=vehicle_attrs_net_file,
@@ -6126,8 +6216,12 @@ def build_teacher_guided_junction_variant(
             # geometry is only a semantic template: retain the candidate
             # boundary shapes so every lane still reaches its real endpoint.
             # Single-junction replay keeps teacher geometry for parity.
-            geometry_anchor_edge_file=(candidate_net_file if len(joined_source_node_ids) > 1 else None),
-            blend_geometry_anchor_at_target=len(joined_source_node_ids) > 1,
+            geometry_anchor_edge_file=(
+                candidate_net_file
+                if len(joined_source_node_ids) > 1 and not preserve_target_junction_shape
+                else None
+            ),
+            blend_geometry_anchor_at_target=len(joined_source_node_ids) > 1 and not preserve_target_junction_shape,
             # Strict TUM replay retains teacher-only modal boundary edges when
             # their transformed endpoints exist; default hybrid replay keeps
             # the candidate boundary and reports unmapped edges instead.
@@ -6135,6 +6229,8 @@ def build_teacher_guided_junction_variant(
             preserve_mapped_boundary_endpoints=True,
             preserve_unmapped_boundary_edges=strict_teacher_replay,
             prune_unmapped_micro_boundary_edges=strict_teacher_replay,
+            prune_strict_unmapped_outgoing_boundary_edges=strict_teacher_replay,
+            preserve_target_junction_shape=preserve_target_junction_shape,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -6594,11 +6690,17 @@ def build_teacher_guided_junction_variant(
     boundary_edge_preservation_by_junction = {}
     boundary_vehicle_connectivity_by_junction = {}
     micro_boundary_excluded_edge_ids = set()
+    strict_unmapped_boundary_excluded_edge_ids = set()
     if isinstance(target_internal_replay_report, dict):
         micro_report = target_internal_replay_report.get("micro_boundary_prune", {})
         if isinstance(micro_report, dict):
             micro_boundary_excluded_edge_ids = {
                 str(edge_id) for edge_id in micro_report.get("removed_edge_ids", []) if str(edge_id)
+            }
+        strict_report = target_internal_replay_report.get("strict_unmapped_boundary_prune", {})
+        if isinstance(strict_report, dict):
+            strict_unmapped_boundary_excluded_edge_ids = {
+                str(edge_id) for edge_id in strict_report.get("removed_edge_ids", []) if str(edge_id)
             }
     for compound_junction_id in compound_junction_ids:
         if compound_junction_id not in final_junction_ids:
@@ -6622,11 +6724,16 @@ def build_teacher_guided_junction_variant(
             edge_id: "unmapped_motorized_boundary_micro_edge"
             for edge_id in sorted(raw_missing_boundary_edge_ids & micro_boundary_excluded_edge_ids)
         }
+        strict_unmapped_boundary_exclusions = {
+            edge_id: "unmapped_non_motorized_outgoing_boundary_edge"
+            for edge_id in sorted(raw_missing_boundary_edge_ids & strict_unmapped_boundary_excluded_edge_ids)
+        }
         missing_boundary_edge_ids = sorted(
             raw_missing_boundary_edge_ids
             - set(internalized_boundary_edge_aliases)
             - set(replaced_boundary_edge_aliases)
             - set(micro_boundary_exclusions)
+            - set(strict_unmapped_boundary_exclusions)
         )
         boundary_edge_preservation_by_junction[compound_junction_id] = {
             "status": "pass" if not missing_boundary_edge_ids else "fail",
@@ -6636,7 +6743,10 @@ def build_teacher_guided_junction_variant(
             "missing_boundary_edge_ids": missing_boundary_edge_ids,
             "internalized_boundary_edge_aliases": dict(sorted(internalized_boundary_edge_aliases.items())),
             "replaced_boundary_edge_aliases": dict(sorted(replaced_boundary_edge_aliases.items())),
-            "excluded_with_reason": micro_boundary_exclusions,
+            "excluded_with_reason": {
+                **micro_boundary_exclusions,
+                **strict_unmapped_boundary_exclusions,
+            },
             "added_boundary_edge_ids": sorted(final_boundary_edge_ids - source_boundary_edge_ids),
         }
         boundary_vehicle_connectivity_by_junction[compound_junction_id] = _boundary_vehicle_connectivity(
@@ -6699,6 +6809,7 @@ def build_teacher_guided_junction_variant(
             baseline_report_file=baseline_surface_overlap_report_file,
             baseline_expected_net_file=candidate_net_file,
             lane_edge_aliases=contraction_edge_aliases,
+            allow_non_motorized_lane_overlaps=strict_teacher_replay,
         )
         for compound_junction_id in compound_junction_ids
         if compound_junction_id in final_junction_ids
@@ -6861,6 +6972,7 @@ def build_teacher_guided_junction_variant(
             else "",
             "target_internal_replay_file": str(target_internal_replay_file) if replay_target_internal_subgraph else "",
             "target_internal_replay_fallback": target_internal_replay_fallback,
+            "preserve_target_junction_shape": preserve_target_junction_shape,
             "target_internal_replay_fallback_net_file": str(fallback_net_file)
             if target_internal_replay_fallback
             else "",
@@ -6892,6 +7004,7 @@ def build_teacher_guided_junction_variant(
             "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
             "target_internal_normalize": target_internal_normalize_report,
             "teacher_guided_normalize": teacher_guided_normalize_report,
+            "structural_pedestrian_normalize": structural_pedestrian_normalize_report,
             "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
             "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
             "tl_logic": tl_logic_report,
@@ -8152,6 +8265,7 @@ def run_teacher_guided_repair_queue(
                         preserve_teacher_lane_shapes=(
                             False if strict_teacher_replay else not use_full_network_join_patch_replay
                         ),
+                        preserve_target_junction_shape=strict_teacher_replay,
                         structural_osm_boundary_authority=(
                             use_full_network_join_patch_replay and not strict_teacher_replay
                         ),
@@ -9310,6 +9424,81 @@ def _shape_points(shape: str) -> list[tuple[float, float]]:
         except ValueError:
             continue
     return points
+
+
+def _safe_junction_shape(shape: str) -> str | None:
+    """Keep finite valid points; repair SUMO sentinel/self-intersecting shapes."""
+
+    tokens = [token for token in shape.split() if "," in token]
+    points = [
+        (x, y)
+        for x, y in _shape_points(shape)
+        if math.isfinite(x) and math.isfinite(y) and abs(x) <= 1_000_000 and abs(y) <= 1_000_000
+    ]
+    if len(points) < 3:
+        return None
+    polygon = Polygon(points)
+    if polygon.is_valid and polygon.area > 0 and len(points) == len(tokens):
+        return " ".join(tokens)
+    points = _convex_hull(points)
+    if len(points) < 3:
+        return None
+    return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
+
+
+def _sanitize_junction_shapes(root: ET.Element) -> dict[str, object]:
+    """Prevent one invalid SUMO shape from making the whole GUI viewport unusable."""
+
+    repaired_ids: list[str] = []
+    invalid_shape_count = 0
+    for junction in root.findall("junction"):
+        junction_id = str(junction.attrib.get("id", ""))
+        try:
+            center_x = float(junction.attrib.get("x", ""))
+            center_y = float(junction.attrib.get("y", ""))
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(center_x) and math.isfinite(center_y)):
+            continue
+        changed = False
+        for attribute in ("shape", "customShape"):
+            original = junction.attrib.get(attribute)
+            if not original or (attribute == "customShape" and "," not in original):
+                continue
+            tokens = [token for token in original.split() if "," in token]
+            points = _shape_points(original)
+            has_unusable_coordinate = (
+                len(points) != len(tokens)
+                or not points
+                or any(
+                    not (math.isfinite(x) and math.isfinite(y))
+                    or abs(x) > 1_000_000
+                    or abs(y) > 1_000_000
+                    for x, y in points
+                )
+            )
+            if not has_unusable_coordinate:
+                continue
+            if has_unusable_coordinate:
+                invalid_shape_count += 1
+                radius = 0.5
+                safe = (
+                    f"{center_x - radius:.2f},{center_y - radius:.2f} "
+                    f"{center_x + radius:.2f},{center_y - radius:.2f} "
+                    f"{center_x + radius:.2f},{center_y + radius:.2f} "
+                    f"{center_x - radius:.2f},{center_y + radius:.2f}"
+                )
+            if safe != original:
+                junction.attrib[attribute] = safe
+                changed = True
+        if changed:
+            repaired_ids.append(junction_id)
+    return {
+        "status": "pass",
+        "repaired_count": len(repaired_ids),
+        "repaired_junction_ids": repaired_ids,
+        "invalid_shape_count": invalid_shape_count,
+    }
 
 
 def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, object]:
@@ -11170,6 +11359,7 @@ def _target_surface_overlap_gate(
     baseline_report_file: Path | None = None,
     baseline_expected_net_file: Path | None = None,
     lane_edge_aliases: dict[str, str] | None = None,
+    allow_non_motorized_lane_overlaps: bool = False,
 ) -> dict[str, object]:
     report_identity, audited_report = _surface_report_identity(
         report,
@@ -11202,20 +11392,77 @@ def _target_surface_overlap_gate(
             item.get("second_junction_id", ""),
         }
     ]
-    lane_non_owner_overlaps = [
-        item
-        for item in audited_report.get("external_lane_non_owner_junction_overlaps", []) or []
-        if isinstance(item, dict) and item.get("non_owner_junction_id") == junction_id
-    ]
-    lane_target_owner_overlaps = [
+    lane_overlap_candidates = [
         item
         for item in audited_report.get("external_lane_non_owner_junction_overlaps", []) or []
         if isinstance(item, dict)
-        and junction_id
+        and (
+            item.get("non_owner_junction_id") == junction_id
+            or junction_id
+            in {
+                item.get("from_junction_id", ""),
+                item.get("to_junction_id", ""),
+            }
+        )
+    ]
+    lane_classes_by_id: dict[str, set[str]] = {}
+    if allow_non_motorized_lane_overlaps:
+        try:
+            expected_root = ET.parse(expected_net_file).getroot()
+        except (ET.ParseError, OSError):
+            expected_root = None
+        if expected_root is not None:
+            for edge in expected_root.findall("edge"):
+                for lane in edge.findall("lane"):
+                    lane_id = str(lane.attrib.get("id", ""))
+                    if lane_id:
+                        lane_classes_by_id[lane_id] = _sumo_allowed_classes({**edge.attrib, **lane.attrib})
+
+    def is_authorized_non_motorized_overlap(item: dict[str, Any]) -> bool:
+        if not allow_non_motorized_lane_overlaps:
+            return False
+        classes = lane_classes_by_id.get(str(item.get("lane_id", "")), set())
+        return bool(classes) and not classes & ROAD_MOTORIZED_CLASSES and classes <= {"bicycle", "pedestrian"}
+
+    authorized_non_motorized_overlaps = [
+        item for item in lane_overlap_candidates if is_authorized_non_motorized_overlap(item)
+    ]
+    authorized_non_motorized_overlap_keys = {
+        (
+            str(item.get("lane_id", "")),
+            str(item.get("non_owner_junction_id", "")),
+            str(item.get("from_junction_id", "")),
+            str(item.get("to_junction_id", "")),
+        )
+        for item in authorized_non_motorized_overlaps
+    }
+    lane_non_owner_overlaps = [
+        item
+        for item in lane_overlap_candidates
+        if item.get("non_owner_junction_id") == junction_id
+        and (
+            str(item.get("lane_id", "")),
+            str(item.get("non_owner_junction_id", "")),
+            str(item.get("from_junction_id", "")),
+            str(item.get("to_junction_id", "")),
+        )
+        not in authorized_non_motorized_overlap_keys
+    ]
+    lane_target_owner_overlaps = [
+        item
+        for item in lane_overlap_candidates
+        if junction_id
         in {
             item.get("from_junction_id", ""),
             item.get("to_junction_id", ""),
         }
+        and (
+            str(item.get("lane_id", "")),
+            str(item.get("non_owner_junction_id", "")),
+            str(item.get("from_junction_id", "")),
+            str(item.get("to_junction_id", "")),
+        )
+        not in authorized_non_motorized_overlap_keys
     ]
     if baseline_report is not None and baseline_report_file is not None and baseline_expected_net_file is not None:
         baseline_identity, audited_baseline_report = _surface_report_identity(
@@ -11318,6 +11565,8 @@ def _target_surface_overlap_gate(
         "geometry_errors": geometry_errors,
         "junction_overlap_count": len(junction_overlaps),
         "junction_overlaps": junction_overlaps,
+        "authorized_non_motorized_overlap_count": len(authorized_non_motorized_overlap_keys),
+        "authorized_non_motorized_overlaps": authorized_non_motorized_overlaps,
         "lane_non_owner_overlap_count": len(lane_non_owner_overlaps),
         "lane_non_owner_overlaps": lane_non_owner_overlaps,
         "lane_non_owner_regression_count": len(regressed_lane_non_owner_overlaps),
@@ -15066,6 +15315,56 @@ def _prune_unmapped_micro_boundary_edges(
         "removed_edge_ids": removed_edge_ids,
         "removed_connection_count": removed_connections,
         "protected_edge_ids": sorted(protected),
+    }
+
+
+def _prune_strict_unmapped_outgoing_boundary_edges(
+    root: ET.Element,
+    *,
+    junction_id: str,
+    mapped_candidate_edge_ids: set[str],
+) -> dict[str, object]:
+    """Remove modal outgoing approaches that have no teacher movement mapping."""
+
+    edges_by_id = {
+        edge.attrib["id"]: edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and not edge.attrib["id"].startswith(":")
+        and not edge.attrib.get("function")
+    }
+    candidate_edge_ids = set(mapped_candidate_edge_ids)
+    removable_edge_ids = []
+    for edge_id, edge in edges_by_id.items():
+        if edge_id in candidate_edge_ids or edge.attrib.get("from") != junction_id:
+            continue
+        lane_classes = set().union(
+            *(
+                _sumo_allowed_classes({**edge.attrib, **lane.attrib})
+                for lane in edge.findall("lane")
+            )
+        ) if edge.findall("lane") else set()
+        if not lane_classes or lane_classes & ROAD_MOTORIZED_CLASSES or "bicycle" not in lane_classes:
+            continue
+        if not any(connection.attrib.get("from") == edge_id for connection in root.findall("connection")):
+            continue
+        removable_edge_ids.append(edge_id)
+
+    removed_connection_count = 0
+    removable = set(removable_edge_ids)
+    for connection in list(root.findall("connection")):
+        if {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removable:
+            root.remove(connection)
+            removed_connection_count += 1
+    for edge_id in removable_edge_ids:
+        edge = edges_by_id[edge_id]
+        _remove_edge_lanes_from_destination_junction(root, edge, all_junctions=True)
+        root.remove(edge)
+    return {
+        "status": "pass",
+        "policy": "strict replay only: remove unmapped non-motorized outgoing boundary edges with movement evidence absent from the teacher",
+        "removed_edge_ids": sorted(removable_edge_ids),
+        "removed_connection_count": removed_connection_count,
     }
 
 

@@ -141,7 +141,7 @@ def test_fastmcp_schema_constrains_netedit_operation_action_and_object_type() ->
 
     async def schema() -> dict[str, object]:
         registered = await create_server().list_tools()
-        return next(tool.inputSchema for tool in registered if tool.name == "sumo_netedit_session")
+        return next(tool.input_schema for tool in registered if tool.name == "sumo_netedit_session")
 
     properties = anyio.run(schema)["properties"]
 
@@ -155,6 +155,20 @@ def test_fastmcp_schema_constrains_netedit_operation_action_and_object_type() ->
         "connection",
         "tlLogic",
     }
+
+
+def test_recenter_view_action_maps_to_home_key() -> None:
+    action = tools._core_action(
+        "recenter_view",
+        expected_screenshot_sha256="a" * 64,
+        x=None,
+        y=None,
+        to_x=None,
+        to_y=None,
+    )
+
+    assert action["type"] == "key"
+    assert action["virtual_key"] == 0x24
 
 
 def test_act_maps_only_one_named_atomic_action_and_finalize_releases_session(tmp_path: Path) -> None:

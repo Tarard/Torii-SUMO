@@ -30,7 +30,13 @@ def test_launch_netedit_uses_compiled_network_option_and_never_plain_node_option
 
     command, kwargs = calls[0]
     assert report["status"] == "pass"
-    assert command == ["C:/SUMO/bin/netedit.exe", "--sumo-net-file", str(net_file)]
+    assert command == [
+        "C:/SUMO/bin/netedit.exe",
+        "--sumo-net-file",
+        str(net_file),
+        "--registry-viewport",
+        "false",
+    ]
     assert "-n" not in command
     assert kwargs["shell"] is False
 
@@ -173,6 +179,11 @@ def _patch_target_session_runtime(
     monkeypatch.setattr(netedit, "_capture_target_window", capture)
     monkeypatch.setattr(netedit, "_client_size", lambda hwnd: (800, 600))
     monkeypatch.setattr(netedit, "_perform_real_input", perform_input)
+    monkeypatch.setattr(
+        netedit,
+        "_ensure_english_window_layout",
+        lambda _hwnd: {"status": "pass", "layout_name": "00000409", "changed_by_torii": False},
+    )
     monkeypatch.setattr(
         netedit,
         "_enable_per_monitor_dpi_awareness",
@@ -516,11 +527,18 @@ def test_f7_requires_frozen_exact_selection_and_first_edit_action(
 
     opened = session.open()
     selection.write_text("junction:unrelated\n", encoding="utf-8")
+    recentered = session.act(
+        {
+            "type": "key",
+            "virtual_key": 0x24,
+            "expected_screenshot_sha256": opened["screenshot_sha256"],
+        }
+    )
     merged = session.act(
         {
             "type": "key",
             "virtual_key": 0x76,
-            "expected_screenshot_sha256": opened["screenshot_sha256"],
+            "expected_screenshot_sha256": recentered["screenshot_sha256"],
         }
     )
 
@@ -639,6 +657,11 @@ def test_real_input_waits_for_target_and_requires_context_restore(
     monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
     monkeypatch.setattr(
         netedit,
+        "_ensure_english_window_layout",
+        lambda _hwnd: {"status": "pass", "layout_name": "00000409", "changed_by_torii": False},
+    )
+    monkeypatch.setattr(
+        netedit,
         "_assert_physical_input_idle",
         lambda _action: {"status": "idle", "checked_virtual_keys": []},
     )
@@ -668,6 +691,87 @@ def test_real_input_waits_for_target_and_requires_context_restore(
     assert sleeps == [0.25]
 
 
+def test_real_input_requires_and_records_english_keyboard_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGui:
+        @staticmethod
+        def GetForegroundWindow():
+            return 42
+
+        @staticmethod
+        def IsChild(parent, child):
+            return parent == 42 and child == 43
+
+    layout = {"status": "pass", "layout_name": "00000409", "changed_by_torii": False}
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(
+        netedit,
+        "_assert_physical_input_idle",
+        lambda _action: {"status": "idle", "checked_virtual_keys": []},
+    )
+    monkeypatch.setattr(
+        netedit,
+        "_activate_target_window",
+        lambda _hwnd, _pid: {"previous_foreground_hwnd": 7, "previous_focus_hwnd": 7, "previous_cursor": [1, 2]},
+    )
+    monkeypatch.setattr(netedit, "_ensure_english_window_layout", lambda _hwnd: layout)
+    monkeypatch.setattr(netedit, "_send_inputs", lambda inputs: len(inputs))
+    monkeypatch.setattr(netedit, "_gui_focus", lambda _hwnd: 43)
+    monkeypatch.setattr(netedit, "_restore_input_context", lambda _context: {"restored": True})
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    report = netedit._perform_real_input(
+        42,
+        9001,
+        {"type": "key", "virtual_key": ord("I"), "modifier_keys": []},
+    )
+
+    assert report["keyboard_layout"] == layout
+
+
+def test_ensure_english_window_layout_switches_non_english_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contexts = iter(
+        [
+            {"status": "blocked", "layout_name": "00000407", "primary_language_id": 0x07},
+            {"status": "pass", "layout_name": "00000409", "primary_language_id": 0x09},
+        ]
+    )
+    messages = []
+
+    class Loader:
+        argtypes = None
+        restype = None
+
+        def __call__(self, name, _flags):
+            assert name == "00000409"
+            return 0x409
+
+    class User32:
+        LoadKeyboardLayoutW = Loader()
+
+    class FakeGui:
+        @staticmethod
+        def SendMessage(hwnd, message, _wparam, lparam):
+            messages.append((hwnd, message, lparam))
+
+    monkeypatch.setattr(netedit, "_keyboard_layout_context", lambda _hwnd: next(contexts))
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+
+    class Windll:
+        user32 = User32()
+
+    monkeypatch.setattr(netedit.ctypes, "windll", Windll())
+
+    result = netedit._ensure_english_window_layout(99)
+
+    assert result["changed_by_torii"] is True
+    assert result["layout_name"] == "00000409"
+    assert messages == [(99, 0x0050, 0x409)]
+
+
 def test_partial_input_is_released_and_context_is_restored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -685,6 +789,11 @@ def test_partial_input_is_released_and_context_is_restored(
         lambda _action: {"status": "idle", "checked_virtual_keys": []},
     )
     monkeypatch.setattr(netedit, "_activate_target_window", lambda _hwnd, _pid: {"context": True})
+    monkeypatch.setattr(
+        netedit,
+        "_ensure_english_window_layout",
+        lambda _hwnd: {"status": "pass", "layout_name": "00000409", "changed_by_torii": False},
+    )
     monkeypatch.setattr(
         netedit,
         "_send_inputs",

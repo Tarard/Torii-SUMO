@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import anyio
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from .tools.environment_tools import sumo_get_environment, sumo_preflight
 from .tools.demand_tools import (
@@ -86,11 +86,12 @@ from .tools.osm_tools import (
 )
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
 from .tools.netedit_tools import sumo_netedit_session
+from .tools.tum_style_tools import sumo_tum_style_closed_loop
 from .tools.workflow_tools import torii_auto_workflow
 
 
-def create_server() -> FastMCP:
-    server = FastMCP("Torii")
+def create_server() -> MCPServer:
+    server = MCPServer("Torii")
 
     server.tool(description="Return Python and SUMO environment discovery evidence.")(sumo_get_environment)
     server.tool(description="Run SUMO environment preflight and return a construction-check report.")(sumo_preflight)
@@ -110,6 +111,7 @@ def create_server() -> FastMCP:
     server.tool(description="Control the single hash-bound NetEdit diagnostic session with open, observe, act, finalize, or abort. Open requires immutable source/candidate/output paths and source SHA; F7 additionally requires a frozen selection and declared junction identities. Observe returns viewport evidence and persisted XML state. Act accepts one whitelisted mouse or shortcut action plus the last screenshot SHA. Finalize saves and runs SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits; abort closes the session. The source stays immutable and promotion is always blocked.")(
         sumo_netedit_session
     )
+    server.tool(description="Advance one hash-bound TUM-style correction loop around the existing NetEdit/MCP session: start or begin from the current accepted candidate, record one atomic edit with before/after evidence and an audit decision, derive the next corrective action, or rollback without overwriting the canonical baseline.")(sumo_tum_style_closed_loop)
     server.tool(description="Conditionally route one natural-language SUMO request to the narrow Phase-1 synthetic four-way scene workflow or existing OSM, TLS/network review, routeability, debugging, and experiment paths.")(
         torii_auto_workflow
     )

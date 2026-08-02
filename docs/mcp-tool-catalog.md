@@ -1,6 +1,6 @@
 # Torii MCP Tool Catalog
 
-Torii currently registers 74 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+Torii currently registers 75 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
 
 The implementation boundary is consistent across groups:
 
@@ -27,6 +27,7 @@ Use these for environment discovery, controlled execution, baseline/variant chec
 ## NetEdit GUI Candidate Session
 
 - `sumo_netedit_session`
+- `sumo_tum_style_closed_loop`
 
 This is one grouped session tool, inspired by the recurring scene/document/
 object/viewport/edit lifecycle in [Blender MCP](https://github.com/ahujasid/blender-mcp),
@@ -50,6 +51,13 @@ keeps automatic promotion blocked. Torii deliberately omits arbitrary Python,
 C#, shell, or caller-exposed raw Win32 execution surfaces. The current local Codex
 integration renders the screenshot artifact with its local image viewer; the tool
 does not yet embed pixels as generic MCP `ImageContent`.
+
+`sumo_tum_style_closed_loop` is the companion ledger for a TUM-style teaching
+run. It keeps one accepted candidate SHA as the next iteration's parent,
+records one atomic NetEdit/MCP action with before/after evidence and audits,
+derives a concrete next correction when evidence is incomplete, and can restore
+the parent artifact. It never overwrites the canonical baseline and never turns
+GUI evidence into automatic promotion.
 
 ## OSM Construction and User-Facing Review
 

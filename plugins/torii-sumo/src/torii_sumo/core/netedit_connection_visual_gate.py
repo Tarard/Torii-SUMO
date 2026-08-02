@@ -1,0 +1,342 @@
+from __future__ import annotations
+
+import math
+from pathlib import Path
+import shutil
+import time
+from typing import Any, Sequence
+import xml.etree.ElementTree as ET
+
+from PIL import Image
+
+from .artifact_io import write_json_atomic
+from .candidate_contracts import file_sha256
+from .netedit import NeteditTargetSession, _windows_modules
+
+
+_PALETTE = {
+    "source": (0, 255, 255),
+    "target": (0, 255, 0),
+    "conflict": (255, 255, 0),
+    "pass": (255, 0, 255),
+}
+
+
+def point_before_lane_end(
+    points: Sequence[tuple[float, float]], *, distance_m: float = 8.0
+) -> tuple[float, float]:
+    if len(points) < 2 or distance_m <= 0:
+        raise ValueError("lane shape needs two points and a positive distance")
+    remaining, end = distance_m, points[-1]
+    for start in reversed(points[:-1]):
+        length = math.dist(start, end)
+        if length >= remaining and length > 0:
+            ratio = remaining / length
+            return end[0] + ratio * (start[0] - end[0]), end[1] + ratio * (start[1] - end[1])
+        remaining, end = remaining - length, start
+    return points[0]
+
+
+def canvas_click_for_world_point(
+    *,
+    point: tuple[float, float],
+    center: tuple[float, float],
+    conv_boundary: tuple[float, float, float, float],
+    canvas_rect: tuple[int, int, int, int],
+    zoom: float,
+) -> tuple[int, int]:
+    left, top, right, bottom = canvas_rect
+    width, height = right - left, bottom - top
+    x0, y0, x1, y1 = conv_boundary
+    if width <= 0 or height <= 0 or x1 <= x0 or y1 <= y0 or zoom <= 0:
+        raise ValueError("invalid canvas, network boundary, or zoom")
+    scale = zoom / 100.0 * min(width / (x1 - x0), height / (y1 - y0))
+    return (
+        round(left + width / 2 + (point[0] - center[0]) * scale),
+        round(top + height / 2 - (point[1] - center[1]) * scale),
+    )
+
+
+def lane_capture_spec(net_file: Path | str, *, junction_id: str, lane_id: str) -> dict[str, Any]:
+    path = Path(net_file).resolve()
+    root = ET.parse(path).getroot()
+    location = root.find("location")
+    if location is None:
+        raise ValueError(f"network has no location element: {path}")
+    offset = _numbers(location.get("netOffset", ""), 2, "netOffset")
+    boundary = _numbers(location.get("convBoundary", ""), 4, "convBoundary")
+    junction = next((item for item in root.findall("junction") if item.get("id") == junction_id), None)
+    lane = next((item for item in root.iter("lane") if item.get("id") == lane_id), None)
+    if junction is None or lane is None:
+        raise ValueError(f"junction {junction_id!r} or lane {lane_id!r} is absent from {path}")
+    if lane_id not in junction.get("incLanes", "").split():
+        raise ValueError(f"lane {lane_id!r} is not incoming to junction {junction_id!r}")
+    shape = tuple(
+        tuple(float(value) for value in point.split(","))
+        for point in lane.get("shape", "").split()
+    )
+    if any(len(point) != 2 for point in shape) or len(shape) < 2:
+        raise ValueError(f"lane {lane_id!r} has no usable two-dimensional shape")
+    center = float(junction.get("x", "nan")), float(junction.get("y", "nan"))
+    allow = set(lane.get("allow", "").split())
+    disallow = set(lane.get("disallow", "").split())
+    return {
+        "net_file": str(path),
+        "junction_id": junction_id,
+        "lane_id": lane_id,
+        "shape": shape,
+        "center": center,
+        "projected_center": (center[0] - offset[0], center[1] - offset[1]),
+        "conv_boundary": boundary,
+        "motor_vehicle": "passenger" not in disallow and (not allow or "passenger" in allow),
+    }
+
+
+def _motor_incoming_lanes(net_file: Path | str, junction_id: str) -> set[str]:
+    root = ET.parse(net_file).getroot()
+    junction = next((item for item in root.findall("junction") if item.get("id") == junction_id), None)
+    if junction is None:
+        raise ValueError(f"junction {junction_id!r} is absent from {net_file}")
+    lanes = {item.get("id", ""): item for item in root.iter("lane")}
+    result = set()
+    for lane_id in junction.get("incLanes", "").split():
+        lane = lanes.get(lane_id)
+        if lane is None:
+            continue
+        allow, disallow = set(lane.get("allow", "").split()), set(lane.get("disallow", "").split())
+        if "passenger" not in disallow and (not allow or "passenger" in allow):
+            result.add(lane_id)
+    return result
+
+
+def lane_pair_coverage(
+    teacher_net_file: Path | str,
+    candidate_net_file: Path | str,
+    *,
+    teacher_junction: str,
+    candidate_junction: str,
+    lane_pairs: Sequence[tuple[str, str]],
+) -> dict[str, Any]:
+    teacher_lanes = _motor_incoming_lanes(teacher_net_file, teacher_junction)
+    candidate_lanes = _motor_incoming_lanes(candidate_net_file, candidate_junction)
+    mapped_teacher = {pair[0] for pair in lane_pairs}
+    mapped_candidate = {pair[1] for pair in lane_pairs}
+    missing_teacher = sorted(teacher_lanes - mapped_teacher)
+    missing_candidate = sorted(candidate_lanes - mapped_candidate)
+    extra_teacher = sorted(mapped_teacher - teacher_lanes)
+    extra_candidate = sorted(mapped_candidate - candidate_lanes)
+    status = "pass" if not (missing_teacher or missing_candidate or extra_teacher or extra_candidate) else "blocked"
+    return {
+        "status": status,
+        "teacher_motor_lane_count": len(teacher_lanes),
+        "candidate_motor_lane_count": len(candidate_lanes),
+        "missing_teacher_motor_lanes": missing_teacher,
+        "missing_candidate_motor_lanes": missing_candidate,
+        "non_motor_teacher_pairs": extra_teacher,
+        "non_motor_candidate_pairs": extra_candidate,
+    }
+
+
+def _numbers(value: str, count: int, label: str) -> tuple[float, ...]:
+    numbers = tuple(float(item) for item in value.split(",") if item)
+    if len(numbers) != count:
+        raise ValueError(f"{label} must contain {count} numbers")
+    return numbers
+
+
+def _layer_pixels(image: Image.Image, color: tuple[int, int, int], tolerance: int = 12) -> int:
+    return sum(
+        max(abs(pixel[index] - color[index]) for index in range(3)) <= tolerance
+        for pixel in image.convert("RGB").get_flattened_data()
+    )
+
+
+def analyze_connection_pair(teacher_file: Path, candidate_file: Path) -> dict[str, Any]:
+    with Image.open(teacher_file) as source:
+        teacher = source.convert("RGB")
+    with Image.open(candidate_file) as source:
+        candidate = source.convert("RGB")
+    if teacher.size != candidate.size:
+        return {"status": "blocked", "reasons": ["image_size_mismatch"], "layers": {}}
+    layers: dict[str, dict[str, int]] = {}
+    reasons: list[str] = []
+    for name, color in _PALETTE.items():
+        teacher_pixels = _layer_pixels(teacher, color)
+        candidate_pixels = _layer_pixels(candidate, color)
+        ratio = candidate_pixels / teacher_pixels if teacher_pixels else None
+        layers[name] = {
+            "teacher_pixels": teacher_pixels,
+            "candidate_pixels": candidate_pixels,
+            "candidate_teacher_ratio": None if ratio is None else round(ratio, 4),
+        }
+        if teacher_pixels >= 40 and candidate_pixels < max(20, teacher_pixels // 10):
+            reasons.append(f"{name}_layer_missing")
+        elif teacher_pixels >= 40 and candidate_pixels >= 40 and not 0.5 <= ratio <= 2.0:
+            reasons.append(f"{name}_layer_scale_mismatch")
+    if min(layers["source"]["teacher_pixels"], layers["source"]["candidate_pixels"]) < 20:
+        return {"status": "review_required", "reasons": ["source_lane_not_selected"], "layers": layers}
+    return {"status": "fail" if reasons else "pass", "reasons": reasons, "layers": layers}
+
+
+def netedit_canvas_rect(hwnd: int) -> tuple[int, int, int, int]:
+    _, win32gui, _, _ = _windows_modules()
+    canvases: list[int] = []
+
+    def collect(child: int, _: object) -> bool:
+        if win32gui.GetClassName(child) == "FXGLCanvas":
+            canvases.append(child)
+        return True
+
+    win32gui.EnumChildWindows(hwnd, collect, None)
+    if len(canvases) != 1:
+        raise RuntimeError(f"expected one FXGLCanvas, found {len(canvases)}")
+    left, top, right, bottom = win32gui.GetWindowRect(canvases[0])
+    x0, y0 = win32gui.ScreenToClient(hwnd, (left, top))
+    x1, y1 = win32gui.ScreenToClient(hwnd, (right, bottom))
+    return x0, y0, x1, y1
+
+
+def _viewsettings(path: Path, center: tuple[float, float], zoom: float) -> None:
+    path.write_text(
+        "<viewsettings>\n"
+        '  <scheme name="standard"/>\n'
+        f'  <viewport zoom="{zoom:g}" x="{center[0]:g}" y="{center[1]:g}" angle="0"/>\n'
+        '  <delay value="100"/>\n'
+        "</viewsettings>\n",
+        encoding="utf-8",
+    )
+
+
+def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size: tuple[int, int]) -> dict[str, Any]:
+    support = output_dir / "support"
+    support.mkdir(parents=True, exist_ok=True)
+    view = support / "view.xml"
+    _viewsettings(view, spec["center"], zoom)
+    session_dir = output_dir / "session"
+    session = NeteditTargetSession(
+        spec["net_file"],
+        support / "working.net.xml",
+        session_dir,
+        expected_source_sha256=file_sha256(Path(spec["net_file"])),
+        gui_settings_file=view,
+        target_source_junction_ids=(spec["junction_id"],),
+        target_candidate_junction_ids=(spec["junction_id"],),
+        window_size=f"{window_size[0]},{window_size[1]}",
+    )
+    session.open()
+    try:
+        time.sleep(1.5)
+        latest = session.observe("pre_connection_stable")
+        mode = session.act({
+            "type": "key", "virtual_key": ord("C"),
+            "expected_screenshot_sha256": latest["screenshot_sha256"],
+        })
+        canvas = netedit_canvas_rect(session.hwnd)
+        click = canvas_click_for_world_point(
+            point=point_before_lane_end(spec["shape"]), center=spec["center"],
+            conv_boundary=spec["conv_boundary"], canvas_rect=canvas, zoom=zoom,
+        )
+        selected = session.act({
+            "type": "click", "x": click[0], "y": click[1],
+            "expected_screenshot_sha256": mode["screenshot_sha256"],
+        })
+        destination = output_dir / "connection.png"
+        shutil.copy2(selected["screenshot_file"], destination)
+        return {"status": "pass", "click": list(click), "canvas_rect": list(canvas),
+                "screenshot_file": str(destination), "screenshot_sha256": file_sha256(destination)}
+    finally:
+        session.abort("visual_capture_complete")
+
+
+def _comparison_image(teacher: Path, candidate: Path, destination: Path) -> None:
+    with Image.open(teacher) as left_source, Image.open(candidate) as right_source:
+        left, right = left_source.convert("RGB"), right_source.convert("RGB")
+    image = Image.new("RGB", (left.width + right.width, max(left.height, right.height)), "white")
+    image.paste(left, (0, 0))
+    image.paste(right, (left.width, 0))
+    image.save(destination)
+
+
+def write_visual_gate_report(
+    *, output_dir: Path, teacher_net_file: Path, candidate_net_file: Path,
+    lane_reports: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    statuses = {str(item["status"]) for item in lane_reports}
+    status = next((value for value in ("blocked", "fail", "review_required") if value in statuses), "pass")
+    report = {
+        "schema": "torii.netedit_connection_visual_gate.v1", "status": status,
+        "teacher_net_file": str(Path(teacher_net_file).resolve()),
+        "teacher_sha256": file_sha256(Path(teacher_net_file)),
+        "candidate_net_file": str(Path(candidate_net_file).resolve()),
+        "candidate_sha256": file_sha256(Path(candidate_net_file)),
+        "lane_reports": list(lane_reports),
+        "comparison_images": [str(item["comparison_file"]) for item in lane_reports
+                              if item["status"] != "pass" and item.get("comparison_file")],
+        "automatic_promotion_gate": "pass" if status == "pass" else "blocked",
+    }
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    report_file = destination / "visual-gate.json"
+    write_json_atomic(report_file, report, sort_keys=True)
+    return {**report, "report_file": str(report_file)}
+
+
+def run_connection_visual_gate(
+    *, teacher_net_file: Path | str, candidate_net_file: Path | str,
+    teacher_junction: str, candidate_junction: str,
+    lane_pairs: Sequence[tuple[str, str]], output_dir: Path | str,
+    zoom: float = 2500.0, window_size: tuple[int, int] = (1400, 1000),
+) -> dict[str, Any]:
+    teacher_net, candidate_net, output = Path(teacher_net_file), Path(candidate_net_file), Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    coverage = lane_pair_coverage(
+        teacher_net,
+        candidate_net,
+        teacher_junction=teacher_junction,
+        candidate_junction=candidate_junction,
+        lane_pairs=lane_pairs,
+    )
+    if coverage["status"] != "pass":
+        return write_visual_gate_report(
+            output_dir=output,
+            teacher_net_file=teacher_net,
+            candidate_net_file=candidate_net,
+            lane_reports=[{"status": "blocked", "reasons": ["motor_lane_coverage_incomplete"], "coverage": coverage}],
+        )
+    reports: list[dict[str, Any]] = []
+    for index, (teacher_lane, candidate_lane) in enumerate(lane_pairs, 1):
+        teacher_spec = lane_capture_spec(teacher_net, junction_id=teacher_junction, lane_id=teacher_lane)
+        candidate_spec = lane_capture_spec(candidate_net, junction_id=candidate_junction, lane_id=candidate_lane)
+        row: dict[str, Any] = {"teacher_lane": teacher_lane, "candidate_lane": candidate_lane}
+        if not teacher_spec["motor_vehicle"] or not candidate_spec["motor_vehicle"]:
+            reports.append({**row, "status": "blocked", "reasons": ["incompatible_lane_permissions"]})
+            continue
+        if math.dist(teacher_spec["projected_center"], candidate_spec["projected_center"]) > 2.0:
+            reports.append({**row, "status": "blocked", "reasons": ["projected_junction_mismatch"]})
+            continue
+        endpoint_gap = math.dist(
+            (teacher_spec["shape"][-1][0] - teacher_spec["center"][0] + teacher_spec["projected_center"][0],
+             teacher_spec["shape"][-1][1] - teacher_spec["center"][1] + teacher_spec["projected_center"][1]),
+            (candidate_spec["shape"][-1][0] - candidate_spec["center"][0] + candidate_spec["projected_center"][0],
+             candidate_spec["shape"][-1][1] - candidate_spec["center"][1] + candidate_spec["projected_center"][1]),
+        )
+        row["projected_lane_endpoint_gap_m"] = round(endpoint_gap, 3)
+        if endpoint_gap > 25.0:
+            reports.append({**row, "status": "blocked", "reasons": ["lane_pair_geometry_mismatch"]})
+            continue
+        pair_dir = output / f"lane-{index:02d}"
+        teacher_capture = _capture(teacher_spec, output_dir=pair_dir / "teacher", zoom=zoom, window_size=window_size)
+        candidate_capture = _capture(candidate_spec, output_dir=pair_dir / "candidate", zoom=zoom, window_size=window_size)
+        comparison = analyze_connection_pair(
+            Path(teacher_capture["screenshot_file"]), Path(candidate_capture["screenshot_file"])
+        )
+        report = {**row, **comparison, "teacher_capture": teacher_capture, "candidate_capture": candidate_capture}
+        if comparison["status"] != "pass":
+            comparison_file = pair_dir / "comparison.png"
+            _comparison_image(Path(teacher_capture["screenshot_file"]), Path(candidate_capture["screenshot_file"]), comparison_file)
+            report["comparison_file"] = str(comparison_file)
+        reports.append(report)
+    return write_visual_gate_report(
+        output_dir=output, teacher_net_file=teacher_net, candidate_net_file=candidate_net,
+        lane_reports=reports,
+    )

@@ -32,6 +32,7 @@ NeteditAction = Literal[
     "edge_mode",
     "move_mode",
     "select_mode",
+    "recenter_view",
     "tls_mode",
     "recompute",
     "join_selected_junctions",
@@ -48,6 +49,7 @@ _SHORTCUTS: dict[str, tuple[int, tuple[int, ...]]] = {
     "edge_mode": (ord("E"), ()),
     "move_mode": (ord("M"), ()),
     "select_mode": (ord("S"), ()),
+    "recenter_view": (0x24, ()),  # Home
     "tls_mode": (ord("T"), ()),
     "recompute": (0x74, ()),  # F5
     "join_selected_junctions": (0x76, ()),  # F7

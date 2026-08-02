@@ -2742,7 +2742,15 @@ def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
     assert report["netedit_status"] == "opened"
     assert report["netedit_binary"] == "C:/SUMO/bin/netedit.exe"
     assert report["netedit_process_id"] == 12345
-    assert calls == [["C:/SUMO/bin/netedit.exe", "--sumo-net-file", str(net_file)]]
+    assert calls == [
+        [
+            "C:/SUMO/bin/netedit.exe",
+            "--sumo-net-file",
+            str(net_file),
+            "--registry-viewport",
+            "false",
+        ]
+    ]
 
 
 def test_launch_netedit_opens_sumo_config_with_additional_files(tmp_path: Path) -> None:
@@ -2769,7 +2777,15 @@ def test_launch_netedit_opens_sumo_config_with_additional_files(tmp_path: Path) 
     assert report["netedit_status"] == "opened"
     assert report["netedit_open_mode"] == "sumocfg"
     assert report["netedit_input_file"] == str(sumocfg_file)
-    assert calls == [["C:/SUMO/bin/netedit.exe", "--sumocfg-file", str(sumocfg_file)]]
+    assert calls == [
+        [
+            "C:/SUMO/bin/netedit.exe",
+            "--sumocfg-file",
+            str(sumocfg_file),
+            "--registry-viewport",
+            "false",
+        ]
+    ]
 
 
 def test_launch_netedit_accepts_review_selection_view_and_window_options(tmp_path: Path) -> None:
@@ -2812,9 +2828,11 @@ def test_launch_netedit_accepts_review_selection_view_and_window_options(tmp_pat
             str(sumocfg_file),
             "-g",
             str(view_file),
-            "--selection-file",
-            str(selection_file),
-            "--window-size",
+                "--selection-file",
+                str(selection_file),
+                "--registry-viewport",
+                "false",
+                "--window-size",
             "1000,900",
             "--window-pos",
             "1020,0",

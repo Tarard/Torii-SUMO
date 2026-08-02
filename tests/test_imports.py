@@ -11,6 +11,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_compare_outputs",
         "sumo_collect_evidence",
         "sumo_netedit_session",
+        "sumo_tum_style_closed_loop",
         "sumo_detector_count_audit",
         "sumo_detector_count_constraints",
         "sumo_detector_route_support",
@@ -128,14 +129,14 @@ def test_server_smoke_tool_reports_blocked_without_real_sumo(tmp_path) -> None:
 
     async def _call_minimal_smoke() -> dict[str, object]:
         server = create_server()
-        _content, structured = await server.call_tool(
+        result = await server.call_tool(
             "sumo_run_minimal_smoke",
             {
                 "work_dir": str(tmp_path),
                 "require_real_sumo": False,
             },
         )
-        return structured
+        return result.structured_content
 
     result = anyio.run(_call_minimal_smoke)
 
@@ -152,7 +153,7 @@ def test_server_netedit_session_exposes_constrained_operation_schema() -> None:
     async def _schema() -> dict[str, object]:
         tools = await create_server().list_tools()
         tool = next(item for item in tools if item.name == "sumo_netedit_session")
-        return tool.inputSchema
+        return tool.input_schema
 
     schema = anyio.run(_schema)
 
@@ -163,3 +164,15 @@ def test_server_netedit_session_exposes_constrained_operation_schema() -> None:
         "finalize",
         "abort",
     ]
+
+
+def test_server_uses_mcp_v2_snake_case_tool_schema() -> None:
+    from torii_sumo.server import create_server
+
+    async def _schema() -> dict[str, object]:
+        tools = await create_server().list_tools()
+        tool = next(item for item in tools if item.name == "sumo_netedit_session")
+        return tool.input_schema
+
+    schema = anyio.run(_schema)
+    assert schema["properties"]["operation"]["enum"]

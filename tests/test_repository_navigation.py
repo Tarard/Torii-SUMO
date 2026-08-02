@@ -65,7 +65,7 @@ def test_mcp_catalog_covers_every_registered_tool() -> None:
     catalog = (ROOT / "docs" / "mcp-tool-catalog.md").read_text(encoding="utf-8")
     registered = _registered_tool_names()
 
-    assert len(registered) == 74
+    assert len(registered) == 75
     missing = sorted(name for name in registered if f"`{name}`" not in catalog)
     assert missing == []
 

@@ -22,6 +22,9 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _hybrid_osm_approach_authority_policy,
     _netedit_review_actions,
     _prune_unmapped_micro_boundary_edges,
+    _prune_strict_unmapped_outgoing_boundary_edges,
+    _safe_junction_shape,
+    _sanitize_junction_shapes,
     _remove_teacher_non_tls_tllogics,
     _reference_teacher_turnaround_authority,
     _limit_ready_repair_candidates,
@@ -97,6 +100,68 @@ def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() 
     assert root.find("edge[@id='short_b']") is None
     assert root.find("edge[@id='long']") is not None
     assert root.find("connection[@from='short_a']") is None
+
+
+def test_prune_strict_unmapped_outgoing_boundary_edges_removes_only_unmapped_modal_edge() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="mapped" from="j" to="remote"><lane id="mapped_0" index="0" length="50" allow="bicycle"/></edge>
+  <edge id="extra_modal" from="j" to="remote2" type="highway.path"><lane id="extra_modal_0" index="0" length="40" allow="bicycle"/></edge>
+  <edge id="extra_road" from="j" to="remote3" type="highway.primary"><lane id="extra_road_0" index="0" length="40" allow="passenger"/></edge>
+  <junction id="j" type="traffic_light" intLanes=""/>
+  <junction id="remote" type="priority"/>
+  <junction id="remote2" type="priority"/>
+  <junction id="remote3" type="priority"/>
+  <connection from="extra_modal" to="mapped" fromLane="0" toLane="0"/>
+  <connection from="extra_road" to="mapped" fromLane="0" toLane="0"/>
+</net>"""
+    )
+
+    report = _prune_strict_unmapped_outgoing_boundary_edges(
+        root,
+        junction_id="j",
+        mapped_candidate_edge_ids={"mapped"},
+    )
+
+    assert report["removed_edge_ids"] == ["extra_modal"]
+    assert root.find("edge[@id='extra_modal']") is None
+    assert root.find("edge[@id='extra_road']") is not None
+    assert root.find("connection[@from='extra_modal']") is None
+
+
+def test_safe_junction_shape_discards_sumo_sentinel_points() -> None:
+    shape = "-1073741822.43,-1073741818.19 -1073741818.19,-1073741822.43 0,0 4,0 4,4 0,4"
+
+    safe = _safe_junction_shape(shape)
+
+    assert safe is not None
+    assert "107374182" not in safe
+    assert len(safe.split()) == 4
+
+
+def test_sanitize_junction_shapes_repairs_sentinel_fallback_at_junction_center() -> None:
+    root = ET.fromstring(
+        '<net><junction id="bad" x="10" y="20" customShape="1" shape="-1073741824,-1073741824 -1073741823,-1073741823 -1073741824,-1073741823"/></net>'
+    )
+
+    report = _sanitize_junction_shapes(root)
+
+    assert report["status"] == "pass"
+    assert report["repaired_count"] == 1
+    shape = root.find("junction").attrib["shape"]
+    assert "107374182" not in shape
+    assert shape == "9.50,19.50 10.50,19.50 10.50,20.50 9.50,20.50"
+    assert root.find("junction").attrib["customShape"] == "1"
+
+
+def test_sanitize_junction_shapes_preserves_finite_but_non_simple_shape() -> None:
+    original = "0,0 2,2 0,2 2,0"
+    root = ET.fromstring(f'<net><junction id="finite" x="1" y="1" shape="{original}"/></net>')
+
+    report = _sanitize_junction_shapes(root)
+
+    assert report["repaired_count"] == 0
+    assert root.find("junction").attrib["shape"] == original
 
 
 def test_strict_teacher_structural_context_maps_existing_adjacent_teacher_edges(tmp_path: Path) -> None:
@@ -6234,6 +6299,7 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert variant_calls[0]["raw_edge_file"] != raw_edges
     assert variant_calls[0]["replay_target_internal_subgraph"] is True
     assert variant_calls[0]["preserve_teacher_lane_shapes"] is False
+    assert variant_calls[0]["preserve_target_junction_shape"] is True
     assert variant_calls[0]["structural_osm_boundary_authority"] is False
     assert variant_calls[0]["strict_teacher_replay"] is True
     assert variant_calls[0]["safety_junction_ids"] == ["cluster_a_b"]
@@ -9603,7 +9669,7 @@ def test_write_teacher_connection_plan_leaves_joined_scope_for_netconvert_genera
         {
             "from": "cand_in",
             "to": "cand_out",
-            "fromLane": "0",
+            "fromLane": "1",
             "toLane": "0",
         },
         {
@@ -9612,14 +9678,8 @@ def test_write_teacher_connection_plan_leaves_joined_scope_for_netconvert_genera
             "fromLane": "0",
             "toLane": "0",
         },
-        {
-            "from": "cand_in",
-            "to": "cand_out",
-            "fromLane": "1",
-            "toLane": "0",
-            "uncontrolled": "true",
-        },
     ]
+    assert report["lane_compatibility_repair_count"] == 1
     assert root.findall("delete") == []
     assert report["structural_connection_generation"] is True
     assert report["structural_regenerated_source_edge_ids"] == ["cand_in"]
@@ -9678,6 +9738,69 @@ def test_structural_connection_plan_does_not_count_raw_turnaround_as_connectivit
     ]
     assert ("in", "out") in connections
     assert report["structural_missing_lanes_by_source"] == {"in": [0]}
+
+
+def test_structural_connection_plan_does_not_count_bicycle_only_exit_as_motor_connectivity(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="service_in" to="bike_out" fromLane="0" toLane="1"/>
+  <connection from="healthy_in" to="road_out" fromLane="0" toLane="0"/>
+</connections>""",
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="service_in" from="a" to="j"><lane index="0" allow="passenger bicycle"/></edge>
+  <edge id="healthy_in" from="d" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="bike_out" from="j" to="b">
+    <lane index="0" allow="pedestrian"/>
+    <lane index="1" allow="bicycle"/>
+  </edge>
+  <edge id="road_out" from="j" to="c"><lane index="0" allow="passenger"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={
+            "vehicle_connections": [
+                {"from": "service_in", "to": "teacher_bike", "fromLane": "0", "toLane": "0"},
+                {"from": "service_in", "to": "teacher_road", "fromLane": "0", "toLane": "0"},
+            ],
+            "crossings": [],
+        },
+        candidate_model={
+            "approaches": {
+                "incoming": [
+                    {"edge_id": "service_in", "lane_count": 1},
+                    {"edge_id": "healthy_in", "lane_count": 1},
+                ],
+                "outgoing": [
+                    {"edge_id": "bike_out", "lane_count": 2},
+                    {"edge_id": "road_out", "lane_count": 1},
+                ],
+            }
+        },
+        edge_map={
+            "teacher_bike": "bike_out",
+            "teacher_road": "road_out",
+        },
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert root.find("connection[@from='service_in'][@to='road_out']") is not None
+    assert root.find("connection[@from='service_in'][@to='bike_out'][@toLane='0']") is None
+    assert root.find("connection[@from='service_in'][@to='bike_out'][@toLane='1']") is not None
+    assert report["structural_regenerated_source_edge_ids"] == ["service_in"]
 
 
 def test_structural_connection_plan_fills_unreached_outgoing_vehicle_lane(
@@ -13086,6 +13209,45 @@ def test_target_surface_overlap_gate_blocks_new_target_owned_lane_overlap(
     assert gate["lane_target_owner_regression_count"] == 1
 
 
+def test_target_surface_overlap_gate_ignores_non_motorized_lane_overlap_when_authorized(
+    tmp_path: Path,
+) -> None:
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[
+            {
+                "lane_id": "path_0",
+                "edge_id": "path",
+                "from_junction_id": "target",
+                "to_junction_id": "remote",
+                "non_owner_junction_id": "neighbor",
+                "overlap_area_m2": 1.0,
+            }
+        ],
+    )
+    net_file.write_text(
+        '<net><edge id="path" from="target" to="remote" type="highway.path">'
+        '<lane id="path_0" index="0" allow="bicycle"/></edge></net>',
+        encoding="utf-8",
+    )
+    report["source_sha256"] = hashlib.sha256(net_file.read_bytes()).hexdigest()
+    report_file.write_text(json.dumps(report), encoding="utf-8")
+    report["report_sha256"] = hashlib.sha256(report_file.read_bytes()).hexdigest()
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        allow_non_motorized_lane_overlaps=True,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["lane_target_owner_regression_count"] == 0
+    assert gate["authorized_non_motorized_overlap_count"] == 1
+
+
 def test_target_surface_overlap_gate_ignores_sub_square_centimeter_roundtrip_noise(
     tmp_path: Path,
 ) -> None:
@@ -14327,6 +14489,8 @@ def test_restore_scoped_pedestrian_internal_semantics_after_normalize(
     assert root.find("edge[@id=':j_w0']") is not None
     assert root.find("edge[@id=':j_c0']").attrib["crossingEdges"] == "candidate_in"
     assert root.find("connection[@tl='j'][@linkIndex='4']") is not None
+    children = list(root)
+    assert children.index(root.find("edge[@id=':j_c0']")) < children.index(root.find("junction[@id='candidate']"))
 
 
 def test_restore_scoped_pedestrian_internal_semantics_maps_teacher_owner_to_candidate_owner(
@@ -14346,7 +14510,9 @@ def test_restore_scoped_pedestrian_internal_semantics_maps_teacher_owner_to_cand
     target.write_text(
         """<net>
   <edge id="candidate_in"><lane id="candidate_in_0" index="0"/></edge>
+  <edge id=":candidate_j_w0" function="walkingarea"><lane id=":candidate_j_w0_0" index="0"/></edge>
   <junction id="candidate_j" type="traffic_light" x="10" y="20"/>
+  <connection from="candidate_in" to=":candidate_j_w0" fromLane="0" toLane="0" dir="l" state="m"/>
 </net>""",
         encoding="utf-8",
     )
@@ -14366,6 +14532,7 @@ def test_restore_scoped_pedestrian_internal_semantics_maps_teacher_owner_to_cand
     connection = root.find("connection[@from=':candidate_j_w0'][@to=':candidate_j_c0']")
     assert connection is not None
     assert connection.attrib["tl"] == "candidate_j"
+    assert root.find("connection[@from='candidate_in'][@to=':candidate_j_w0']") is None
 
 
 def test_write_teacher_target_internal_replay_net_removes_stale_candidate_boundary_edge(

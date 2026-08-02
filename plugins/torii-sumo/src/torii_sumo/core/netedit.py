@@ -30,6 +30,8 @@ _MOUSEEVENTF_VIRTUALDESK = 0x4000
 _MOUSEEVENTF_ABSOLUTE = 0x8000
 _DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
 _DPI_AWARENESS_PER_MONITOR = 2
+# View/mode changes are safe before the single semantic F7 edit.
+_NON_SEMANTIC_PRE_F7_KEYS = frozenset({0x24, *(ord(value) for value in "ICDEMST")})
 
 
 class _MouseInput(ctypes.Structure):
@@ -124,6 +126,7 @@ def _build_netedit_open_command(
         command += ["-g", str(gui_settings_file)]
     if selection_file is not None:
         command += ["--selection-file", str(selection_file)]
+    command += ["--registry-viewport", "false"]
     if window_size:
         command += ["--window-size", window_size]
     if window_pos:
@@ -668,6 +671,69 @@ def _key_input(virtual_key: int, *, up: bool = False) -> _Input:
     )
 
 
+def _keyboard_layout_context(hwnd: int | None = None) -> dict[str, Any]:
+    """Return the target window input layout; NetEdit actions require English."""
+
+    if sys.platform != "win32":
+        return {"status": "not_applicable", "is_english": False, "reason": "windows_only"}
+    _, win32gui, _, _ = _windows_modules()
+    user32 = ctypes.windll.user32
+    foreground_hwnd = int(win32gui.GetForegroundWindow())
+    target_hwnd = foreground_hwnd if hwnd is None else int(hwnd)
+    thread_id = int(user32.GetWindowThreadProcessId(target_hwnd, None)) if target_hwnd else 0
+    if not thread_id:
+        return {
+            "status": "unknown",
+            "is_english": None,
+            "foreground_hwnd": foreground_hwnd,
+            "target_hwnd": target_hwnd,
+            "thread_id": thread_id,
+            "reason": "no_target_input_thread",
+        }
+    hkl = int(user32.GetKeyboardLayout(thread_id))
+    lang_id = hkl & 0xFFFF
+    primary_language_id = lang_id & 0x3FF
+    layout_name = ""
+    get_layout_name = getattr(user32, "GetKeyboardLayoutNameW", None)
+    if get_layout_name is not None:
+        buffer = ctypes.create_unicode_buffer(9)
+        if get_layout_name(buffer):
+            layout_name = buffer.value
+    is_english = primary_language_id == 0x09
+    return {
+        "status": "pass" if is_english else "blocked",
+        "is_english": is_english,
+        "is_chinese": primary_language_id == 0x04,
+        "foreground_hwnd": foreground_hwnd,
+        "target_hwnd": target_hwnd,
+        "thread_id": thread_id,
+        "hkl": f"0x{hkl:X}",
+        "lang_id": f"0x{lang_id:04X}",
+        "primary_language_id": primary_language_id,
+        "layout_name": layout_name,
+    }
+
+
+def _ensure_english_window_layout(hwnd: int) -> dict[str, Any]:
+    before = _keyboard_layout_context(hwnd)
+    if before["status"] in {"not_applicable", "pass"}:
+        return {**before, "changed_by_torii": False}
+    if before["status"] != "blocked":
+        raise RuntimeError(f"Cannot verify English keyboard layout for NetEdit: {before}")
+    user32 = ctypes.windll.user32
+    loader = user32.LoadKeyboardLayoutW
+    loader.argtypes = (wintypes.LPCWSTR, wintypes.UINT)
+    loader.restype = wintypes.HANDLE
+    english_hkl = int(loader("00000409", 0) or 0)
+    if not english_hkl:
+        raise RuntimeError("Unable to load the English keyboard layout for NetEdit")
+    _windows_modules()[1].SendMessage(hwnd, 0x0050, 0, english_hkl)
+    after = _keyboard_layout_context(hwnd)
+    if after["status"] != "pass":
+        raise RuntimeError("NetEdit rejected the English keyboard-layout request")
+    return {**after, "changed_by_torii": True, "before": before}
+
+
 def _mouse_input(screen_x: int, screen_y: int, flags: int) -> _Input:
     user32 = ctypes.windll.user32
     virtual_left = int(user32.GetSystemMetrics(76))
@@ -699,7 +765,9 @@ def _perform_real_input(
     _, win32gui, _, _ = _windows_modules()
     physical_input = _assert_physical_input_idle(action)
     context = _activate_target_window(hwnd, pid)
+    keyboard_layout: dict[str, Any] | None = None
     try:
+        keyboard_layout = _ensure_english_window_layout(hwnd)
         if int(win32gui.GetForegroundWindow()) != hwnd:
             raise RuntimeError("NetEdit lost foreground before SendInput")
         if action["type"] == "key":
@@ -731,6 +799,7 @@ def _perform_real_input(
     return {
         "send_input_event_count": sent,
         "physical_input_preflight": physical_input,
+        "keyboard_layout": keyboard_layout,
         "focus_context": context,
         "target_foreground_after_input": foreground_after,
         "target_focus_after_input": focus_after,
@@ -794,6 +863,7 @@ class NeteditTargetSession:
         self.global_input_used = False
         self.foreground_activation_used = False
         self.dpi_awareness: dict[str, Any] = {}
+        self.keyboard_layout_evidence: list[dict[str, Any]] = []
         self.report_file = self.output_dir / "netedit-target-session.json"
 
     def open(self) -> dict[str, Any]:
@@ -904,8 +974,12 @@ class NeteditTargetSession:
             _require_owned_window(self.hwnd, self.process.pid)
             render_context = _activate_target_window(self.hwnd, self.process.pid)
             self.foreground_activation_used = True
-            time.sleep(self.settle_seconds)
-            render_restore = _restore_input_context(render_context)
+            try:
+                keyboard_layout = _ensure_english_window_layout(self.hwnd)
+                self.keyboard_layout_evidence.append({"phase": "open", **keyboard_layout})
+                time.sleep(self.settle_seconds)
+            finally:
+                render_restore = _restore_input_context(render_context)
             if not render_restore["restored"]:
                 raise RuntimeError("foreground context was not restored after NetEdit initial render")
             self.state = "open"
@@ -913,6 +987,7 @@ class NeteditTargetSession:
                 "open",
                 {
                     "window_title": self._window_title(),
+                    "keyboard_layout": keyboard_layout,
                     "render_activation": render_context,
                     "render_restore": render_restore,
                 },
@@ -985,6 +1060,8 @@ class NeteditTargetSession:
                 self.global_input_used = True
             raise
         self.global_input_used = True
+        if delivery.get("keyboard_layout") is not None:
+            self.keyboard_layout_evidence.append({"phase": "act", **delivery["keyboard_layout"]})
         time.sleep(self.settle_seconds)
         try:
             return self._record_step(
@@ -1028,6 +1105,8 @@ class NeteditTargetSession:
                     self.global_input_used = True
                 raise
             self.global_input_used = True
+            if save.get("keyboard_layout") is not None:
+                self.keyboard_layout_evidence.append({"phase": "finalize", **save["keyboard_layout"]})
             time.sleep(self.settle_seconds)
             stable_file = _wait_for_file_stable(self.candidate)
             if _file_sha256(self.source) != self.expected_source_sha256:
@@ -1086,7 +1165,15 @@ class NeteditTargetSession:
         if not self.initial_selection_sha256 or current_hash != self.initial_selection_sha256:
             raise RuntimeError("NetEdit selection file changed after the session opened")
         prior_actions = [step for step in self.steps if step.get("kind") == "act"]
-        if prior_actions:
+        prior_edit_actions = [
+            step
+            for step in prior_actions
+            if not (
+                step.get("detail", {}).get("type") == "key"
+                and step.get("detail", {}).get("virtual_key") in _NON_SEMANTIC_PRE_F7_KEYS
+            )
+        ]
+        if prior_edit_actions:
             raise ValueError("F7 must be the first edit action in a NetEdit target session")
         selected_junction_ids = sorted(
             {
@@ -1279,6 +1366,7 @@ class NeteditTargetSession:
             "global_keyboard_or_mouse_input_used": self.global_input_used,
             "foreground_activation_used": self.foreground_activation_used,
             "dpi_awareness": self.dpi_awareness,
+            "keyboard_layout_context": self.keyboard_layout_evidence,
             "automatic_promotion_gate": "blocked",
             "claim_boundary": "GUI edits are diagnostic candidate evidence and never authorize promotion.",
         }
