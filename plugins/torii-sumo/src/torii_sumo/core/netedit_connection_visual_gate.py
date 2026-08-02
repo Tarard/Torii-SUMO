@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import math
 from pathlib import Path
 import shutil
@@ -144,11 +145,79 @@ def _numbers(value: str, count: int, label: str) -> tuple[float, ...]:
     return numbers
 
 
-def _layer_pixels(image: Image.Image, color: tuple[int, int, int], tolerance: int = 12) -> int:
-    return sum(
-        max(abs(pixel[index] - color[index]) for index in range(3)) <= tolerance
-        for pixel in image.convert("RGB").get_flattened_data()
-    )
+def _component_count(points: set[tuple[int, int]]) -> int:
+    remaining = set(points)
+    count = 0
+    while remaining:
+        count += 1
+        queue = collections.deque([remaining.pop()])
+        while queue:
+            x, y = queue.popleft()
+            for neighbor in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    queue.append(neighbor)
+    return count
+
+
+def _palette_points(image: Image.Image, tolerance: int) -> dict[str, set[tuple[int, int]]]:
+    rgb = image.convert("RGB")
+    pixels = rgb.load()
+    return {
+        name: {
+            (x, y)
+            for y in range(rgb.height)
+            for x in range(rgb.width)
+            if max(abs(pixels[x, y][channel] - color[channel]) for channel in range(3)) <= tolerance
+        }
+        for name, color in _PALETTE.items()
+    }
+
+
+def _point_stats(points: set[tuple[int, int]], center: tuple[int, int]) -> dict[str, Any]:
+    return {
+        "pixel_count": len(points),
+        "bbox": (
+            [
+                min(x for x, _ in points),
+                min(y for _, y in points),
+                max(x for x, _ in points) + 1,
+                max(y for _, y in points) + 1,
+            ]
+            if points
+            else []
+        ),
+        "angular_bins": sorted({
+            int((math.degrees(math.atan2(center[1] - y, x - center[0])) % 360.0) // 45.0)
+            for x, y in points
+        }),
+        "component_count": _component_count(points),
+    }
+
+
+def write_semantic_mask(
+    source: Path,
+    destination: Path,
+    *,
+    center: tuple[int, int],
+    tolerance: int = 12,
+) -> dict[str, Any]:
+    with Image.open(source) as opened:
+        image = opened.convert("RGB")
+    mask = Image.new("P", image.size, 0)
+    palette = [0, 0, 0, *(channel for color in _PALETTE.values() for channel in color)]
+    mask.putpalette(palette + [0] * (768 - len(palette)))
+    mask_pixels = mask.load()
+    points_by_layer = _palette_points(image, tolerance)
+    stats: dict[str, Any] = {}
+    for index, name in enumerate(_PALETTE, 1):
+        points = points_by_layer[name]
+        for point in points:
+            mask_pixels[point] = index
+        stats[name] = _point_stats(points, center)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    mask.save(destination)
+    return {"file": str(destination), "sha256": file_sha256(destination), "layers": stats}
 
 
 def analyze_connection_pair(teacher_file: Path, candidate_file: Path) -> dict[str, Any]:
@@ -158,21 +227,40 @@ def analyze_connection_pair(teacher_file: Path, candidate_file: Path) -> dict[st
         candidate = source.convert("RGB")
     if teacher.size != candidate.size:
         return {"status": "blocked", "reasons": ["image_size_mismatch"], "layers": {}}
-    layers: dict[str, dict[str, int]] = {}
+    center = teacher.width // 2, teacher.height // 2
+    teacher_stats = {name: _point_stats(points, center) for name, points in _palette_points(teacher, 12).items()}
+    candidate_stats = {name: _point_stats(points, center) for name, points in _palette_points(candidate, 12).items()}
+    layers: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
-    for name, color in _PALETTE.items():
-        teacher_pixels = _layer_pixels(teacher, color)
-        candidate_pixels = _layer_pixels(candidate, color)
+    for name in _PALETTE:
+        teacher_pixels = teacher_stats[name]["pixel_count"]
+        candidate_pixels = candidate_stats[name]["pixel_count"]
         ratio = candidate_pixels / teacher_pixels if teacher_pixels else None
+        missing_bins = sorted(
+            teacher_bin
+            for teacher_bin in teacher_stats[name]["angular_bins"]
+            if not any(
+                min((teacher_bin - candidate_bin) % 8, (candidate_bin - teacher_bin) % 8) <= 1
+                for candidate_bin in candidate_stats[name]["angular_bins"]
+            )
+        )
         layers[name] = {
             "teacher_pixels": teacher_pixels,
             "candidate_pixels": candidate_pixels,
             "candidate_teacher_ratio": None if ratio is None else round(ratio, 4),
+            "teacher_angular_bins": teacher_stats[name]["angular_bins"],
+            "candidate_angular_bins": candidate_stats[name]["angular_bins"],
+            "teacher_component_count": teacher_stats[name]["component_count"],
+            "candidate_component_count": candidate_stats[name]["component_count"],
         }
         if teacher_pixels >= 40 and candidate_pixels < max(20, teacher_pixels // 10):
             reasons.append(f"{name}_layer_missing")
         elif teacher_pixels >= 40 and candidate_pixels >= 40 and not 0.5 <= ratio <= 2.0:
             reasons.append(f"{name}_layer_scale_mismatch")
+        elif teacher_pixels >= 40 and candidate_pixels >= 40 and missing_bins:
+            reasons.append(f"{name}_direction_missing")
+        elif abs(teacher_stats[name]["component_count"] - candidate_stats[name]["component_count"]) > 1:
+            reasons.append(f"{name}_component_mismatch")
     if min(layers["source"]["teacher_pixels"], layers["source"]["candidate_pixels"]) < 20:
         return {"status": "review_required", "reasons": ["source_lane_not_selected"], "layers": layers}
     return {"status": "fail" if reasons else "pass", "reasons": reasons, "layers": layers}
