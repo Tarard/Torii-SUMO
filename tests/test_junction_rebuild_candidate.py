@@ -13063,6 +13063,31 @@ def test_hybrid_osm_approach_authority_accepts_strict_teacher_replay_boundary_co
     assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
 
 
+def test_strict_teacher_replay_defers_shape_only_signature_delta_to_visual_gate() -> None:
+    fixture = _hybrid_authority_fixture()
+    fixture["target_internal_replay"]["copy_unmapped_boundary_edges"] = True
+    fixture["target_internal_replay"]["copied_boundary_edge_count"] = 3
+    shape_failure = {"report": "parity", "field": "junction_signature_mismatch_count", "count": 1}
+
+    report = _hybrid_osm_approach_authority_policy(
+        {"status": "fail", "failures": [shape_failure]},
+        replay_target_internal_subgraph=True,
+        preserve_teacher_lane_shapes=False,
+        strict_teacher_replay=True,
+        preserved_target_shape_only_mismatch=True,
+        edge_map=fixture["edge_map"],
+        lane_patch=fixture["lane_patch"],
+        target_internal_replay=fixture["target_internal_replay"],
+        tls_movement_parity={"status": "pass"},
+        pedestrian_crossing_parity={"status": "pass"},
+        target_surface_overlap_gate={"status": "pass"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["waived_raw_failures"] == [shape_failure]
+    assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
+
+
 def test_hybrid_osm_approach_authority_accepts_preserved_boundary_structural_replay() -> None:
     report = _hybrid_osm_approach_authority_policy(
         {

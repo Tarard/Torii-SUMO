@@ -6929,6 +6929,10 @@ def build_teacher_guided_junction_variant(
         target_surface_overlap_gate=target_surface_overlap_gate,
         turnaround_audit=turnaround_audit,
         strict_teacher_replay=strict_teacher_replay,
+        preserved_target_shape_only_mismatch=(
+            preserve_target_junction_shape
+            and _junction_signature_mismatch_fields(parity) == {"shape"}
+        ),
     )
     effective_semantic_gate = approach_authority_policy["effective_semantic_gate"]
     semantic_layer_gates = _semantic_layer_gates(
@@ -18256,12 +18260,32 @@ def _compare_teacher_models(
     }
 
 
+def _junction_signature_mismatch_fields(parity: dict[str, Any]) -> set[str]:
+    def fields(summary: object) -> dict[str, str]:
+        if not isinstance(summary, dict):
+            return {}
+        signature = str(summary.get("junction_signature", ""))
+        return {
+            key: value
+            for item in signature.split("|")
+            if "=" in item
+            for key, value in [item.split("=", 1)]
+        }
+
+    teacher = fields(parity.get("teacher"))
+    candidate = fields(parity.get("candidate"))
+    if not teacher or not candidate:
+        return set()
+    return {key for key in teacher.keys() | candidate.keys() if teacher.get(key) != candidate.get(key)}
+
+
 def _hybrid_osm_approach_authority_policy(
     raw_semantic_gate: dict[str, Any],
     *,
     replay_target_internal_subgraph: bool,
     preserve_teacher_lane_shapes: bool,
     strict_teacher_replay: bool = False,
+    preserved_target_shape_only_mismatch: bool = False,
     structural_osm_boundary_authority: bool = False,
     edge_map: dict[str, str],
     lane_patch: dict[str, Any],
@@ -18286,17 +18310,26 @@ def _hybrid_osm_approach_authority_policy(
 
     if strict_teacher_replay:
         target_internal_replay = target_internal_replay or {}
-        raw_failures = [
+        target_surface_overlap_gate = target_surface_overlap_gate or {}
+        all_raw_failures = [
             dict(failure) for failure in raw_semantic_gate.get("failures", []) if isinstance(failure, dict)
         ]
-        if raw_semantic_gate.get("status") != "pass" and not raw_failures:
-            raw_failures.append(
+        if raw_semantic_gate.get("status") != "pass" and not all_raw_failures:
+            all_raw_failures.append(
                 {
                     "report": "semantic_replay_gate",
                     "field": "status_not_pass",
                     "count": 1,
                 }
             )
+        waived_raw_failures = [
+            failure
+            for failure in all_raw_failures
+            if preserved_target_shape_only_mismatch
+            and failure.get("report") == "parity"
+            and failure.get("field") == "junction_signature_mismatch_count"
+        ]
+        raw_failures = [failure for failure in all_raw_failures if failure not in waived_raw_failures]
         invariant_failures = []
         if target_internal_replay.get("status") != "pass":
             invariant_failures.append("target_internal_replay_not_pass")
@@ -18306,6 +18339,8 @@ def _hybrid_osm_approach_authority_policy(
             invariant_failures.append("tls_movement_parity_not_pass")
         if pedestrian_crossing_parity.get("status") != "pass":
             invariant_failures.append("pedestrian_crossing_parity_not_pass")
+        if preserved_target_shape_only_mismatch and target_surface_overlap_gate.get("status") != "pass":
+            invariant_failures.append("preserved_target_shape_surface_overlap_not_pass")
         effective_failures = [
             *raw_failures,
             *(
@@ -18327,7 +18362,7 @@ def _hybrid_osm_approach_authority_policy(
             "policy": "strict_teacher_replay",
             "requires_exact_tls_parity": True,
             "requires_exact_pedestrian_parity": True,
-            "waived_raw_failures": [],
+            "waived_raw_failures": waived_raw_failures,
             "retained_raw_failures": effective_failures,
             "invariant_failures": invariant_failures,
             "effective_semantic_gate": effective_gate,
