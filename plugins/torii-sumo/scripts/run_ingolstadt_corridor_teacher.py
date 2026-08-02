@@ -80,6 +80,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use exact teacher internal/TLS replay for materialized TUM candidates.",
     )
+    parser.add_argument(
+        "--use-reference-source-way-scope",
+        action="store_true",
+        help="Build from only the OSM way IDs represented by the reference network.",
+    )
     return parser.parse_args()
 
 
@@ -121,7 +126,7 @@ def _reference_matched_workflow_kwargs(
         "reference_join_audit_structural_only": False,
         "run_reference_join_aggregation_after_build": True,
         "reference_is_authority": True,
-        "use_reference_source_way_scope": False,
+        "use_reference_source_way_scope": args.use_reference_source_way_scope,
         "run_reference_hierarchy_audit_after_build": True,
         "run_reference_scope_audit_after_build": True,
         "run_scope_pruning_after_build": False,

@@ -35,6 +35,7 @@ def _args(**overrides):
         "skip_runtime_audits": False,
         "materialize_teacher_candidates": False,
         "strict_teacher_replay": False,
+        "use_reference_source_way_scope": False,
         "verbose": False,
     }
     values.update(overrides)
@@ -60,6 +61,7 @@ def test_default_cli_mode_remains_bounded_slice(monkeypatch) -> None:
 
     assert args.workflow_mode == "bounded-slice"
     assert args.materialize_teacher_candidates is False
+    assert args.use_reference_source_way_scope is False
 
 
 def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path) -> None:
@@ -92,6 +94,22 @@ def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path)
     assert kwargs["teacher_guided_strict_teacher_replay"] is False
     assert kwargs["launch_netedit_after_build"] is False
     assert kwargs["launch_sumo_gui_after_build"] is False
+
+
+def test_reference_matched_source_way_scope_is_explicit_opt_in(tmp_path: Path) -> None:
+    script = _load_script()
+    teacher = tmp_path / "teacher.net.xml"
+    args = _args(use_reference_source_way_scope=True)
+
+    kwargs = script._reference_matched_workflow_kwargs(
+        args,
+        output_dir=tmp_path / "run",
+        teacher_net=teacher,
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+    )
+
+    assert kwargs["use_reference_source_way_scope"] is True
 
 
 def test_reference_matched_teacher_materialization_is_explicit_opt_in(tmp_path: Path) -> None:
