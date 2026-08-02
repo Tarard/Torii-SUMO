@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any, Mapping
 import xml.etree.ElementTree as ET
 
+from pyproj import Transformer
+from shapely import LineString
+from shapely.strtree import STRtree
+
 from .osm_network import _parse_utm_zone, _utm_to_latlon, haversine_m
 
 
@@ -63,11 +67,11 @@ def audit_reference_hierarchy(
         min_extra_edges=min_extra_edges,
     )
     type_decisions = {row["edge_type"]: row["hierarchy_scope_decision"] for row in type_comparisons}
+    reference_index = _ReferenceEdgeIndex(reference_edges, reference_high_edges)
     candidate_cases = [
         _classify_candidate_edge(
             edge,
-            reference_edges=reference_edges,
-            reference_high_edges=reference_high_edges,
+            reference_index=reference_index,
             type_decisions=type_decisions,
             match_distance_m=match_distance_m,
             oversplit_length_ratio=oversplit_length_ratio,
@@ -372,6 +376,65 @@ def _is_link_or_slip_lane(edge: dict[str, Any]) -> bool:
     return str(edge.get("type", "")).endswith("_link")
 
 
+class _ReferenceEdgeIndex:
+    def __init__(self, edges: list[dict[str, Any]], high_edges: list[dict[str, Any]]) -> None:
+        self.by_id = {str(edge["id"]): edge for edge in edges}
+        self._by_name: dict[str, list[dict[str, Any]]] = {}
+        for edge in high_edges:
+            name = str(edge.get("normalized_name", ""))
+            if name:
+                self._by_name.setdefault(name, []).append(edge)
+        self._all = _SpatialEdges(edges)
+        typed: dict[str, list[dict[str, Any]]] = {}
+        for edge in high_edges:
+            for token in _high_hierarchy_type_tokens(str(edge["type"])):
+                typed.setdefault(token, []).append(edge)
+        self._by_type = {token: _SpatialEdges(items) for token, items in typed.items()}
+
+    def any_candidates(self, edge: dict[str, Any], distance_m: float) -> list[dict[str, Any]]:
+        return self._all.near_or_nearest(edge, distance_m)
+
+    def same_type_candidates(self, edge: dict[str, Any], distance_m: float) -> list[dict[str, Any]]:
+        matches: dict[str, dict[str, Any]] = {}
+        for token in _high_hierarchy_type_tokens(str(edge["type"])):
+            spatial = self._by_type.get(token)
+            if spatial is not None:
+                matches.update((str(item["id"]), item) for item in spatial.near_or_nearest(edge, distance_m))
+        return list(matches.values())
+
+    def same_name_candidates(self, edge: dict[str, Any]) -> list[dict[str, Any]]:
+        return self._by_name.get(str(edge.get("normalized_name", "")), [])
+
+
+class _SpatialEdges:
+    def __init__(self, edges: list[dict[str, Any]]) -> None:
+        self.edges = edges
+        self.tree = STRtree([_spatial_geometry(edge) for edge in edges])
+
+    def near_or_nearest(self, edge: dict[str, Any], distance_m: float) -> list[dict[str, Any]]:
+        if not self.edges:
+            return []
+        geometry = _spatial_geometry(edge)
+        indexes = self.tree.query(geometry, predicate="dwithin", distance=distance_m)
+        if len(indexes) == 0:
+            indexes = [self.tree.nearest(geometry)]
+        return [self.edges[int(index)] for index in indexes]
+
+
+_WGS84_TO_UTM32 = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
+
+
+def _spatial_geometry(edge: dict[str, Any]) -> LineString:
+    geo_shape = edge.get("geo_shape") or []
+    if geo_shape:
+        points = [_WGS84_TO_UTM32.transform(lon, lat) for lat, lon in geo_shape]
+    else:
+        points = list(edge.get("shape") or [(0.0, 0.0)])
+    if len(points) == 1:
+        points.append(points[0])
+    return LineString(points)
+
+
 def _type_comparisons(
     *,
     reference_high_edges: list[dict[str, Any]],
@@ -412,32 +475,17 @@ def _type_comparisons(
 def _classify_candidate_edge(
     edge: dict[str, Any],
     *,
-    reference_edges: list[dict[str, Any]],
-    reference_high_edges: list[dict[str, Any]],
+    reference_index: _ReferenceEdgeIndex,
     type_decisions: dict[str, str],
     match_distance_m: float,
     oversplit_length_ratio: float,
     resolve_equivalent_fragmentation: bool = False,
 ) -> dict[str, Any]:
-    nearest_same = _nearest_edge(
-        edge,
-        [
-            item
-            for item in reference_high_edges
-            if _has_matching_high_hierarchy_type(str(edge["type"]), str(item["type"]))
-        ],
-    )
-    same_name_candidates = [
-        item
-        for item in reference_high_edges
-        if edge.get("normalized_name") and item.get("normalized_name") == edge.get("normalized_name")
-    ]
+    nearest_same = _nearest_edge(edge, reference_index.same_type_candidates(edge, match_distance_m))
+    same_name_candidates = reference_index.same_name_candidates(edge)
     nearest_same_name = _nearest_edge(edge, same_name_candidates)
-    nearest_any = _nearest_edge(edge, reference_edges)
-    same_id_reference = next(
-        (item for item in reference_edges if str(item.get("id", "")) == str(edge.get("id", ""))),
-        None,
-    )
+    nearest_any = _nearest_edge(edge, reference_index.any_candidates(edge, match_distance_m))
+    same_id_reference = reference_index.by_id.get(str(edge.get("id", "")))
     same_id_reference_type = str(same_id_reference.get("type", "")) if same_id_reference else ""
     if (
         same_id_reference is not None

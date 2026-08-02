@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import xml.etree.ElementTree as ET
 
+import torii_sumo.core.reference_hierarchy as reference_hierarchy
 from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
 
 
@@ -96,6 +97,46 @@ def test_reference_hierarchy_audit_classifies_high_road_gap_modes(tmp_path: Path
     assert Path(report["cases_file"]).is_file()
     assert Path(report["type_comparison_file"]).is_file()
     assert Path(report["summary_file"]).is_file()
+
+
+def test_reference_hierarchy_audit_limits_exact_distance_checks(tmp_path: Path, monkeypatch) -> None:
+    reference_net = tmp_path / "reference_many.net.xml"
+    candidate_net = tmp_path / "candidate_one.net.xml"
+    reference_edges = [
+        ("ref_near", "near_a", "near_b", "highway.primary", 100.0, "0,1 100,1"),
+        *[
+            (
+                f"ref_far_{index}",
+                f"far_{index}_a",
+                f"far_{index}_b",
+                "highway.primary",
+                100.0,
+                f"{10000 + index * 200},0 {10100 + index * 200},0",
+            )
+            for index in range(200)
+        ],
+    ]
+    _write_net(reference_net, reference_edges)
+    _write_net(candidate_net, [("cand", "ca", "cb", "highway.primary", 100.0, "0,0 100,0")])
+    original = reference_hierarchy._edge_distance
+    calls = 0
+
+    def counted_distance(left, right):
+        nonlocal calls
+        calls += 1
+        return original(left, right)
+
+    monkeypatch.setattr(reference_hierarchy, "_edge_distance", counted_distance)
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy_many",
+        match_distance_m=10.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_cases"][0]["nearest_same_type_reference_edge_id"] == "ref_near"
+    assert calls < 10
 
 
 def test_reference_hierarchy_can_resolve_proven_equivalent_osm_fragmentation(tmp_path: Path) -> None:
