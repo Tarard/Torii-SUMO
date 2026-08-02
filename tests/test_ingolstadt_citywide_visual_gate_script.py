@@ -141,6 +141,17 @@ def test_registration_prefers_source_identity_then_direction() -> None:
     assert report["ambiguous"] == []
 
 
+def test_registration_keeps_unique_source_identity_after_coordinate_drift() -> None:
+    module = _module()
+    teacher = _junction("10", (1000, 2000), roads=("20",), bearings=(0,))
+    moved = _junction("10", (1050, 2000), roads=("20",), bearings=(0,))
+
+    report = module.register_junctions([teacher], [moved], max_distance_m=10)
+
+    assert report["matched"][0]["candidate_ids"] == ["10"]
+    assert report["teacher_only"] == []
+
+
 def test_registration_maps_a_teacher_cluster_to_its_source_junctions() -> None:
     module = _module()
     teacher = _junction("cluster_10_11", (1000, 2000), roads=("10", "20"), bearings=(0, 180))

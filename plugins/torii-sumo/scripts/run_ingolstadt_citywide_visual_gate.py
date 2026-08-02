@@ -111,30 +111,48 @@ def register_junctions(
     if max_distance_m <= 0:
         raise ValueError("max_distance_m must be positive")
     available = {str(row["id"]): row for row in candidate_junctions}
+    candidate_sources = {candidate_id: source_ids(candidate_id) for candidate_id in available}
+    exact_by_sources: dict[frozenset[str], list[str]] = collections.defaultdict(list)
+    members_by_source: dict[str, list[str]] = collections.defaultdict(list)
+    spatial: dict[tuple[int, int], list[str]] = collections.defaultdict(list)
+    for candidate_id, row in available.items():
+        exact_by_sources[candidate_sources[candidate_id]].append(candidate_id)
+        for source_id in candidate_sources[candidate_id]:
+            members_by_source[source_id].append(candidate_id)
+        x, y = row["projected_center"]
+        spatial[math.floor(x / max_distance_m), math.floor(y / max_distance_m)].append(candidate_id)
     used: set[str] = set()
     matched, teacher_only, ambiguous = [], [], []
     for teacher in sorted(teacher_junctions, key=lambda row: str(row["id"])):
         teacher_id = str(teacher["id"])
-        nearby = [
-            row for candidate_id, row in available.items()
-            if candidate_id not in used
-            and math.dist(teacher["projected_center"], row["projected_center"]) <= max_distance_m
-        ]
         teacher_sources = source_ids(teacher_id)
-        exact = [row for row in nearby if teacher_sources and source_ids(str(row["id"])) == teacher_sources]
+        exact = (
+            [available[candidate_id] for candidate_id in exact_by_sources[teacher_sources] if candidate_id not in used]
+            if teacher_sources else []
+        )
+        by_source = {
+            source_id: [available[candidate_id] for candidate_id in members_by_source[source_id] if candidate_id not in used]
+            for source_id in teacher_sources
+        }
+        x, y = teacher["projected_center"]
+        cell_x, cell_y = math.floor(x / max_distance_m), math.floor(y / max_distance_m)
+        nearby = [
+            available[candidate_id]
+            for dx in (-1, 0, 1)
+            for dy in (-1, 0, 1)
+            for candidate_id in spatial.get((cell_x + dx, cell_y + dy), ())
+            if candidate_id not in used
+            and math.dist(teacher["projected_center"], available[candidate_id]["projected_center"]) <= max_distance_m
+        ]
         if len(exact) == 1:
             selected = exact
         elif len(exact) > 1:
             selected = []
             ambiguous.append({"teacher_id": teacher_id, "candidate_ids": sorted(str(row["id"]) for row in exact)})
+        elif len(teacher_sources) > 1 and all(len(rows) == 1 for rows in by_source.values()):
+            selected = list({str(rows[0]["id"]): rows[0] for rows in by_source.values()}.values())
         else:
-            by_source = {
-                source_id: [row for row in nearby if source_id in source_ids(str(row["id"]))]
-                for source_id in teacher_sources
-            }
-            if len(teacher_sources) > 1 and all(len(rows) == 1 for rows in by_source.values()):
-                selected = list({str(rows[0]["id"]): rows[0] for rows in by_source.values()}.values())
-            elif not nearby:
+            if not nearby:
                 selected = []
                 teacher_only.append(teacher_id)
             else:
