@@ -1,7 +1,27 @@
 from pathlib import Path
 
+import torii_sumo.core.overlapping_junction_audit as overlapping_audit
 from torii_sumo.core.overlapping_junction_audit import audit_overlapping_junctions
 from torii_sumo.core.surface_overlap_audit import audit_sumo_lane_junction_surface_overlaps
+
+
+def test_overlap_groups_only_compare_nearby_grid_cells(monkeypatch) -> None:
+    junctions = {
+        str(index): {"id": str(index), "type": "priority", "x": index * 100.0, "y": 0.0}
+        for index in range(1_000)
+    }
+    calls = 0
+    real_distance = overlapping_audit._distance
+
+    def counted_distance(left, right):
+        nonlocal calls
+        calls += 1
+        return real_distance(left, right)
+
+    monkeypatch.setattr(overlapping_audit, "_distance", counted_distance)
+
+    assert overlapping_audit._overlap_groups(junctions, [], 12.0, 20.0, 2) == []
+    assert calls < 10
 
 
 def test_overlapping_junction_audit_flags_close_top_level_junctions(tmp_path: Path) -> None:

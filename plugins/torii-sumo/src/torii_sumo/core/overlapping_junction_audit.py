@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -46,8 +46,21 @@ def audit_overlapping_junctions(
 
     reference_groups = _reference_groups(reference_join_audit_report)
     groups = _overlap_groups(net["junctions"], net["edges"], overlap_radius_m, short_edge_length_m, min_group_nodes)
+    edge_indexes_by_node: dict[str, set[int]] = defaultdict(set)
+    for edge_index, edge in enumerate(net["edges"]):
+        edge_indexes_by_node[edge["from"]].add(edge_index)
+        edge_indexes_by_node[edge["to"]].add(edge_index)
     reports = [
-        _group_report(index, group, net["junctions"], net["edges"], reference_groups)
+        _group_report(
+            index,
+            group,
+            net["junctions"],
+            [
+                net["edges"][edge_index]
+                for edge_index in sorted({item for node_id in group for item in edge_indexes_by_node[node_id]})
+            ],
+            reference_groups,
+        )
         for index, group in enumerate(groups, start=1)
     ]
     reports = [group for group in reports if _is_actionable_group(group)]
@@ -171,11 +184,20 @@ def _overlap_groups(
             short_neighbors[edge["from"]].add(edge["to"])
             short_neighbors[edge["to"]].add(edge["from"])
 
+    cells: dict[tuple[int, int], list[str]] = defaultdict(list)
+    for node_id in ids:
+        junction = junctions[node_id]
+        cells[(math.floor(junction["x"] / overlap_radius_m), math.floor(junction["y"] / overlap_radius_m))].append(node_id)
+
     groups: set[frozenset[str]] = set()
     for seed in ids:
+        junction = junctions[seed]
+        cell = (math.floor(junction["x"] / overlap_radius_m), math.floor(junction["y"] / overlap_radius_m))
         local = {
             node_id
-            for node_id in ids
+            for delta_x in (-1, 0, 1)
+            for delta_y in (-1, 0, 1)
+            for node_id in cells.get((cell[0] + delta_x, cell[1] + delta_y), ())
             if node_id == seed or _distance(junctions[seed], junctions[node_id]) <= overlap_radius_m
         }
         local.update(short_neighbors[seed])
@@ -191,8 +213,9 @@ def _group_report(
     edges: list[dict[str, Any]],
     reference_groups: dict[frozenset[str], list[str]],
 ) -> dict[str, Any]:
-    group_edges = [edge for edge in edges if edge["from"] in node_ids and edge["to"] in node_ids]
-    incident_edges = [edge for edge in edges if edge["from"] in node_ids or edge["to"] in node_ids]
+    node_id_set = set(node_ids)
+    group_edges = [edge for edge in edges if edge["from"] in node_id_set and edge["to"] in node_id_set]
+    incident_edges = edges
     reference_ids = _matching_reference_ids(node_ids, reference_groups)
     edge_types = Counter(edge["type"] for edge in incident_edges)
     has_vehicle_edges = any(_is_vehicle_edge(edge) for edge in incident_edges)
@@ -294,6 +317,12 @@ def _compound_core_candidates(
     }
     candidates = []
     authorized_ids = {str(item) for item in (authorized_reference_ids or ()) if str(item)}
+    micro_edges_by_node: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for edge in net["edges"]:
+        if float(edge["length"]) <= micro_edge_length_m and frozenset((str(edge["from"]), str(edge["to"]))) in exact_pairs:
+            micro_edges_by_node[str(edge["from"])].append(edge)
+            if edge["to"] != edge["from"]:
+                micro_edges_by_node[str(edge["to"])].append(edge)
     for case in reference.get("all_cases", reference.get("matched_cases", [])) or []:
         reference_id = str(case.get("reference_id", ""))
         cluster = clusters.get(str(case.get("matched_candidate_cluster_id", "")))
@@ -320,13 +349,14 @@ def _compound_core_candidates(
             and str(cluster.get("physical_intersection_shape", "")) in {"cross", "t_or_y", "multi_arm"}
         )
         join_node_set = set(join_nodes)
-        micro_edges = [
-            edge
-            for edge in net["edges"]
-            if float(edge["length"]) <= micro_edge_length_m
-            and frozenset((str(edge["from"]), str(edge["to"]))) in exact_pairs
-            and {str(edge["from"]), str(edge["to"])} <= join_node_set
-        ]
+        micro_edges = list(
+            {
+                str(edge["id"]): edge
+                for node_id in join_nodes
+                for edge in micro_edges_by_node.get(node_id, ())
+                if {str(edge["from"]), str(edge["to"])} <= join_node_set
+            }.values()
+        )
         target_clean = not (join_node_set & geometry_error_nodes)
         evidence_complete = bool(
             case.get("match_status") == "matched"
