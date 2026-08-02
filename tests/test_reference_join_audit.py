@@ -8,6 +8,18 @@ from torii_sumo.core import reference_join_audit as reference_join_audit_module
 from torii_sumo.core.reference_join_audit import _reference_join_cases, audit_reference_join_patterns
 
 
+def test_tls_controller_neighborhoods_group_distance_rows_once() -> None:
+    reference_rows, candidate_rows = reference_join_audit_module._tls_controller_neighborhood_indexes(
+        [(5.0, 0, 1), (8.0, 1, 0), (120.0, 0, 0)],
+        reference_count=2,
+        candidate_count=2,
+        max_distance_m=100.0,
+    )
+
+    assert reference_rows == [[(5.0, 1)], [(8.0, 0)]]
+    assert candidate_rows == [[(8.0, 1)], [(5.0, 0)]]
+
+
 def test_tls_controller_alignment_pairs_by_geography_not_id() -> None:
     reference = {
         "tl_logic_control_records": [

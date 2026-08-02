@@ -1271,13 +1271,18 @@ def _tls_controller_alignment(
         for reference_index, reference_record in enumerate(reference_records)
         for candidate_index, candidate_record in enumerate(candidate_records)
     )
+    reference_distance_rows, candidate_distance_rows = _tls_controller_neighborhood_indexes(
+        distances,
+        reference_count=len(reference_records),
+        candidate_count=len(candidate_records),
+        max_distance_m=max_distance_m,
+    )
     reference_neighborhoods = []
     for reference_index, reference_record in enumerate(reference_records):
         neighbors = sorted(
             [
                 [distance_m, candidate_records[candidate_index]]
-                for distance_m, candidate_reference_index, candidate_index in distances
-                if candidate_reference_index == reference_index and distance_m <= max_distance_m
+                for distance_m, candidate_index in reference_distance_rows[reference_index]
             ],
             key=lambda item: (item[0], str(item[1].get("tl_id", ""))),
         )
@@ -1300,8 +1305,7 @@ def _tls_controller_alignment(
         neighbors = sorted(
             [
                 [distance_m, reference_records[reference_index]]
-                for distance_m, reference_index, candidate_candidate_index in distances
-                if candidate_candidate_index == candidate_index and distance_m <= max_distance_m
+                for distance_m, reference_index in candidate_distance_rows[candidate_index]
             ],
             key=lambda item: (item[0], str(item[1].get("tl_id", ""))),
         )
@@ -1501,6 +1505,23 @@ def _tls_controller_alignment(
         "repair_safe": False,
         "warning": "centroid pairing does not yet align approaches or controller split/merge groups",
     }
+
+
+def _tls_controller_neighborhood_indexes(
+    distances: list[tuple[float, int, int]],
+    *,
+    reference_count: int,
+    candidate_count: int,
+    max_distance_m: float,
+) -> tuple[list[list[tuple[float, int]]], list[list[tuple[float, int]]]]:
+    reference_rows: list[list[tuple[float, int]]] = [[] for _ in range(reference_count)]
+    candidate_rows: list[list[tuple[float, int]]] = [[] for _ in range(candidate_count)]
+    for distance_m, reference_index, candidate_index in distances:
+        if distance_m > max_distance_m:
+            break
+        reference_rows[reference_index].append((distance_m, candidate_index))
+        candidate_rows[candidate_index].append((distance_m, reference_index))
+    return reference_rows, candidate_rows
 
 
 def _latlon_distance_m(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
