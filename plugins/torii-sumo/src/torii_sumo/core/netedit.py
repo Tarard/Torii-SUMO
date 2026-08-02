@@ -305,6 +305,24 @@ def _require_owned_window(hwnd: int, pid: int) -> None:
         raise RuntimeError(f"window {hwnd} belongs to process {window_pid}, not NetEdit process {pid}")
 
 
+def _wait_for_netedit_network_loaded(
+    hwnd: int,
+    pid: int,
+    candidate_name: str,
+    timeout_seconds: float,
+) -> str:
+    _, win32gui, _, _ = _windows_modules()
+    deadline = time.monotonic() + timeout_seconds
+    expected = candidate_name.casefold()
+    while time.monotonic() < deadline:
+        _require_owned_window(hwnd, pid)
+        title = str(win32gui.GetWindowText(hwnd))
+        if expected in title.casefold():
+            return title
+        time.sleep(0.1)
+    raise TimeoutError(f"NetEdit did not finish loading {candidate_name}")
+
+
 def _capture_target_window(hwnd: int, destination: Path) -> dict[str, Any]:
     _, win32gui, _, win32ui = _windows_modules()
     from PIL import Image
@@ -972,6 +990,12 @@ class NeteditTargetSession:
         try:
             self.hwnd = _wait_for_netedit_window(self.process.pid, self.window_timeout_seconds)
             _require_owned_window(self.hwnd, self.process.pid)
+            loaded_title = _wait_for_netedit_network_loaded(
+                self.hwnd,
+                self.process.pid,
+                self.candidate.name,
+                self.window_timeout_seconds,
+            )
             render_context = _activate_target_window(self.hwnd, self.process.pid)
             self.foreground_activation_used = True
             try:
@@ -986,7 +1010,7 @@ class NeteditTargetSession:
             return self._record_step(
                 "open",
                 {
-                    "window_title": self._window_title(),
+                    "window_title": loaded_title,
                     "keyboard_layout": keyboard_layout,
                     "render_activation": render_context,
                     "render_restore": render_restore,

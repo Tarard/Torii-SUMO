@@ -175,6 +175,11 @@ def _patch_target_session_runtime(
         return {"send_input_event_count": 1, "restore": {"restored": True}}
 
     monkeypatch.setattr(netedit, "_wait_for_netedit_window", lambda pid, timeout: 42)
+    monkeypatch.setattr(
+        netedit,
+        "_wait_for_netedit_network_loaded",
+        lambda hwnd, pid, candidate_name, timeout: f"{candidate_name} - netedit",
+    )
     monkeypatch.setattr(netedit, "_require_owned_window", require_owned)
     monkeypatch.setattr(netedit, "_capture_target_window", capture)
     monkeypatch.setattr(netedit, "_client_size", lambda hwnd: (800, 600))
@@ -208,6 +213,23 @@ def _patch_target_session_runtime(
     monkeypatch.setattr(netedit, "_windows_modules", lambda: (FakeCon(), FakeGui(), None, None))
     monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
     return deliveries, owned_pids
+
+
+def test_wait_for_netedit_network_loaded_rejects_the_loading_window(monkeypatch) -> None:
+    titles = iter(["netedit 1.27.1", "candidate.net.xml - netedit 1.27.1"])
+
+    class FakeGui:
+        @staticmethod
+        def GetWindowText(_hwnd):
+            return next(titles)
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    title = netedit._wait_for_netedit_network_loaded(42, 9001, "candidate.net.xml", 1.0)
+
+    assert title == "candidate.net.xml - netedit 1.27.1"
 
 
 def test_target_session_copies_source_records_every_step_and_never_promotes(
