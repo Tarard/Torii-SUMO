@@ -58,6 +58,9 @@ def test_inventory_uses_projected_coordinates_and_motor_scope(tmp_path: Path) ->
     assert junction["motor_incoming_lane_details"] == [
         {"id": "in_0", "edge_id": "in", "road_root": "in", "bearing": 0.0}
     ]
+    assert junction["motor_outgoing_lane_details"] == [
+        {"id": "out_0", "edge_id": "out", "road_root": "out", "bearing": 0.0}
+    ]
 
 
 def test_inventory_applies_the_teacher_projected_scope(tmp_path: Path) -> None:
@@ -176,3 +179,167 @@ def test_lane_registration_is_one_to_one_by_road_and_bearing() -> None:
     ]
     assert report["teacher_only"] == []
     assert report["candidate_only"] == []
+
+
+def test_resume_skips_hash_matching_pass_and_invalidates_changed_candidate(tmp_path: Path) -> None:
+    module = _module()
+    state = tmp_path / "state.json"
+    module.write_tile_state(state, candidate_sha="a" * 64, completed=["j0/in_0"])
+
+    assert module.pending_items(
+        state,
+        candidate_sha="a" * 64,
+        items=["j0/in_0", "j1/in_0"],
+    ) == ["j1/in_0"]
+    assert module.pending_items(
+        state,
+        candidate_sha="b" * 64,
+        items=["j0/in_0", "j1/in_0"],
+    ) == ["j0/in_0", "j1/in_0"]
+
+
+def test_city_completion_fails_on_any_unmapped_or_nonpass_item() -> None:
+    report = _module().city_completion(
+        teacher_count=2,
+        candidate_count=2,
+        matched_count=1,
+        teacher_only=["t1"],
+        candidate_only=["c1"],
+        ambiguous=[],
+        lane_statuses=["pass", "fail"],
+        structure_statuses=["pass"],
+        global_load="pass",
+        global_routeability="pass",
+    )
+
+    assert report["status"] == "fail"
+    assert report["automatic_promotion_gate"] == "blocked"
+
+
+def _connection_net(path: Path, *, target: str, tl: str, link_index: str) -> Path:
+    signal = f' tl="{tl}" linkIndex="{link_index}"' if tl else ""
+    path.write_text(
+        "<net>"
+        '<edge id="in"><lane id="in_0" index="0" allow="passenger"/></edge>'
+        '<edge id="out"><lane id="out_0" index="0" allow="passenger"/></edge>'
+        '<edge id="wrong"><lane id="wrong_0" index="0" allow="passenger"/></edge>'
+        f'<connection from="in" to="{target}" fromLane="0" toLane="0" dir="s" via=":j_0_0"{signal}/>'
+        "</net>",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_structure_pair_detects_missing_target_and_signal_binding(tmp_path: Path) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="wrong", tl="", link_index="")
+
+    report = module.compare_lane_structure(
+        teacher,
+        candidate,
+        teacher_lane="in_0",
+        candidate_lane="in_0",
+        outgoing_lane_pairs={"out_0": "out_0"},
+    )
+
+    assert report["status"] == "fail"
+    assert "target_lane_mismatch" in report["reasons"]
+    assert "signal_binding_mismatch" in report["reasons"]
+
+
+def test_city_manifest_binds_junction_and_lane_pairs() -> None:
+    module = _module()
+    teacher_junction = _junction("cluster_10_11", (1000, 2000), roads=("10",), bearings=(0,))
+    candidate_junction = _junction("cluster_10_11", (1001, 2000), roads=("10",), bearings=(1,))
+    teacher_junction.update({
+        "tile_id": "0004_0008",
+        "motor_incoming_lane_details": [{"id": "t_in", "road_root": "10", "bearing": 0.0}],
+        "motor_outgoing_lane_details": [{"id": "t_out", "road_root": "20", "bearing": 90.0}],
+    })
+    candidate_junction.update({
+        "tile_id": "0004_0008",
+        "motor_incoming_lane_details": [{"id": "c_in", "road_root": "10", "bearing": 1.0}],
+        "motor_outgoing_lane_details": [{"id": "c_out", "road_root": "20", "bearing": 91.0}],
+    })
+    teacher = {"applicable_junction_count": 1, "junctions": [teacher_junction]}
+    candidate = {"applicable_junction_count": 1, "junctions": [candidate_junction]}
+
+    manifest = module.build_city_manifest(teacher, candidate, max_distance_m=10.0)
+
+    assert manifest["status"] == "ready"
+    assert manifest["junction_pairs"][0]["incoming_lane_pairs"] == [["t_in", "c_in"]]
+    assert manifest["junction_pairs"][0]["outgoing_lane_pairs"] == {"t_out": "c_out"}
+    assert manifest["teacher_only"] == []
+    assert manifest["candidate_only"] == []
+
+
+def test_cli_exposes_resumable_city_phases() -> None:
+    args = _module().build_parser().parse_args([
+        "--teacher-net", "teacher.net.xml",
+        "--candidate-net", "candidate.net.xml",
+        "--source-osm", "source.osm.xml",
+        "--output-dir", "out",
+        "--phase", "inventory",
+        "--resume",
+    ])
+
+    assert args.phase == "inventory"
+    assert args.resume is True
+    assert args.seed_junction == "cluster_2230504019_376231769"
+    assert args.tile_size_m == 250.0
+
+
+def test_inventory_phase_writes_hash_bound_city_manifest(tmp_path: Path, monkeypatch) -> None:
+    module = _module()
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source_osm = tmp_path / "source.osm.xml"
+    _write_net(teacher, offset="-1000,-2000", junction_x=20, junction_y=30)
+    _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
+    source_osm.write_text("<osm/>", encoding="utf-8")
+    monkeypatch.setattr(module, "OFFICIAL_TEACHER_SHA256", file_sha256(teacher))
+    monkeypatch.setattr(module, "OFFICIAL_CONV_BOUNDARY", (0.0, 0.0, 500.0, 500.0))
+
+    report = module.run_inventory_phase(
+        teacher_net=teacher,
+        candidate_net=candidate,
+        source_osm=source_osm,
+        output_dir=tmp_path / "out",
+        tile_size_m=250.0,
+        junction_distance_m=10.0,
+        git_commit="abc123",
+        sumo_version="SUMO 1.27.1",
+        netedit_version="NetEdit 1.27.1",
+    )
+
+    assert report["status"] == "ready"
+    assert report["teacher_sha256"] == file_sha256(teacher)
+    assert report["candidate_sha256"] == file_sha256(candidate)
+    assert Path(report["manifest_file"]).is_file()
+    assert Path(report["source_ledger_file"]).is_file()
+
+
+def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, capsys) -> None:
+    module = _module()
+    calls = []
+
+    def fake_inventory(**kwargs):
+        calls.append(kwargs)
+        return {"status": "ready", "manifest_file": "city-manifest.json"}
+
+    code = module.main(
+        [
+            "--teacher-net", str(tmp_path / "teacher.net.xml"),
+            "--candidate-net", str(tmp_path / "candidate.net.xml"),
+            "--source-osm", str(tmp_path / "source.osm.xml"),
+            "--output-dir", str(tmp_path / "out"),
+            "--phase", "inventory",
+        ],
+        inventory_func=fake_inventory,
+        provenance_func=lambda: ("abc123", "SUMO 1.27.1", "NetEdit 1.27.1"),
+    )
+
+    assert code == 2
+    assert calls[0]["tile_size_m"] == 250.0
+    assert '"status": "ready"' in capsys.readouterr().out
