@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+import multiprocessing
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 import xml.etree.ElementTree as ET
@@ -156,6 +158,23 @@ def find_removable_corridor_geometry_nodes(
     return sorted(candidates, key=lambda item: str(item["node_id"]))
 
 
+def _find_removable_corridor_geometry_nodes_isolated(
+    net_file: Path,
+    *,
+    reference_net_file: Path | None,
+    max_micro_edge_length_m: float,
+    candidate_node_ids: set[str] | None,
+) -> list[dict[str, Any]]:
+    with ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn")) as executor:
+        return executor.submit(
+            find_removable_corridor_geometry_nodes,
+            net_file,
+            reference_net_file=reference_net_file,
+            max_micro_edge_length_m=max_micro_edge_length_m,
+            candidate_node_ids=candidate_node_ids,
+        ).result()
+
+
 def build_corridor_geometry_simplification_variant(
     *,
     net_file: Path,
@@ -173,13 +192,13 @@ def build_corridor_geometry_simplification_variant(
     if reference_net_file is not None and not reference_net_file.exists():
         return _failure(f"reference net file does not exist: {reference_net_file}")
     try:
-        candidates = find_removable_corridor_geometry_nodes(
+        candidates = _find_removable_corridor_geometry_nodes_isolated(
             net_file,
             reference_net_file=reference_net_file,
             max_micro_edge_length_m=max_micro_edge_length_m,
             candidate_node_ids=candidate_node_ids,
         )
-    except (OSError, ET.ParseError, ValueError) as exc:
+    except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
     output_dir = output_dir.resolve()
