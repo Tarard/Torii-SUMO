@@ -1,6 +1,7 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+import torii_sumo.core.road_connectivity_teacher_model as road_connectivity_model
 from torii_sumo.core.road_connectivity_teacher_model import (
     audit_road_connectivity_parity,
     build_internal_movement_replay_audit,
@@ -2403,6 +2404,30 @@ def test_audit_road_connectivity_parity_writes_complete_gate_and_components(tmp_
     assert Path(report["road_template_report_file"]).exists()
     assert Path(report["connection_topology_report_file"]).exists()
     assert Path(report["internal_movement_report_file"]).exists()
+
+
+def test_complete_road_connectivity_audit_parses_each_network_once(tmp_path: Path, monkeypatch) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    network = """<net>
+  <edge id="in" from="west" to="center"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="center" to="east"><lane id="out_0" index="0"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    teacher_net.write_text(network, encoding="utf-8")
+    candidate_net.write_text(network, encoding="utf-8")
+    parse_calls = 0
+    real_parse = road_connectivity_model.ET.parse
+
+    def counted_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(road_connectivity_model.ET, "parse", counted_parse)
+
+    assert audit_road_connectivity_parity(teacher_net, candidate_net)["status"] == "pass"
+    assert parse_calls == 2
 
 
 def test_build_internal_movement_replay_audit_groups_missing_movements_by_owner(

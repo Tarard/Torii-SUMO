@@ -28,6 +28,8 @@ def audit_reference_road_alignment(
     prefix: str = "reference_road_alignment",
     max_examples: int = 20,
     max_review_locations: int = 200,
+    teacher_root: ET.Element | None = None,
+    candidate_root: ET.Element | None = None,
 ) -> dict[str, Any]:
     """Compare an OSM-derived road network with a manual reference by source way.
 
@@ -43,8 +45,8 @@ def audit_reference_road_alignment(
     """
 
     try:
-        teacher_root, teacher_edges = _read_external_edges(teacher_net_file)
-        candidate_root, candidate_edges = _read_external_edges(candidate_net_file)
+        teacher_root, teacher_edges = _read_external_edges(teacher_net_file, root=teacher_root)
+        candidate_root, candidate_edges = _read_external_edges(candidate_net_file, root=candidate_root)
         source_way_ids = _read_source_way_ids(source_osm_file) if source_osm_file else None
     except (OSError, ET.ParseError, ValueError, TypeError) as exc:
         report = {
@@ -221,8 +223,12 @@ def audit_reference_road_alignment(
     return _write_report(report, output_dir=output_dir, prefix=prefix)
 
 
-def _read_external_edges(net_file: Path) -> tuple[ET.Element, dict[str, ET.Element]]:
-    root = ET.parse(net_file).getroot()
+def _read_external_edges(
+    net_file: Path,
+    *,
+    root: ET.Element | None = None,
+) -> tuple[ET.Element, dict[str, ET.Element]]:
+    root = root if root is not None else ET.parse(net_file).getroot()
     edges = {
         edge.attrib["id"]: edge
         for edge in root.findall("edge")
@@ -461,6 +467,8 @@ def _build_review_locations(
 ) -> list[dict[str, Any]]:
     locations: list[dict[str, Any]] = []
     seen: set[str] = set()
+    teacher_edges = {edge_id: edge for items in teacher_groups.values() for edge_id, edge in items}
+    candidate_edges = {edge_id: edge for items in candidate_groups.values() for edge_id, edge in items}
 
     def add(location: dict[str, Any]) -> None:
         location_id = str(location.get("location_id", ""))
@@ -472,10 +480,9 @@ def _build_review_locations(
     for row in manual_source_rows:
         group_key = row.get("source_way_id") or row.get("teacher_example_edge_id", "")
         edge_id = str(row.get("teacher_example_edge_id", ""))
+        group_items = teacher_groups.get(str(row.get("source_way_id", "")), [])
         point = _edge_point_in_candidate_space(
-            teacher_groups.get(str(row.get("source_way_id", "")), [(edge_id, _find_edge(teacher_root, edge_id))])[0][1]
-            if edge_id and _find_edge(teacher_root, edge_id) is not None
-            else None,
+            group_items[0][1] if group_items else teacher_edges.get(edge_id),
             teacher_root,
             candidate_root,
         )
@@ -508,7 +515,7 @@ def _build_review_locations(
     ):
         source_id = str(row.get("source_way_id", ""))
         candidate_edge_id = str(row.get("candidate_edge_id", ""))
-        candidate_edge = _find_edge(candidate_root, candidate_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
         point = _edge_local_midpoint(candidate_edge) if candidate_edge is not None else None
         if point is None:
             continue

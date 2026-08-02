@@ -1,7 +1,35 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+import torii_sumo.core.reference_road_alignment as reference_alignment
 from torii_sumo.core.reference_road_alignment import audit_reference_road_alignment
+
+
+def test_review_locations_reuse_external_edge_index(tmp_path: Path, monkeypatch) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        "<net><location netOffset='0,0'/>"
+        + "".join(
+            f"<edge id='manual_{index}'><lane id='manual_{index}_0' shape='{index},0 {index + 1},0'/></edge>"
+            for index in range(100)
+        )
+        + "</net>",
+        encoding="utf-8",
+    )
+    candidate.write_text("<net><location netOffset='0,0'/></net>", encoding="utf-8")
+    calls = 0
+    real_find_edge = reference_alignment._find_edge
+
+    def counted_find_edge(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_find_edge(*args, **kwargs)
+
+    monkeypatch.setattr(reference_alignment, "_find_edge", counted_find_edge)
+
+    assert audit_reference_road_alignment(teacher, candidate)["status"] == "needs_review"
+    assert calls == 0
 
 
 def _write_net(path: Path, *, teacher: bool = False) -> None:

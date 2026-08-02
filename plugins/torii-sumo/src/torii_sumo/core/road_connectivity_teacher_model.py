@@ -734,9 +734,11 @@ def build_road_connection_topology_replay_audit(
     candidate_net_file: Path,
     *,
     max_examples: int = 20,
+    teacher_root: ET.Element | None = None,
+    candidate_root: ET.Element | None = None,
 ) -> dict[str, Any]:
-    teacher_root = ET.parse(teacher_net_file).getroot()
-    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_root = teacher_root if teacher_root is not None else ET.parse(teacher_net_file).getroot()
+    candidate_root = candidate_root if candidate_root is not None else ET.parse(candidate_net_file).getroot()
     candidate_edges = {
         edge.attrib.get("id", ""): edge
         for edge in candidate_root.findall("edge")
@@ -790,11 +792,15 @@ def build_internal_movement_replay_audit(
     candidate_net_file: Path,
     *,
     max_examples: int = 5,
+    teacher_root: ET.Element | None = None,
+    candidate_root: ET.Element | None = None,
 ) -> dict[str, Any]:
     audit = build_road_connection_topology_replay_audit(
         teacher_net_file,
         candidate_net_file,
         max_examples=1_000_000,
+        teacher_root=teacher_root,
+        candidate_root=candidate_root,
     )
     owner_records: dict[str, list[dict[str, str]]] = {}
     for connection in audit["replayable_connections"]:
@@ -2584,42 +2590,52 @@ def compare_net_road_template_parity(
     *,
     max_examples: int = 3,
     semantic_gate: bool = False,
+    teacher_root: ET.Element | None = None,
+    candidate_root: ET.Element | None = None,
 ) -> dict[str, Any]:
     teacher_lane_templates = summarize_net_road_lane_model_templates(
         teacher_net_file,
         max_examples=max_examples,
+        root=teacher_root,
     )
     candidate_lane_templates = summarize_net_road_lane_model_templates(
         candidate_net_file,
         max_examples=max_examples,
+        root=candidate_root,
     )
     teacher_connection_templates = summarize_net_road_connection_templates(
         teacher_net_file,
         max_examples=max_examples,
+        root=teacher_root,
     )
     candidate_connection_templates = summarize_net_road_connection_templates(
         candidate_net_file,
         max_examples=max_examples,
+        root=candidate_root,
     )
     teacher_semantic_lane_templates = summarize_net_road_lane_model_templates(
         teacher_net_file,
         max_examples=max_examples,
         include_semantic=True,
+        root=teacher_root,
     )
     candidate_semantic_lane_templates = summarize_net_road_lane_model_templates(
         candidate_net_file,
         max_examples=max_examples,
         include_semantic=True,
+        root=candidate_root,
     )
     teacher_semantic_connection_templates = summarize_net_road_connection_templates(
         teacher_net_file,
         max_examples=max_examples,
         include_semantic=True,
+        root=teacher_root,
     )
     candidate_semantic_connection_templates = summarize_net_road_connection_templates(
         candidate_net_file,
         max_examples=max_examples,
         include_semantic=True,
+        root=candidate_root,
     )
     lane_parity = compare_road_template_summaries(
         teacher_lane_templates,
@@ -2750,21 +2766,29 @@ def audit_road_connectivity_parity(
     try:
         from .reference_road_alignment import audit_reference_road_alignment
 
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        candidate_root = ET.parse(candidate_net_file).getroot()
         road_template_report = compare_net_road_template_parity(
             teacher_net_file,
             candidate_net_file,
             max_examples=max_examples,
             semantic_gate=True,
+            teacher_root=teacher_root,
+            candidate_root=candidate_root,
         )
         connection_topology_report = build_road_connection_topology_replay_audit(
             teacher_net_file,
             candidate_net_file,
             max_examples=max_examples,
+            teacher_root=teacher_root,
+            candidate_root=candidate_root,
         )
         internal_movement_report = build_internal_movement_replay_audit(
             teacher_net_file,
             candidate_net_file,
             max_examples=max_examples,
+            teacher_root=teacher_root,
+            candidate_root=candidate_root,
         )
         reference_road_alignment_report = audit_reference_road_alignment(
             teacher_net_file,
@@ -2773,6 +2797,8 @@ def audit_road_connectivity_parity(
             output_dir=None,
             prefix=f"{prefix}_reference_road_alignment",
             max_examples=max_examples,
+            teacher_root=teacher_root,
+            candidate_root=candidate_root,
         )
         topology_gate = {
             "status": (
@@ -2940,8 +2966,9 @@ def summarize_net_road_lane_model_templates(
     *,
     max_examples: int = 3,
     include_semantic: bool = False,
+    root: ET.Element | None = None,
 ) -> list[dict[str, Any]]:
-    root = ET.parse(net_file).getroot()
+    root = root if root is not None else ET.parse(net_file).getroot()
     edges = [
         _canonical_edge_record(edge)
         for edge in root.findall("edge")
@@ -2961,8 +2988,9 @@ def summarize_net_road_connection_templates(
     *,
     max_examples: int = 3,
     include_semantic: bool = False,
+    root: ET.Element | None = None,
 ) -> list[dict[str, Any]]:
-    root = ET.parse(net_file).getroot()
+    root = root if root is not None else ET.parse(net_file).getroot()
     edges = {
         edge.attrib["id"]: _canonical_edge_record(edge)
         for edge in root.findall("edge")
