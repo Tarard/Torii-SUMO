@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from scipy.spatial import cKDTree
+
 from .junction_teacher_model import (
     compare_junction_pattern_records,
     extract_junction_pattern_index,
@@ -1262,14 +1264,10 @@ def _tls_controller_alignment(
             "pairs": [],
         }
 
-    distances = sorted(
-        (
-            _tls_controller_distance_m(reference_record, candidate_record),
-            reference_index,
-            candidate_index,
-        )
-        for reference_index, reference_record in enumerate(reference_records)
-        for candidate_index, candidate_record in enumerate(candidate_records)
+    distances = _nearby_tls_controller_distances(
+        reference_records,
+        candidate_records,
+        max_distance_m=max_distance_m,
     )
     reference_distance_rows, candidate_distance_rows = _tls_controller_neighborhood_indexes(
         distances,
@@ -1531,40 +1529,75 @@ def _latlon_distance_m(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -
     return math.hypot(delta_x, delta_y)
 
 
+def _nearby_tls_controller_distances(
+    reference_records: list[dict[str, Any]],
+    candidate_records: list[dict[str, Any]],
+    *,
+    max_distance_m: float,
+) -> list[tuple[float, int, int]]:
+    candidate_points: list[tuple[float, float, float]] = []
+    candidate_indexes: list[int] = []
+    for candidate_index, record in enumerate(candidate_records):
+        for lat, lon in _tls_controller_coordinates(record):
+            candidate_points.append(_unit_sphere_point(lat, lon))
+            candidate_indexes.append(candidate_index)
+    if not candidate_points:
+        return []
+    tree = cKDTree(candidate_points)
+    earth_radius_m = 6_371_000.0
+    chord_radius = 2.0 * math.sin((max_distance_m * 1.01) / (2.0 * earth_radius_m))
+    distances = []
+    for reference_index, reference_record in enumerate(reference_records):
+        nearby_candidate_indexes: set[int] = set()
+        for lat, lon in _tls_controller_coordinates(reference_record):
+            nearby_candidate_indexes.update(
+                candidate_indexes[point_index]
+                for point_index in tree.query_ball_point(_unit_sphere_point(lat, lon), chord_radius)
+            )
+        for candidate_index in nearby_candidate_indexes:
+            distance_m = _tls_controller_distance_m(reference_record, candidate_records[candidate_index])
+            if distance_m <= max_distance_m:
+                distances.append((distance_m, reference_index, candidate_index))
+    return sorted(distances)
+
+
+def _unit_sphere_point(lat: float, lon: float) -> tuple[float, float, float]:
+    lat_radians = math.radians(lat)
+    lon_radians = math.radians(lon)
+    cos_lat = math.cos(lat_radians)
+    return (
+        cos_lat * math.cos(lon_radians),
+        cos_lat * math.sin(lon_radians),
+        math.sin(lat_radians),
+    )
+
+
+def _tls_controller_coordinates(record: dict[str, Any]) -> list[tuple[float, float]]:
+    points = [
+        (float(point["lat"]), float(point["lon"]))
+        for point in record.get("controlled_junction_points", [])
+        if isinstance(point.get("lat"), (int, float))
+        and isinstance(point.get("lon"), (int, float))
+        and not str(point.get("status", "")).startswith("xy_fallback")
+    ]
+    if points:
+        return points
+    return [
+        (
+            float(record["controlled_junction_centroid_lat"]),
+            float(record["controlled_junction_centroid_lon"]),
+        )
+    ]
+
+
 def _tls_controller_distance_m(
     reference_record: dict[str, Any],
     candidate_record: dict[str, Any],
 ) -> float:
-    reference_points = [
-        point
-        for point in reference_record.get("controlled_junction_points", [])
-        if isinstance(point.get("lat"), (int, float))
-        and isinstance(point.get("lon"), (int, float))
-        and not str(point.get("status", "")).startswith("xy_fallback")
-    ]
-    candidate_points = [
-        point
-        for point in candidate_record.get("controlled_junction_points", [])
-        if isinstance(point.get("lat"), (int, float))
-        and isinstance(point.get("lon"), (int, float))
-        and not str(point.get("status", "")).startswith("xy_fallback")
-    ]
-    if reference_points and candidate_points:
-        return min(
-            _latlon_distance_m(
-                float(reference_point["lat"]),
-                float(reference_point["lon"]),
-                float(candidate_point["lat"]),
-                float(candidate_point["lon"]),
-            )
-            for reference_point in reference_points
-            for candidate_point in candidate_points
-        )
-    return _latlon_distance_m(
-        float(reference_record["controlled_junction_centroid_lat"]),
-        float(reference_record["controlled_junction_centroid_lon"]),
-        float(candidate_record["controlled_junction_centroid_lat"]),
-        float(candidate_record["controlled_junction_centroid_lon"]),
+    return min(
+        _latlon_distance_m(reference_lat, reference_lon, candidate_lat, candidate_lon)
+        for reference_lat, reference_lon in _tls_controller_coordinates(reference_record)
+        for candidate_lat, candidate_lon in _tls_controller_coordinates(candidate_record)
     )
 
 

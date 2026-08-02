@@ -20,6 +20,35 @@ def test_tls_controller_neighborhoods_group_distance_rows_once() -> None:
     assert candidate_rows == [[(8.0, 1)], [(5.0, 0)]]
 
 
+def test_tls_controller_distances_skip_far_pairs(monkeypatch) -> None:
+    def record(tl_id: str, lat: float, lon: float) -> dict:
+        return {
+            "tl_id": tl_id,
+            "controlled_junction_centroid_lat": lat,
+            "controlled_junction_centroid_lon": lon,
+            "controlled_junction_points": [],
+        }
+
+    calls = 0
+    original = reference_join_audit_module._tls_controller_distance_m
+
+    def counted_distance(reference, candidate):
+        nonlocal calls
+        calls += 1
+        return original(reference, candidate)
+
+    monkeypatch.setattr(reference_join_audit_module, "_tls_controller_distance_m", counted_distance)
+    distances = reference_join_audit_module._nearby_tls_controller_distances(
+        [record("reference", 48.76, 11.42)],
+        [record("near", 48.7601, 11.42), *[record(f"far_{i}", 49.0 + i * 0.01, 11.42) for i in range(100)]],
+        max_distance_m=100.0,
+    )
+
+    assert len(distances) == 1
+    assert distances[0][1:] == (0, 0)
+    assert calls == 1
+
+
 def test_tls_controller_alignment_pairs_by_geography_not_id() -> None:
     reference = {
         "tl_logic_control_records": [
