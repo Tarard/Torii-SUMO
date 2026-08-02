@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
+from PIL import Image, ImageDraw
 import pytest
 
 from torii_sumo.core.candidate_contracts import file_sha256
@@ -56,10 +58,10 @@ def test_inventory_uses_projected_coordinates_and_motor_scope(tmp_path: Path) ->
     assert junction["road_roots"] == ["in", "out"]
     assert junction["approach_bearings"] == [0.0]
     assert junction["motor_incoming_lane_details"] == [
-        {"id": "in_0", "edge_id": "in", "road_root": "in", "bearing": 0.0}
+        {"id": "in_0", "junction_id": "j0", "edge_id": "in", "road_root": "in", "bearing": 0.0}
     ]
     assert junction["motor_outgoing_lane_details"] == [
-        {"id": "out_0", "edge_id": "out", "road_root": "out", "bearing": 0.0}
+        {"id": "out_0", "junction_id": "j0", "edge_id": "out", "road_root": "out", "bearing": 0.0}
     ]
 
 
@@ -254,13 +256,13 @@ def test_city_manifest_binds_junction_and_lane_pairs() -> None:
     candidate_junction = _junction("cluster_10_11", (1001, 2000), roads=("10",), bearings=(1,))
     teacher_junction.update({
         "tile_id": "0004_0008",
-        "motor_incoming_lane_details": [{"id": "t_in", "road_root": "10", "bearing": 0.0}],
-        "motor_outgoing_lane_details": [{"id": "t_out", "road_root": "20", "bearing": 90.0}],
+        "motor_incoming_lane_details": [{"id": "t_in", "junction_id": "cluster_10_11", "road_root": "10", "bearing": 0.0}],
+        "motor_outgoing_lane_details": [{"id": "t_out", "junction_id": "cluster_10_11", "road_root": "20", "bearing": 90.0}],
     })
     candidate_junction.update({
         "tile_id": "0004_0008",
-        "motor_incoming_lane_details": [{"id": "c_in", "road_root": "10", "bearing": 1.0}],
-        "motor_outgoing_lane_details": [{"id": "c_out", "road_root": "20", "bearing": 91.0}],
+        "motor_incoming_lane_details": [{"id": "c_in", "junction_id": "cluster_10_11", "road_root": "10", "bearing": 1.0}],
+        "motor_outgoing_lane_details": [{"id": "c_out", "junction_id": "cluster_10_11", "road_root": "20", "bearing": 91.0}],
     })
     teacher = {"applicable_junction_count": 1, "junctions": [teacher_junction]}
     candidate = {"applicable_junction_count": 1, "junctions": [candidate_junction]}
@@ -269,6 +271,12 @@ def test_city_manifest_binds_junction_and_lane_pairs() -> None:
 
     assert manifest["status"] == "ready"
     assert manifest["junction_pairs"][0]["incoming_lane_pairs"] == [["t_in", "c_in"]]
+    assert manifest["junction_pairs"][0]["incoming_lane_records"] == [{
+        "teacher_lane": "t_in",
+        "teacher_junction": "cluster_10_11",
+        "candidate_lane": "c_in",
+        "candidate_junction": "cluster_10_11",
+    }]
     assert manifest["junction_pairs"][0]["outgoing_lane_pairs"] == {"t_out": "c_out"}
     assert manifest["teacher_only"] == []
     assert manifest["candidate_only"] == []
@@ -343,3 +351,195 @@ def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, ca
     assert code == 2
     assert calls[0]["tile_size_m"] == 250.0
     assert '"status": "ready"' in capsys.readouterr().out
+
+
+def test_lane_evidence_keeps_masks_and_accepts_renumbered_signal_order(tmp_path: Path) -> None:
+    module = _module()
+    teacher_net = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
+    candidate_net = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="tls", link_index="7")
+    teacher_image, candidate_image = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    for path in (teacher_image, candidate_image):
+        image = Image.new("RGB", (240, 180), "white")
+        draw = ImageDraw.Draw(image)
+        draw.line((120, 110, 120, 165), fill=(0, 255, 255), width=4)
+        draw.line((130, 90, 210, 90), fill=(0, 255, 0), width=4)
+        image.save(path)
+
+    report = module.evaluate_lane_pair(
+        teacher_net=teacher_net,
+        candidate_net=candidate_net,
+        record={
+            "teacher_lane": "in_0",
+            "candidate_lane": "in_0",
+            "outgoing_lane_pairs": {"out_0": "out_0"},
+        },
+        teacher_capture={"screenshot_file": str(teacher_image), "junction_pixel": [120, 90]},
+        candidate_capture={"screenshot_file": str(candidate_image), "junction_pixel": [120, 90]},
+        lane_dir=tmp_path / "lane",
+        failure_dir=tmp_path / "failures",
+    )
+
+    assert report["status"] == "pass"
+    assert report["structure"]["status"] == "pass"
+    assert Path(report["teacher_mask"]["file"]).is_file()
+    assert Path(report["candidate_mask"]["file"]).is_file()
+    assert not (tmp_path / "failures").exists()
+
+
+def test_tiles_expand_from_the_verified_seed() -> None:
+    manifest = {
+        "junction_pairs": [
+            {"teacher_id": "far", "tile_id": "0007_0008"},
+            {"teacher_id": "seed", "tile_id": "0004_0008"},
+            {"teacher_id": "near", "tile_id": "0005_0008"},
+        ]
+    }
+
+    assert _module().ordered_tiles(manifest, seed_junction="seed") == [
+        "0004_0008", "0005_0008", "0007_0008"
+    ]
+
+
+def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="tls", link_index="7")
+    manifest_file = tmp_path / "city-manifest.json"
+    manifest_file.write_text(json.dumps({
+        "schema": "torii.ingolstadt-citywide-manifest/v1",
+        "status": "ready",
+        "teacher_net_file": str(teacher.resolve()),
+        "teacher_sha256": file_sha256(teacher),
+        "candidate_net_file": str(candidate.resolve()),
+        "candidate_sha256": file_sha256(candidate),
+        "tile_size_m": 250.0,
+        "junction_pairs": [{
+            "teacher_id": "seed",
+            "candidate_ids": ["seed"],
+            "tile_id": "0004_0008",
+            "incoming_lane_records": [{
+                "teacher_lane": "in_0",
+                "teacher_junction": "seed",
+                "candidate_lane": "in_0",
+                "candidate_junction": "seed",
+            }],
+            "outgoing_lane_pairs": {"out_0": "out_0"},
+        }],
+    }), encoding="utf-8")
+    capture_calls = []
+
+    def fake_capture(**kwargs):
+        capture_calls.append(kwargs)
+        captures = []
+        session_dir = Path(kwargs["output_dir"])
+        session_dir.mkdir(parents=True, exist_ok=True)
+        for role in ("teacher", "candidate"):
+            image_file = session_dir / f"{role}.png"
+            image = Image.new("RGB", (240, 180), "white")
+            draw = ImageDraw.Draw(image)
+            draw.line((120, 110, 120, 165), fill=(0, 255, 255), width=4)
+            draw.line((130, 90, 210, 90), fill=(0, 255, 0), width=4)
+            image.save(image_file)
+            captures.append([{
+                "lane_id": "in_0",
+                "screenshot_file": str(image_file),
+                "junction_pixel": [120, 90],
+            }])
+        return tuple(captures)
+
+    first = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=True,
+        capture_tile_func=fake_capture,
+    )
+    second = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=True,
+        capture_tile_func=fake_capture,
+    )
+
+    assert first["status"] == "pass"
+    assert second["status"] == "pass"
+    assert len(capture_calls) == 1
+    assert first["pass_lane_count"] == 1
+    assert Path(first["summary_file"]).is_file()
+    assert (tmp_path / "out" / "tiles" / "0004_0008" / "state.json").is_file()
+    assert not (tmp_path / "out" / "tiles" / "0004_0008" / ".session").exists()
+
+
+def test_real_tile_adapter_builds_two_persistent_sessions(tmp_path: Path) -> None:
+    module = _module()
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    _write_net(teacher, offset="-1000,-2000", junction_x=20, junction_y=30)
+    _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
+    sessions, captures = [], []
+
+    def fake_session(*args, **kwargs):
+        value = {"args": args, "kwargs": kwargs}
+        sessions.append(value)
+        return value
+
+    def fake_capture(**kwargs):
+        captures.append(kwargs)
+        return [{"lane_id": kwargs["specs"][0]["lane_id"]}]
+
+    result = module.capture_tile_pair(
+        tile_id="0004_0008",
+        records=[{
+            "teacher_lane": "in_0",
+            "teacher_junction": "j0",
+            "candidate_lane": "in_0",
+            "candidate_junction": "j0",
+        }],
+        teacher_net=teacher,
+        candidate_net=candidate,
+        output_dir=tmp_path / "session",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        tile_size_m=250.0,
+        session_factory=fake_session,
+        capture_func=fake_capture,
+    )
+
+    assert len(sessions) == 2
+    assert len(captures) == 2
+    assert captures[0]["viewport_center"] == (125.0, 125.0)
+    assert captures[1]["viewport_center"] == (125.0, 125.0)
+    assert result[0][0]["lane_id"] == "in_0"
+
+
+def test_main_runs_visual_phase_without_claiming_global_completion(tmp_path: Path) -> None:
+    module = _module()
+    calls = []
+    output = tmp_path / "out"
+    output.mkdir()
+    (output / "city-manifest.json").write_text("{}", encoding="utf-8")
+
+    def fake_visual(**kwargs):
+        calls.append(kwargs)
+        return {"status": "pass", "summary_file": "visual-summary.json"}
+
+    code = module.main(
+        [
+            "--teacher-net", str(tmp_path / "teacher.net.xml"),
+            "--candidate-net", str(tmp_path / "candidate.net.xml"),
+            "--source-osm", str(tmp_path / "source.osm.xml"),
+            "--output-dir", str(output),
+            "--phase", "visual",
+            "--resume",
+        ],
+        visual_func=fake_visual,
+    )
+
+    assert code == 2
+    assert calls[0]["resume"] is True
+    assert calls[0]["manifest_file"] == output / "city-manifest.json"

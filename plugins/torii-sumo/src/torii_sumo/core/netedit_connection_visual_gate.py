@@ -220,16 +220,29 @@ def write_semantic_mask(
     return {"file": str(destination), "sha256": file_sha256(destination), "layers": stats}
 
 
-def analyze_connection_pair(teacher_file: Path, candidate_file: Path) -> dict[str, Any]:
+def analyze_connection_pair(
+    teacher_file: Path,
+    candidate_file: Path,
+    *,
+    teacher_center: tuple[int, int] | None = None,
+    candidate_center: tuple[int, int] | None = None,
+) -> dict[str, Any]:
     with Image.open(teacher_file) as source:
         teacher = source.convert("RGB")
     with Image.open(candidate_file) as source:
         candidate = source.convert("RGB")
     if teacher.size != candidate.size:
         return {"status": "blocked", "reasons": ["image_size_mismatch"], "layers": {}}
-    center = teacher.width // 2, teacher.height // 2
-    teacher_stats = {name: _point_stats(points, center) for name, points in _palette_points(teacher, 12).items()}
-    candidate_stats = {name: _point_stats(points, center) for name, points in _palette_points(candidate, 12).items()}
+    teacher_center = teacher_center or (teacher.width // 2, teacher.height // 2)
+    candidate_center = candidate_center or (candidate.width // 2, candidate.height // 2)
+    teacher_stats = {
+        name: _point_stats(points, teacher_center)
+        for name, points in _palette_points(teacher, 12).items()
+    }
+    candidate_stats = {
+        name: _point_stats(points, candidate_center)
+        for name, points in _palette_points(candidate, 12).items()
+    }
     layers: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
     for name in _PALETTE:
@@ -316,6 +329,13 @@ def capture_connection_tile(
         canvas = canvas_rect or netedit_canvas_rect(session.hwnd)
         destination.mkdir(parents=True, exist_ok=True)
         for index, spec in enumerate(specs, 1):
+            junction_pixel = canvas_click_for_world_point(
+                point=spec["center"],
+                center=viewport_center,
+                conv_boundary=spec["conv_boundary"],
+                canvas_rect=canvas,
+                zoom=zoom,
+            )
             click = canvas_click_for_world_point(
                 point=point_before_lane_end(spec["shape"]),
                 center=viewport_center,
@@ -334,6 +354,8 @@ def capture_connection_tile(
             captures.append({
                 "lane_id": spec["lane_id"],
                 "click": list(click),
+                "junction_pixel": list(junction_pixel),
+                "canvas_rect": list(canvas),
                 "screenshot_file": str(image),
                 "screenshot_sha256": file_sha256(image),
             })

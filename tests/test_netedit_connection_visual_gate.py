@@ -35,7 +35,12 @@ def test_geometry_and_missing_conflict_layer(tmp_path: Path) -> None:
     teacher.save(teacher_file)
     candidate.save(candidate_file)
 
-    report = analyze_connection_pair(teacher_file, candidate_file)
+    report = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_center=(120, 90),
+        candidate_center=(120, 90),
+    )
     assert report["status"] == "fail"
     assert "conflict_layer_missing" in report["reasons"]
 
@@ -149,8 +154,8 @@ def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:
 
     session = FakeSession()
     specs = [
-        {"lane_id": "a_0", "shape": ((0.0, 0.0), (20.0, 0.0)), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
-        {"lane_id": "b_0", "shape": ((0.0, 10.0), (20.0, 10.0)), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
+        {"lane_id": "a_0", "shape": ((0.0, 0.0), (20.0, 0.0)), "center": (20.0, 0.0), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
+        {"lane_id": "b_0", "shape": ((0.0, 10.0), (20.0, 10.0)), "center": (20.0, 10.0), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
     ]
 
     captures = visual_gate.capture_connection_tile(
@@ -166,4 +171,6 @@ def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:
     assert [action["type"] for action in session.actions] == ["key", "click", "click"]
     assert len(captures) == 2
     assert all(Path(row["screenshot_file"]).is_file() for row in captures)
+    assert captures[0]["junction_pixel"] == [460, 330]
+    assert captures[0]["canvas_rect"] == [0, 0, 800, 600]
     assert session.abort_reason == "visual_tile_capture_complete"

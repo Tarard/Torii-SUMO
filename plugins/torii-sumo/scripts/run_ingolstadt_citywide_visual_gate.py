@@ -5,12 +5,22 @@ import collections
 import json
 import math
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.core.candidate_contracts import file_sha256
+from torii_sumo.core.netedit_connection_visual_gate import (
+    _comparison_image,
+    _viewsettings,
+    analyze_connection_pair,
+    capture_connection_tile,
+    lane_capture_spec,
+    write_semantic_mask,
+)
+from torii_sumo.core.netedit import NeteditTargetSession
 
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
@@ -185,13 +195,20 @@ def register_lanes(
     }
 
 
-def write_tile_state(path: Path, *, candidate_sha: str, completed: Sequence[str]) -> None:
+def write_tile_state(
+    path: Path,
+    *,
+    candidate_sha: str,
+    completed: Sequence[str],
+    lane_reports: Mapping[str, Any] | None = None,
+) -> None:
     write_json_atomic(
         path,
         {
             "schema": "torii.ingolstadt-citywide-tile/v1",
             "candidate_sha256": candidate_sha,
             "completed": sorted(set(completed)),
+            "lane_reports": dict(lane_reports or {}),
         },
         sort_keys=True,
     )
@@ -383,6 +400,8 @@ def build_city_manifest(
             for report in (incoming, outgoing)
             for key in ("teacher_only", "candidate_only", "ambiguous")
         )
+        teacher_incoming_by_id = {row["id"]: row for row in teacher["motor_incoming_lane_details"]}
+        candidate_incoming_by_id = {row["id"]: row for row in candidate_incoming}
         pairs.append({
             "teacher_id": registered["teacher_id"],
             "candidate_ids": registered["candidate_ids"],
@@ -391,6 +410,15 @@ def build_city_manifest(
             "status": "blocked" if lane_blocked else "ready",
             "incoming_lane_pairs": [
                 [row["teacher_lane"], row["candidate_lane"]] for row in incoming["matched"]
+            ],
+            "incoming_lane_records": [
+                {
+                    "teacher_lane": row["teacher_lane"],
+                    "teacher_junction": teacher_incoming_by_id[row["teacher_lane"]]["junction_id"],
+                    "candidate_lane": row["candidate_lane"],
+                    "candidate_junction": candidate_incoming_by_id[row["candidate_lane"]]["junction_id"],
+                }
+                for row in incoming["matched"]
             ],
             "outgoing_lane_pairs": {
                 row["teacher_lane"]: row["candidate_lane"] for row in outgoing["matched"]
@@ -480,6 +508,260 @@ def run_inventory_phase(
     }
 
 
+def evaluate_lane_pair(
+    *,
+    teacher_net: Path,
+    candidate_net: Path,
+    record: Mapping[str, Any],
+    teacher_capture: Mapping[str, Any],
+    candidate_capture: Mapping[str, Any],
+    lane_dir: Path,
+    failure_dir: Path,
+) -> dict[str, Any]:
+    teacher_image = Path(str(teacher_capture["screenshot_file"])).resolve(strict=True)
+    candidate_image = Path(str(candidate_capture["screenshot_file"])).resolve(strict=True)
+    teacher_center = tuple(int(value) for value in teacher_capture["junction_pixel"])
+    candidate_center = tuple(int(value) for value in candidate_capture["junction_pixel"])
+    visual = analyze_connection_pair(
+        teacher_image,
+        candidate_image,
+        teacher_center=teacher_center,  # type: ignore[arg-type]
+        candidate_center=candidate_center,  # type: ignore[arg-type]
+    )
+    structure = compare_lane_structure(
+        teacher_net,
+        candidate_net,
+        teacher_lane=str(record["teacher_lane"]),
+        candidate_lane=str(record["candidate_lane"]),
+        outgoing_lane_pairs=record["outgoing_lane_pairs"],
+    )
+    lane_dir = Path(lane_dir).resolve()
+    teacher_mask = write_semantic_mask(teacher_image, lane_dir / "teacher.mask.png", center=teacher_center)  # type: ignore[arg-type]
+    candidate_mask = write_semantic_mask(candidate_image, lane_dir / "candidate.mask.png", center=candidate_center)  # type: ignore[arg-type]
+    status = visual["status"] if visual["status"] != "pass" else structure["status"]
+    report: dict[str, Any] = {
+        "schema": "torii.ingolstadt-citywide-lane-evidence/v1",
+        "status": status,
+        "teacher_lane": record["teacher_lane"],
+        "candidate_lane": record["candidate_lane"],
+        "teacher_screenshot_sha256": file_sha256(teacher_image),
+        "candidate_screenshot_sha256": file_sha256(candidate_image),
+        "teacher_mask": teacher_mask,
+        "candidate_mask": candidate_mask,
+        "visual": visual,
+        "structure": structure,
+    }
+    if status != "pass":
+        failure_dir = Path(failure_dir).resolve()
+        failure_dir.mkdir(parents=True, exist_ok=True)
+        teacher_failure = failure_dir / "teacher.png"
+        candidate_failure = failure_dir / "candidate.png"
+        comparison = failure_dir / "comparison.png"
+        shutil.copy2(teacher_image, teacher_failure)
+        shutil.copy2(candidate_image, candidate_failure)
+        _comparison_image(teacher_failure, candidate_failure, comparison)
+        report["failure_images"] = {
+            "teacher": str(teacher_failure),
+            "candidate": str(candidate_failure),
+            "comparison": str(comparison),
+        }
+    report_file = lane_dir / "evidence.json"
+    write_json_atomic(report_file, report, sort_keys=True)
+    return {**report, "report_file": str(report_file)}
+
+
+def _tile_coordinates(value: str) -> tuple[int, int]:
+    first, second = value.split("_", 1)
+    return int(first), int(second)
+
+
+def ordered_tiles(manifest: Mapping[str, Any], *, seed_junction: str) -> list[str]:
+    seed = next(
+        (row for row in manifest["junction_pairs"] if row["teacher_id"] == seed_junction),
+        None,
+    )
+    if seed is None:
+        raise ValueError(f"seed junction is absent from city manifest: {seed_junction}")
+    seed_x, seed_y = _tile_coordinates(str(seed["tile_id"]))
+    tiles = {str(row["tile_id"]) for row in manifest["junction_pairs"]}
+    return sorted(
+        tiles,
+        key=lambda value: (
+            abs(_tile_coordinates(value)[0] - seed_x) + abs(_tile_coordinates(value)[1] - seed_y),
+            value,
+        ),
+    )
+
+
+def run_visual_phase(
+    *,
+    manifest_file: Path,
+    output_dir: Path,
+    seed_junction: str,
+    zoom: float,
+    window_size: tuple[int, int],
+    resume: bool,
+    capture_tile_func: Any = None,
+) -> dict[str, Any]:
+    capture_tile_func = capture_tile_func or capture_tile_pair
+    manifest_path = Path(manifest_file).resolve(strict=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    output = Path(output_dir).resolve()
+    summary_file = output / "visual-summary.json"
+    if manifest.get("schema") != "torii.ingolstadt-citywide-manifest/v1" or manifest.get("status") != "ready":
+        report = {"status": "blocked", "reason": "city manifest is not ready", "pass_lane_count": 0}
+        write_json_atomic(summary_file, report, sort_keys=True)
+        return {**report, "summary_file": str(summary_file)}
+    teacher_net = Path(str(manifest["teacher_net_file"])).resolve(strict=True)
+    candidate_net = Path(str(manifest["candidate_net_file"])).resolve(strict=True)
+    if file_sha256(teacher_net) != manifest["teacher_sha256"]:
+        raise RuntimeError("teacher network hash changed after inventory")
+    candidate_sha = file_sha256(candidate_net)
+    if candidate_sha != manifest["candidate_sha256"]:
+        raise RuntimeError("candidate network hash changed after inventory")
+
+    all_reports: dict[str, dict[str, Any]] = {}
+    item_count = 0
+    for tile in ordered_tiles(manifest, seed_junction=seed_junction):
+        tile_dir = output / "tiles" / tile
+        state_file = tile_dir / "state.json"
+        pairs = sorted(
+            (row for row in manifest["junction_pairs"] if row["tile_id"] == tile),
+            key=lambda row: row["teacher_id"],
+        )
+        records = []
+        for pair_index, pair in enumerate(pairs, 1):
+            for lane_index, lane in enumerate(
+                sorted(pair["incoming_lane_records"], key=lambda row: row["teacher_lane"]), 1
+            ):
+                item_id = f"{pair_index:05d}-{lane_index:05d}"
+                records.append({
+                    **lane,
+                    "item_id": item_id,
+                    "pair_id": f"{pair_index:05d}",
+                    "outgoing_lane_pairs": pair["outgoing_lane_pairs"],
+                })
+        item_count += len(records)
+        state: dict[str, Any] = {}
+        if resume and state_file.is_file():
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        lane_reports = (
+            dict(state.get("lane_reports", {}))
+            if state.get("candidate_sha256") == candidate_sha
+            else {}
+        )
+        completed = set(lane_reports)
+        pending = [record for record in records if record["item_id"] not in completed]
+        if pending:
+            teacher_captures, candidate_captures = capture_tile_func(
+                tile_id=tile,
+                records=pending,
+                teacher_net=teacher_net,
+                candidate_net=candidate_net,
+                output_dir=tile_dir / ".session",
+                zoom=zoom,
+                window_size=window_size,
+                tile_size_m=float(manifest["tile_size_m"]),
+            )
+            if len(teacher_captures) != len(pending) or len(candidate_captures) != len(pending):
+                raise RuntimeError(f"tile capture count mismatch: {tile}")
+            for record, teacher_capture, candidate_capture in zip(
+                pending, teacher_captures, candidate_captures
+            ):
+                item_id = record["item_id"]
+                report = evaluate_lane_pair(
+                    teacher_net=teacher_net,
+                    candidate_net=candidate_net,
+                    record=record,
+                    teacher_capture=teacher_capture,
+                    candidate_capture=candidate_capture,
+                    lane_dir=tile_dir / "junctions" / record["pair_id"] / f"lane-{item_id}",
+                    failure_dir=tile_dir / "failures" / record["pair_id"] / f"lane-{item_id}",
+                )
+                lane_reports[item_id] = report
+                write_tile_state(
+                    state_file,
+                    candidate_sha=candidate_sha,
+                    completed=lane_reports,
+                    lane_reports=lane_reports,
+                )
+            session_dir = (tile_dir / ".session").resolve()
+            if session_dir.parent == tile_dir.resolve() and session_dir.name == ".session":
+                shutil.rmtree(session_dir, ignore_errors=False)
+        all_reports.update({f"{tile}/{item_id}": report for item_id, report in lane_reports.items()})
+
+    statuses = [str(report["status"]) for report in all_reports.values()]
+    status = "pass" if len(statuses) == item_count and all(value == "pass" for value in statuses) else "fail"
+    summary = {
+        "schema": "torii.ingolstadt-citywide-visual-summary/v1",
+        "status": status,
+        "teacher_sha256": manifest["teacher_sha256"],
+        "candidate_sha256": candidate_sha,
+        "lane_count": item_count,
+        "pass_lane_count": statuses.count("pass"),
+        "fail_lane_count": sum(value != "pass" for value in statuses),
+        "lane_reports": all_reports,
+    }
+    write_json_atomic(summary_file, summary, sort_keys=True)
+    return {**summary, "summary_file": str(summary_file)}
+
+
+def capture_tile_pair(
+    *,
+    tile_id: str,
+    records: Sequence[Mapping[str, Any]],
+    teacher_net: Path,
+    candidate_net: Path,
+    output_dir: Path,
+    zoom: float,
+    window_size: tuple[int, int],
+    tile_size_m: float,
+    session_factory: Any = NeteditTargetSession,
+    capture_func: Any = capture_connection_tile,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    tile_x, tile_y = _tile_coordinates(tile_id)
+    projected_center = (tile_x + 0.5) * tile_size_m, (tile_y + 0.5) * tile_size_m
+    captures = []
+    for role, net_file, lane_field, junction_field in (
+        ("teacher", Path(teacher_net), "teacher_lane", "teacher_junction"),
+        ("candidate", Path(candidate_net), "candidate_lane", "candidate_junction"),
+    ):
+        role_dir = Path(output_dir).resolve() / role
+        support = role_dir / "support"
+        support.mkdir(parents=True, exist_ok=True)
+        offset, _boundary = _location_numbers(net_file)
+        local_center = projected_center[0] + offset[0], projected_center[1] + offset[1]
+        view = support / "view.xml"
+        _viewsettings(view, local_center, zoom)
+        specs = [
+            lane_capture_spec(
+                net_file,
+                junction_id=str(record[junction_field]),
+                lane_id=str(record[lane_field]),
+            )
+            for record in records
+        ]
+        junction_ids = tuple(sorted({str(record[junction_field]) for record in records}))
+        session = session_factory(
+            net_file,
+            support / "working.net.xml",
+            role_dir / "netedit-session",
+            expected_source_sha256=file_sha256(net_file),
+            gui_settings_file=view,
+            target_source_junction_ids=junction_ids,
+            target_candidate_junction_ids=junction_ids,
+            window_size=f"{window_size[0]},{window_size[1]}",
+        )
+        captures.append(capture_func(
+            session=session,
+            specs=specs,
+            viewport_center=local_center,
+            zoom=zoom,
+            destination=role_dir / "captures",
+        ))
+    return captures[0], captures[1]
+
+
 def _command_text(command: Sequence[str]) -> str:
     result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     output = (result.stdout or result.stderr).strip()
@@ -500,9 +782,24 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     inventory_func: Any = run_inventory_phase,
+    visual_func: Any = run_visual_phase,
     provenance_func: Any = _provenance,
 ) -> int:
     args = build_parser().parse_args(argv)
+    if args.phase == "visual":
+        window_size = tuple(int(value) for value in args.window_size.split(","))
+        if len(window_size) != 2 or min(window_size) <= 0:
+            raise ValueError("window-size must be WIDTH,HEIGHT with positive integers")
+        report = visual_func(
+            manifest_file=args.output_dir / "city-manifest.json",
+            output_dir=args.output_dir,
+            seed_junction=args.seed_junction,
+            zoom=args.zoom,
+            window_size=window_size,
+            resume=args.resume,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 3 if report["status"] == "blocked" else 2
     if args.phase != "inventory":
         report = {"status": "blocked", "reason": f"phase is not implemented yet: {args.phase}"}
         print(json.dumps(report, ensure_ascii=False))
@@ -662,6 +959,7 @@ def read_network_inventory(
                     (
                         {
                             "id": lane_id,
+                            "junction_id": junction_id,
                             "edge_id": lane_edges[lane_id],
                             "road_root": road_root(lane_edges[lane_id]),
                             "bearing": _lane_bearing(lanes[lane_id]),
@@ -674,6 +972,7 @@ def read_network_inventory(
                     (
                         {
                             "id": lane_id,
+                            "junction_id": junction_id,
                             "edge_id": lane_edges[lane_id],
                             "road_root": road_root(lane_edges[lane_id]),
                             "bearing": _lane_bearing(lanes[lane_id]),
