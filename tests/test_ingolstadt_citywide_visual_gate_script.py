@@ -53,6 +53,11 @@ def test_inventory_uses_projected_coordinates_and_motor_scope(tmp_path: Path) ->
     assert junction["tile_id"] == "0004_0008"
     assert junction["motor_incoming_lanes"] == ["in_0"]
     assert junction["motor_outgoing_lanes"] == ["out_0"]
+    assert junction["road_roots"] == ["in", "out"]
+    assert junction["approach_bearings"] == [0.0]
+    assert junction["motor_incoming_lane_details"] == [
+        {"id": "in_0", "edge_id": "in", "road_root": "in", "bearing": 0.0}
+    ]
 
 
 def test_inventory_applies_the_teacher_projected_scope(tmp_path: Path) -> None:
@@ -95,3 +100,79 @@ def test_source_ledger_binds_official_scope_and_all_inputs(tmp_path: Path, monke
     assert report["candidate_sha256"] == file_sha256(candidate)
     assert report["source_osm_sha256"] == file_sha256(source_osm)
     assert Path(report["report_file"]).is_file()
+
+
+def _junction(
+    junction_id: str,
+    center: tuple[float, float],
+    *,
+    roads: tuple[str, ...],
+    bearings: tuple[float, ...],
+) -> dict[str, object]:
+    return {
+        "id": junction_id,
+        "projected_center": list(center),
+        "road_roots": list(roads),
+        "approach_bearings": list(bearings),
+    }
+
+
+def test_registration_prefers_source_identity_then_direction() -> None:
+    module = _module()
+    teacher = _junction("cluster_10_11", (1000, 2000), roads=("10", "20"), bearings=(0, 180))
+    exact = _junction("cluster_10_11", (1001, 2000), roads=("10", "20"), bearings=(1, 181))
+    nearby = _junction("other", (1000, 2000), roads=("30",), bearings=(90,))
+
+    report = module.register_junctions([teacher], [nearby, exact], max_distance_m=10)
+
+    assert report["matched"][0]["candidate_ids"] == ["cluster_10_11"]
+    assert report["ambiguous"] == []
+
+
+def test_registration_maps_a_teacher_cluster_to_its_source_junctions() -> None:
+    module = _module()
+    teacher = _junction("cluster_10_11", (1000, 2000), roads=("10", "20"), bearings=(0, 180))
+    candidates = [
+        _junction("10", (999, 2000), roads=("10",), bearings=(0,)),
+        _junction("11", (1001, 2000), roads=("20",), bearings=(180,)),
+    ]
+
+    report = module.register_junctions([teacher], candidates, max_distance_m=10)
+
+    assert report["matched"][0]["candidate_ids"] == ["10", "11"]
+    assert report["candidate_only"] == []
+
+
+def test_registration_does_not_auto_accept_tied_candidates() -> None:
+    module = _module()
+    teacher = _junction("t", (1000, 2000), roads=("10",), bearings=(0,))
+    candidates = [
+        _junction("a", (999, 2000), roads=("10",), bearings=(0,)),
+        _junction("b", (1001, 2000), roads=("10",), bearings=(0,)),
+    ]
+
+    report = module.register_junctions([teacher], candidates, max_distance_m=10)
+
+    assert report["matched"] == []
+    assert report["ambiguous"][0]["teacher_id"] == "t"
+
+
+def test_lane_registration_is_one_to_one_by_road_and_bearing() -> None:
+    module = _module()
+    teacher = [
+        {"id": "t0", "road_root": "10", "bearing": 0.0},
+        {"id": "t1", "road_root": "10", "bearing": 180.0},
+    ]
+    candidate = [
+        {"id": "c1", "road_root": "10", "bearing": 179.0},
+        {"id": "c0", "road_root": "10", "bearing": 1.0},
+    ]
+
+    report = module.register_lanes(teacher, candidate, max_bearing_gap=15.0)
+
+    assert report["matched"] == [
+        {"teacher_lane": "t0", "candidate_lane": "c0", "bearing_gap": 1.0},
+        {"teacher_lane": "t1", "candidate_lane": "c1", "bearing_gap": 1.0},
+    ]
+    assert report["teacher_only"] == []
+    assert report["candidate_only"] == []
