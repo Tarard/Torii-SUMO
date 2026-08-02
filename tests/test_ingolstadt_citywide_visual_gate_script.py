@@ -72,6 +72,25 @@ def test_inventory_uses_projected_coordinates_and_motor_scope(tmp_path: Path) ->
     ]
 
 
+def test_inventory_deduplicates_shared_outgoing_lanes(tmp_path: Path) -> None:
+    net = tmp_path / "city.net.xml"
+    _write_net(net, offset="-1000,-2000", junction_x=20, junction_y=30)
+    xml = net.read_text(encoding="utf-8")
+    xml = xml.replace(
+        '<edge id="out"',
+        '<edge id="in2" from="n4" to="j0"><lane id="in2_0" index="0" allow="passenger" shape="20,0 20,30"/></edge><edge id="out"',
+    ).replace(
+        '<connection from="in" to="out" fromLane="0" toLane="0"/>',
+        '<connection from="in" to="out" fromLane="0" toLane="0"/><connection from="in2" to="out" fromLane="0" toLane="0"/>',
+    ).replace('incLanes="in_0"', 'incLanes="in_0 in2_0"')
+    net.write_text(xml, encoding="utf-8")
+
+    junction = _module().read_network_inventory(net, tile_size_m=250.0)["junctions"][0]
+
+    assert junction["motor_outgoing_lanes"] == ["out_0"]
+    assert [row["id"] for row in junction["motor_outgoing_lane_details"]] == ["out_0"]
+
+
 def test_inventory_applies_the_teacher_projected_scope(tmp_path: Path) -> None:
     net = tmp_path / "city.net.xml"
     _write_net(net, offset="-1000,-2000", junction_x=20, junction_y=30)
@@ -299,6 +318,37 @@ def test_city_manifest_binds_junction_and_lane_pairs() -> None:
     assert manifest["incoming_lane_count"] == 1
     assert manifest["teacher_only"] == []
     assert manifest["candidate_only"] == []
+
+
+def test_city_manifest_excludes_lanes_inside_a_candidate_compound() -> None:
+    module = _module()
+    teacher = _junction("cluster_10_11", (1000, 2000), roads=("a", "b"), bearings=(0,))
+    teacher.update({
+        "tile_id": "0004_0008",
+        "motor_incoming_lane_details": [{"id": "t_in", "junction_id": "cluster_10_11", "road_root": "a", "bearing": 0.0}],
+        "motor_outgoing_lane_details": [{"id": "t_out", "junction_id": "cluster_10_11", "road_root": "b", "bearing": 90.0}],
+    })
+    first = _junction("10", (999, 2000), roads=("a", "bridge"), bearings=(0,))
+    first.update({
+        "motor_incoming_lane_details": [{"id": "c_in", "junction_id": "10", "road_root": "a", "bearing": 0.0}],
+        "motor_outgoing_lane_details": [{"id": "bridge", "junction_id": "10", "road_root": "bridge", "bearing": 0.0}],
+    })
+    second = _junction("11", (1001, 2000), roads=("bridge", "b"), bearings=(0,))
+    second.update({
+        "motor_incoming_lane_details": [{"id": "bridge", "junction_id": "11", "road_root": "bridge", "bearing": 0.0}],
+        "motor_outgoing_lane_details": [{"id": "c_out", "junction_id": "11", "road_root": "b", "bearing": 90.0}],
+    })
+
+    manifest = module.build_city_manifest(
+        {"applicable_junction_count": 1, "junctions": [teacher]},
+        {"applicable_junction_count": 2, "junctions": [first, second]},
+        max_distance_m=10.0,
+    )
+
+    pair = manifest["junction_pairs"][0]
+    assert pair["status"] == "ready"
+    assert pair["incoming_lane_pairs"] == [["t_in", "c_in"]]
+    assert pair["outgoing_lane_pairs"] == {"t_out": "c_out"}
 
 
 def test_cli_exposes_resumable_city_phases() -> None:

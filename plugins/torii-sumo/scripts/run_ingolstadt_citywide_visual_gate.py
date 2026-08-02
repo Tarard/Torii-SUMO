@@ -409,6 +409,12 @@ def build_city_manifest(
         candidates = [candidate_by_id[candidate_id] for candidate_id in registered["candidate_ids"]]
         candidate_incoming = [row for candidate in candidates for row in candidate["motor_incoming_lane_details"]]
         candidate_outgoing = [row for candidate in candidates for row in candidate["motor_outgoing_lane_details"]]
+        internal_lane_ids = (
+            {str(row["id"]) for row in candidate_incoming}
+            & {str(row["id"]) for row in candidate_outgoing}
+        )
+        candidate_incoming = [row for row in candidate_incoming if str(row["id"]) not in internal_lane_ids]
+        candidate_outgoing = [row for row in candidate_outgoing if str(row["id"]) not in internal_lane_ids]
         incoming = register_lanes(
             teacher["motor_incoming_lane_details"], candidate_incoming,
             max_bearing_gap=max_bearing_gap,
@@ -1294,12 +1300,12 @@ def read_network_inventory(
             if lane_id in lanes and lane_allows_motor(lanes[lane_id])
         )
         incoming_edges = {lane_edges[lane_id] for lane_id in incoming}
-        outgoing_lanes = sorted(
+        outgoing_lanes = sorted({
             lane_id
             for edge_id in incoming_edges
             for lane_id in outgoing.get(edge_id, ())
             if lane_allows_motor(lanes[lane_id])
-        )
+        })
         if not incoming or not outgoing_lanes:
             continue
         local = float(junction.get("x", "nan")), float(junction.get("y", "nan"))
