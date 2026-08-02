@@ -17017,6 +17017,35 @@ def test_internal_artifact_owner_uses_longest_valid_junction_id() -> None:
     assert rebuild_candidate_module._internal_artifact_owner(":missing_0", junction_ids) == ""
 
 
+def test_restore_non_target_internal_artifacts_replaces_large_internal_blocks_in_bulk(tmp_path: Path) -> None:
+    count = 8000
+    edges = "".join(
+        f'<edge id=":j_{index}" function="internal"><lane id=":j_{index}_0" index="0"/></edge>'
+        for index in range(count)
+    )
+    junctions = "".join(
+        f'<junction id=":j_{index}" type="internal" x="0" y="0"/>' for index in range(count)
+    )
+    net = f'<net>{edges}<junction id="j" type="priority" x="0" y="0"/>{junctions}</net>'
+    source = tmp_path / "source.net.xml"
+    target = tmp_path / "target.net.xml"
+    source.write_text(net, encoding="utf-8")
+    target.write_text(net, encoding="utf-8")
+
+    start = time.perf_counter()
+    report = _restore_non_target_internal_artifacts(
+        source_file=source,
+        target_file=target,
+        exclude_junction_ids=set(),
+    )
+    elapsed = time.perf_counter() - start
+
+    assert report["status"] == "pass"
+    assert report["restored_non_target_internal_edge_count"] == count
+    assert report["restored_non_target_internal_junction_count"] == count
+    assert elapsed < 0.5
+
+
 def test_restore_non_target_internal_artifacts_restores_referenced_tllogic_capacity(tmp_path: Path) -> None:
     source = tmp_path / "source.net.xml"
     source.write_text(

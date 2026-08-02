@@ -17455,37 +17455,49 @@ def _restore_non_target_internal_artifacts(
             )
             continue
         source_internal_edges.append(edge)
-    target_internal_edge_index = None
-    removed_internal_edges = 0
-    for child in list(target_root):
-        if child.tag == "edge" and is_restored_owner(child.attrib.get("id", "")):
-            if target_internal_edge_index is None:
-                target_internal_edge_index = list(target_root).index(child)
-            target_root.remove(child)
-            removed_internal_edges += 1
-    if target_internal_edge_index is None:
-        target_internal_edge_index = _first_junction_index(target_root)
-    for offset, edge in enumerate(source_internal_edges):
-        target_root.insert(target_internal_edge_index + offset, copy.deepcopy(edge))
+
+    def replace_owned_children(
+        tag: str,
+        replacements: list[ET.Element],
+        fallback_index: int,
+    ) -> int:
+        children = list(target_root)
+        matched_indices = [
+            index
+            for index, child in enumerate(children)
+            if child.tag == tag and is_restored_owner(child.attrib.get("id", ""))
+        ]
+        insert_index = matched_indices[0] if matched_indices else fallback_index
+        retained = [
+            child
+            for child in children
+            if child.tag != tag or not is_restored_owner(child.attrib.get("id", ""))
+        ]
+        target_root[:] = [
+            *retained[:insert_index],
+            *(copy.deepcopy(child) for child in replacements),
+            *retained[insert_index:],
+        ]
+        return len(matched_indices)
+
+    removed_internal_edges = replace_owned_children(
+        "edge",
+        source_internal_edges,
+        _first_junction_index(target_root),
+    )
 
     source_internal_junctions = [
         junction for junction in source_root.findall("junction") if is_restored_owner(junction.attrib.get("id", ""))
     ]
-    target_internal_junction_index = None
-    removed_internal_junctions = 0
-    for child in list(target_root):
-        if child.tag == "junction" and is_restored_owner(child.attrib.get("id", "")):
-            if target_internal_junction_index is None:
-                target_internal_junction_index = list(target_root).index(child)
-            target_root.remove(child)
-            removed_internal_junctions += 1
-    if target_internal_junction_index is None:
-        target_internal_junction_index = next(
-            (index for index, child in enumerate(list(target_root)) if child.tag == "connection"),
-            len(list(target_root)),
-        )
-    for offset, junction in enumerate(source_internal_junctions):
-        target_root.insert(target_internal_junction_index + offset, copy.deepcopy(junction))
+    target_children = list(target_root)
+    removed_internal_junctions = replace_owned_children(
+        "junction",
+        source_internal_junctions,
+        next(
+            (index for index, child in enumerate(target_children) if child.tag == "connection"),
+            len(target_children),
+        ),
+    )
 
     removed_connections = 0
     retained_children = []
