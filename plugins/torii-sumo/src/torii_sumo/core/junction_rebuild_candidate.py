@@ -17380,6 +17380,19 @@ def _xml_element_semantic_payload(element: ET.Element) -> dict[str, object]:
     }
 
 
+def _internal_artifact_owner(value: str, junction_ids: set[str]) -> str:
+    if not value.startswith(":"):
+        return ""
+    body = value[1:]
+    end = len(body)
+    while (separator := body.rfind("_", 0, end)) >= 0:
+        candidate = body[:separator]
+        if candidate in junction_ids:
+            return candidate
+        end = separator
+    return ""
+
+
 def _restore_non_target_internal_artifacts(
     *,
     source_file: Path,
@@ -17400,27 +17413,12 @@ def _restore_non_target_internal_artifacts(
         for junction in root.findall("junction")
         if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
     }
-    junction_prefixes = [
-        (f":{junction_id}_", junction_id) for junction_id in sorted(junction_ids, key=len, reverse=True)
-    ]
     owner_cache: dict[str, str] = {}
 
     def owner(value: str) -> str:
         if value in owner_cache:
             return owner_cache[value]
-        candidates = (value, _via_lane_edge_id(value))
-        if not any(edge_id.startswith(":") for edge_id in candidates):
-            owner_cache[value] = ""
-            return ""
-        internal_owner = next(
-            (
-                junction_id
-                for edge_id in candidates
-                for prefix, junction_id in junction_prefixes
-                if edge_id.startswith(prefix)
-            ),
-            "",
-        )
+        internal_owner = _internal_artifact_owner(value, junction_ids)
         owner_cache[value] = internal_owner
         return internal_owner
 

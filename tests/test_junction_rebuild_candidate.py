@@ -17010,6 +17010,13 @@ def test_restore_non_target_internal_artifacts_caches_repeated_internal_owner_lo
     assert elapsed < 1.0
 
 
+def test_internal_artifact_owner_uses_longest_valid_junction_id() -> None:
+    junction_ids = {"cluster", "cluster_a", "cluster_a_b"}
+
+    assert rebuild_candidate_module._internal_artifact_owner(":cluster_a_b_0_0", junction_ids) == "cluster_a_b"
+    assert rebuild_candidate_module._internal_artifact_owner(":missing_0", junction_ids) == ""
+
+
 def test_restore_non_target_internal_artifacts_restores_referenced_tllogic_capacity(tmp_path: Path) -> None:
     source = tmp_path / "source.net.xml"
     source.write_text(
