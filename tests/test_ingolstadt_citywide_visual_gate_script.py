@@ -3,11 +3,13 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageDraw
 import pytest
 
 from torii_sumo.core.candidate_contracts import file_sha256
+from torii_sumo.core.command_runner import CommandResult
 
 
 SCRIPT = Path("plugins/torii-sumo/scripts/run_ingolstadt_citywide_visual_gate.py")
@@ -278,6 +280,7 @@ def test_city_manifest_binds_junction_and_lane_pairs() -> None:
         "candidate_junction": "cluster_10_11",
     }]
     assert manifest["junction_pairs"][0]["outgoing_lane_pairs"] == {"t_out": "c_out"}
+    assert manifest["incoming_lane_count"] == 1
     assert manifest["teacher_only"] == []
     assert manifest["candidate_only"] == []
 
@@ -543,3 +546,214 @@ def test_main_runs_visual_phase_without_claiming_global_completion(tmp_path: Pat
     assert code == 2
     assert calls[0]["resume"] is True
     assert calls[0]["manifest_file"] == output / "city-manifest.json"
+
+
+def _four_tile_inventory() -> dict[str, object]:
+    junctions = []
+    for x, y in ((0, 0), (0, 1), (1, 0), (1, 1)):
+        tile = f"{x:04d}_{y:04d}"
+        junctions.append({
+            "tile_id": tile,
+            "projected_center": [x * 250.0 + 125.0, y * 250.0 + 125.0],
+            "motor_incoming_edges": [f"in_{x}_{y}"],
+            "motor_outgoing_edges": [f"out_{x}_{y}"],
+        })
+    return {"junctions": junctions}
+
+
+def test_od_plan_covers_tiles_neighbors_and_city_extremes() -> None:
+    plan = _module().build_stratified_od_plan(_four_tile_inventory(), seed=20260802)
+
+    kinds = {row["kind"] for row in plan}
+    assert {"within_tile", "adjacent_tiles", "edge_to_center"} <= kinds
+    assert {row["origin_tile"] for row in plan if row["kind"] == "within_tile"} == {
+        "0000_0000", "0000_0001", "0001_0000", "0001_0001"
+    }
+
+
+def test_global_result_rejects_missing_route_teleport_or_collision() -> None:
+    report = _module().summarize_global_run(
+        requested=20,
+        routed=19,
+        arrived=19,
+        teleports=1,
+        collisions=0,
+        returncode=0,
+    )
+
+    assert report["status"] == "fail"
+
+
+def test_global_phase_runs_load_duarouter_and_completion_checks(tmp_path: Path) -> None:
+    module = _module()
+    candidate = tmp_path / "candidate.net.xml"
+    _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
+    manifest = tmp_path / "city-manifest.json"
+    manifest.write_text(json.dumps({
+        "schema": "torii.ingolstadt-citywide-manifest/v1",
+        "status": "ready",
+        "candidate_net_file": str(candidate.resolve()),
+        "candidate_sha256": file_sha256(candidate),
+        "projected_scope": [1000.0, 2000.0, 1500.0, 2500.0],
+        "tile_size_m": 250.0,
+    }), encoding="utf-8")
+    calls = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        calls.append(command)
+        if command[0] == "duarouter":
+            trips = ET.parse(command[command.index("--route-files") + 1]).getroot().findall("trip")
+            route_file = Path(command[command.index("--output-file") + 1])
+            route_file.write_text(
+                "<routes>" + "".join(f'<vehicle id="v{i}"/>' for i in range(len(trips))) + "</routes>",
+                encoding="utf-8",
+            )
+        elif command[0] == "sumo" and "--route-files" in command:
+            route_count = len(ET.parse(command[command.index("--route-files") + 1]).getroot().findall("vehicle"))
+            summary = Path(command[command.index("--summary-output") + 1])
+            tripinfo = Path(command[command.index("--tripinfo-output") + 1])
+            summary.write_text(
+                f'<summary><step time="100" loaded="{route_count}" inserted="{route_count}" '
+                f'arrived="{route_count}" ended="{route_count}" running="0" waiting="0" '
+                'teleports="0" collisions="0"/></summary>',
+                encoding="utf-8",
+            )
+            tripinfo.write_text(
+                "<tripinfos>" + "".join(f'<tripinfo id="v{i}" duration="1"/>' for i in range(route_count)) + "</tripinfos>",
+                encoding="utf-8",
+            )
+        return CommandResult(command=command, cwd=str(cwd) if cwd else None, status="pass", returncode=0)
+
+    report = module.run_global_phase(
+        manifest_file=manifest,
+        output_dir=tmp_path / "out",
+        binaries={"sumo": "sumo", "duarouter": "duarouter"},
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_sha256"] == file_sha256(candidate)
+    assert [command[0] for command in calls] == ["sumo", "duarouter", "sumo"]
+    assert Path(report["global_load_file"]).is_file()
+    assert Path(report["global_routeability_file"]).is_file()
+
+
+def test_completion_requires_visual_structure_and_global_pass() -> None:
+    candidate_sha = "a" * 64
+    report = _module().build_completion_report(
+        manifest={
+            "teacher_applicable_junction_count": 1,
+            "candidate_applicable_junction_count": 1,
+            "matched_junction_count": 1,
+            "teacher_only": [],
+            "candidate_only": [],
+            "ambiguous": [],
+            "teacher_sha256": "b" * 64,
+            "candidate_sha256": candidate_sha,
+            "source_osm_sha256": "c" * 64,
+        },
+        visual={
+            "candidate_sha256": candidate_sha,
+            "lane_reports": {"tile/lane": {"status": "pass", "structure": {"status": "pass"}}},
+        },
+        global_report={
+            "status": "pass",
+            "candidate_sha256": candidate_sha,
+            "global_load_status": "pass",
+        },
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_sha256"] == candidate_sha
+    assert report["automatic_promotion_gate"] == "pass"
+
+
+def test_main_global_phase_writes_strict_completion(tmp_path: Path) -> None:
+    module = _module()
+    output = tmp_path / "out"
+    output.mkdir()
+    candidate_sha = "a" * 64
+    (output / "city-manifest.json").write_text(json.dumps({
+        "teacher_applicable_junction_count": 1,
+        "candidate_applicable_junction_count": 1,
+        "matched_junction_count": 1,
+        "incoming_lane_count": 1,
+        "teacher_only": [],
+        "candidate_only": [],
+        "ambiguous": [],
+        "teacher_sha256": "b" * 64,
+        "candidate_sha256": candidate_sha,
+        "source_osm_sha256": "c" * 64,
+    }), encoding="utf-8")
+    (output / "visual-summary.json").write_text(json.dumps({
+        "candidate_sha256": candidate_sha,
+        "lane_reports": {"tile/lane": {"status": "pass", "structure": {"status": "pass"}}},
+    }), encoding="utf-8")
+
+    code = module.main(
+        [
+            "--teacher-net", str(tmp_path / "teacher.net.xml"),
+            "--candidate-net", str(tmp_path / "candidate.net.xml"),
+            "--source-osm", str(tmp_path / "source.osm.xml"),
+            "--output-dir", str(output),
+            "--phase", "global",
+        ],
+        global_func=lambda **_kwargs: {
+            "status": "pass", "candidate_sha256": candidate_sha, "global_load_status": "pass"
+        },
+    )
+
+    assert code == 0
+    completion = json.loads((output / "completion.json").read_text(encoding="utf-8"))
+    assert completion["status"] == "pass"
+
+
+def test_main_all_runs_inventory_visual_and_global_in_order(tmp_path: Path) -> None:
+    module = _module()
+    output = tmp_path / "out"
+    candidate_sha = "a" * 64
+    calls = []
+
+    def inventory(**_kwargs):
+        calls.append("inventory")
+        return {
+            "status": "ready",
+            "teacher_applicable_junction_count": 1,
+            "candidate_applicable_junction_count": 1,
+            "matched_junction_count": 1,
+            "incoming_lane_count": 1,
+            "teacher_only": [], "candidate_only": [], "ambiguous": [],
+            "teacher_sha256": "b" * 64,
+            "candidate_sha256": candidate_sha,
+            "source_osm_sha256": "c" * 64,
+        }
+
+    def visual(**_kwargs):
+        calls.append("visual")
+        return {
+            "status": "pass", "candidate_sha256": candidate_sha,
+            "lane_reports": {"tile/lane": {"status": "pass", "structure": {"status": "pass"}}},
+        }
+
+    def global_gate(**_kwargs):
+        calls.append("global")
+        return {"status": "pass", "candidate_sha256": candidate_sha, "global_load_status": "pass"}
+
+    code = module.main(
+        [
+            "--teacher-net", str(tmp_path / "teacher.net.xml"),
+            "--candidate-net", str(tmp_path / "candidate.net.xml"),
+            "--source-osm", str(tmp_path / "source.osm.xml"),
+            "--output-dir", str(output),
+            "--phase", "all",
+            "--resume",
+        ],
+        inventory_func=inventory,
+        visual_func=visual,
+        global_func=global_gate,
+        provenance_func=lambda: ("commit", "sumo", "netedit"),
+    )
+
+    assert code == 0
+    assert calls == ["inventory", "visual", "global"]
+    assert json.loads((output / "completion.json").read_text(encoding="utf-8"))["status"] == "pass"

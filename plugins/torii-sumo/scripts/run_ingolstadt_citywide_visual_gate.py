@@ -5,13 +5,15 @@ import collections
 import json
 import math
 from pathlib import Path
+import random
 import shutil
 import subprocess
 from typing import Any, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
-from torii_sumo.core.artifact_io import write_json_atomic
+from torii_sumo.core.artifact_io import write_json_atomic, write_text_atomic
 from torii_sumo.core.candidate_contracts import file_sha256
+from torii_sumo.core.command_runner import run_command
 from torii_sumo.core.netedit_connection_visual_gate import (
     _comparison_image,
     _viewsettings,
@@ -21,6 +23,8 @@ from torii_sumo.core.netedit_connection_visual_gate import (
     write_semantic_mask,
 )
 from torii_sumo.core.netedit import NeteditTargetSession
+from torii_sumo.core.routeability_audit import inspect_routeability_outputs
+from torii_sumo.core.sumo_commands import discover_binaries
 
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
@@ -438,6 +442,7 @@ def build_city_manifest(
         "teacher_applicable_junction_count": teacher_inventory["applicable_junction_count"],
         "candidate_applicable_junction_count": candidate_inventory["applicable_junction_count"],
         "matched_junction_count": len(pairs),
+        "incoming_lane_count": sum(len(row["incoming_lane_records"]) for row in pairs),
         "teacher_only": registration["teacher_only"],
         "candidate_only": registration["candidate_only"],
         "ambiguous": registration["ambiguous"],
@@ -762,6 +767,282 @@ def capture_tile_pair(
     return captures[0], captures[1]
 
 
+def _centroid(points: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    return (
+        sum(point[0] for point in points) / len(points),
+        sum(point[1] for point in points) / len(points),
+    )
+
+
+def _adjacent_tile_pairs(tile_ids: Sequence[str]) -> list[tuple[str, str]]:
+    return [
+        (left, right)
+        for index, left in enumerate(tile_ids)
+        for right in tile_ids[index + 1 :]
+        if sum(abs(a - b) for a, b in zip(_tile_coordinates(left), _tile_coordinates(right))) == 1
+    ]
+
+
+def build_stratified_od_plan(inventory: Mapping[str, Any], *, seed: int) -> list[dict[str, str]]:
+    rng = random.Random(seed)
+    by_tile: dict[str, list[str]] = collections.defaultdict(list)
+    centers: dict[str, tuple[float, float]] = {}
+    for junction in inventory["junctions"]:
+        tile = str(junction["tile_id"])
+        centers[tile] = tuple(float(value) for value in junction["projected_center"])
+        by_tile[tile].extend(map(str, junction["motor_incoming_edges"]))
+        by_tile[tile].extend(map(str, junction["motor_outgoing_edges"]))
+    for values in by_tile.values():
+        values[:] = sorted(set(values))
+    rows: list[dict[str, str]] = []
+    for tile, edges in sorted(by_tile.items()):
+        if len(edges) >= 2:
+            origin, destination = rng.sample(edges, 2)
+            rows.append({
+                "kind": "within_tile", "origin_tile": tile, "destination_tile": tile,
+                "from": origin, "to": destination,
+            })
+    tiles = sorted(by_tile)
+    for left, right in _adjacent_tile_pairs(tiles):
+        rows.append({
+            "kind": "adjacent_tiles", "origin_tile": left, "destination_tile": right,
+            "from": rng.choice(by_tile[left]), "to": rng.choice(by_tile[right]),
+        })
+    city_center = _centroid(list(centers.values()))
+    center_tile = min(centers, key=lambda tile: math.dist(centers[tile], city_center))
+    extremes = (
+        min(centers, key=lambda tile: centers[tile][0]),
+        max(centers, key=lambda tile: centers[tile][0]),
+        min(centers, key=lambda tile: centers[tile][1]),
+        max(centers, key=lambda tile: centers[tile][1]),
+    )
+    for edge_tile in extremes:
+        rows.append({
+            "kind": "edge_to_center", "origin_tile": edge_tile, "destination_tile": center_tile,
+            "from": rng.choice(by_tile[edge_tile]), "to": rng.choice(by_tile[center_tile]),
+        })
+    return rows
+
+
+def summarize_global_run(
+    *,
+    requested: int,
+    routed: int,
+    arrived: int,
+    teleports: int,
+    collisions: int,
+    returncode: int,
+) -> dict[str, Any]:
+    status = "pass" if (
+        returncode == 0
+        and requested == routed == arrived
+        and teleports == 0
+        and collisions == 0
+    ) else "fail"
+    return {
+        "status": status,
+        "requested": requested,
+        "routed": routed,
+        "arrived": arrived,
+        "teleports": teleports,
+        "collisions": collisions,
+        "returncode": returncode,
+    }
+
+
+def _command_result(result: Any) -> dict[str, Any]:
+    if hasattr(result, "model_dump"):
+        return result.model_dump(mode="json")
+    return dict(result)
+
+
+def run_global_phase(
+    *,
+    manifest_file: Path,
+    output_dir: Path,
+    binaries: Mapping[str, str | None] | None = None,
+    command_runner: Any = run_command,
+) -> dict[str, Any]:
+    manifest = json.loads(Path(manifest_file).resolve(strict=True).read_text(encoding="utf-8"))
+    output = Path(output_dir).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    global_load_file = output / "global-load.json"
+    global_routeability_file = output / "global-routeability.json"
+    candidate = Path(str(manifest["candidate_net_file"])).resolve(strict=True)
+    candidate_sha = file_sha256(candidate)
+    if candidate_sha != manifest.get("candidate_sha256"):
+        raise RuntimeError("candidate network hash changed before global gates")
+    selected = dict(binaries or discover_binaries())
+    if not selected.get("sumo") or not selected.get("duarouter"):
+        report = {
+            "status": "blocked",
+            "candidate_sha256": candidate_sha,
+            "reason": "sumo and duarouter binaries are required",
+        }
+        write_json_atomic(global_load_file, report, sort_keys=True)
+        write_json_atomic(global_routeability_file, report, sort_keys=True)
+        return {
+            **report,
+            "global_load_file": str(global_load_file),
+            "global_routeability_file": str(global_routeability_file),
+        }
+
+    load_result = command_runner(
+        [
+            str(selected["sumo"]), "--net-file", str(candidate),
+            "--begin", "0", "--end", "1", "--no-step-log", "true",
+        ],
+        cwd=output,
+        timeout_seconds=300.0,
+    )
+    load_command = _command_result(load_result)
+    load_status = "pass" if load_command.get("returncode") == 0 else "fail"
+    load_report = {
+        "schema": "torii.ingolstadt-citywide-global-load/v1",
+        "status": load_status,
+        "candidate_net_file": str(candidate),
+        "candidate_sha256": candidate_sha,
+        "command": load_command,
+    }
+    write_json_atomic(global_load_file, load_report, sort_keys=True)
+
+    scope = tuple(float(value) for value in manifest["projected_scope"])
+    inventory = read_network_inventory(
+        candidate,
+        tile_size_m=float(manifest["tile_size_m"]),
+        scope_projected_boundary=scope,  # type: ignore[arg-type]
+    )
+    od_plan = build_stratified_od_plan(inventory, seed=20260802)
+    trips_file = output / "global.trips.xml"
+    trips_root = ET.Element("routes")
+    ET.SubElement(trips_root, "vType", id="passenger", vClass="passenger")
+    for index, row in enumerate(od_plan):
+        ET.SubElement(
+            trips_root,
+            "trip",
+            id=f"citywide_{index:06d}",
+            type="passenger",
+            depart=str(index),
+            **{"from": row["from"], "to": row["to"]},
+        )
+    ET.indent(trips_root, space="  ")
+    write_text_atomic(trips_file, ET.tostring(trips_root, encoding="unicode"), encoding="utf-8")
+    route_file = output / "global.rou.xml"
+    route_result = command_runner(
+        [
+            str(selected["duarouter"]), "--net-file", str(candidate),
+            "--route-files", str(trips_file), "--output-file", str(route_file),
+            "--ignore-errors", "false",
+        ],
+        cwd=output,
+        timeout_seconds=1800.0,
+    )
+    route_command = _command_result(route_result)
+    routed = 0
+    if route_command.get("returncode") == 0 and route_file.is_file():
+        routed = len(ET.parse(route_file).getroot().findall("vehicle"))
+
+    summary_file = output / "global.summary.xml"
+    tripinfo_file = output / "global.tripinfo.xml"
+    if routed == len(od_plan):
+        sumo_result = command_runner(
+            [
+                str(selected["sumo"]), "--net-file", str(candidate),
+                "--route-files", str(route_file),
+                "--summary-output", str(summary_file),
+                "--tripinfo-output", str(tripinfo_file),
+                "--collision.check-junctions", "true",
+                "--no-step-log", "true",
+            ],
+            cwd=output,
+            timeout_seconds=3600.0,
+        )
+        sumo_command = _command_result(sumo_result)
+    else:
+        sumo_command = {"status": "blocked", "returncode": None, "reason": "not every OD pair was routed"}
+    inspection = (
+        inspect_routeability_outputs(
+            summary_path=summary_file,
+            tripinfo_path=tripinfo_file,
+            expected_vehicle_count=len(od_plan),
+        )
+        if sumo_command.get("returncode") == 0 and summary_file.is_file() and tripinfo_file.is_file()
+        else {"status": "fail", "summary": {}, "tripinfo": {}}
+    )
+    summary = inspection.get("summary", {})
+    global_result = summarize_global_run(
+        requested=len(od_plan),
+        routed=routed,
+        arrived=int(summary.get("arrived") or 0),
+        teleports=int(summary.get("teleports") or 0),
+        collisions=int(summary.get("collisions") or 0),
+        returncode=int(sumo_command.get("returncode") or 0) if sumo_command.get("returncode") is not None else -1,
+    )
+    status = "pass" if load_status == "pass" and inspection.get("status") == "pass" and global_result["status"] == "pass" else "fail"
+    routeability_report = {
+        "schema": "torii.ingolstadt-citywide-global-routeability/v1",
+        "status": status,
+        "candidate_net_file": str(candidate),
+        "candidate_sha256": candidate_sha,
+        "seed": 20260802,
+        "od_plan": od_plan,
+        "trip_file": str(trips_file),
+        "trip_sha256": file_sha256(trips_file),
+        "route_file": str(route_file) if route_file.is_file() else "",
+        "route_sha256": file_sha256(route_file) if route_file.is_file() else "",
+        "duarouter_command": route_command,
+        "sumo_command": sumo_command,
+        "inspection": inspection,
+        "result": global_result,
+    }
+    write_json_atomic(global_routeability_file, routeability_report, sort_keys=True)
+    return {
+        **routeability_report,
+        "global_load_status": load_status,
+        "global_load_file": str(global_load_file),
+        "global_routeability_file": str(global_routeability_file),
+    }
+
+
+def build_completion_report(
+    *,
+    manifest: Mapping[str, Any],
+    visual: Mapping[str, Any],
+    global_report: Mapping[str, Any],
+) -> dict[str, Any]:
+    candidate_sha = str(manifest["candidate_sha256"])
+    if visual.get("candidate_sha256") != candidate_sha or global_report.get("candidate_sha256") != candidate_sha:
+        raise ValueError("completion inputs do not bind the same candidate SHA-256")
+    lane_reports = list(visual.get("lane_reports", {}).values())
+    lane_statuses = [str(report.get("status", "blocked")) for report in lane_reports]
+    expected_lanes = int(manifest.get("incoming_lane_count", len(lane_reports)))
+    if len(lane_reports) != expected_lanes:
+        lane_statuses.append("missing")
+    structure_statuses = [
+        str(report.get("structure", {}).get("status", "blocked")) for report in lane_reports
+    ]
+    completion = city_completion(
+        teacher_count=int(manifest["teacher_applicable_junction_count"]),
+        candidate_count=int(manifest["candidate_applicable_junction_count"]),
+        matched_count=int(manifest["matched_junction_count"]),
+        teacher_only=manifest.get("teacher_only", ()),
+        candidate_only=manifest.get("candidate_only", ()),
+        ambiguous=manifest.get("ambiguous", ()),
+        lane_statuses=lane_statuses,
+        structure_statuses=structure_statuses,
+        global_load=str(global_report.get("global_load_status", "blocked")),
+        global_routeability=str(global_report.get("status", "blocked")),
+    )
+    return {
+        **completion,
+        "teacher_sha256": manifest.get("teacher_sha256", ""),
+        "candidate_sha256": candidate_sha,
+        "source_osm_sha256": manifest.get("source_osm_sha256", ""),
+        "visual_lane_count": len(lane_reports),
+        "expected_lane_count": expected_lanes,
+    }
+
+
 def _command_text(command: Sequence[str]) -> str:
     result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     output = (result.stdout or result.stderr).strip()
@@ -783,9 +1064,53 @@ def main(
     *,
     inventory_func: Any = run_inventory_phase,
     visual_func: Any = run_visual_phase,
+    global_func: Any = run_global_phase,
     provenance_func: Any = _provenance,
 ) -> int:
     args = build_parser().parse_args(argv)
+    if args.phase == "all":
+        git_commit, sumo_version, netedit_version = provenance_func()
+        inventory = inventory_func(
+            teacher_net=args.teacher_net,
+            candidate_net=args.candidate_net,
+            source_osm=args.source_osm,
+            output_dir=args.output_dir,
+            tile_size_m=args.tile_size_m,
+            junction_distance_m=args.junction_distance_m,
+            git_commit=git_commit,
+            sumo_version=sumo_version,
+            netedit_version=netedit_version,
+        )
+        if inventory["status"] != "ready":
+            print(json.dumps(inventory, ensure_ascii=False, indent=2))
+            return 3
+        window_size = tuple(int(value) for value in args.window_size.split(","))
+        if len(window_size) != 2 or min(window_size) <= 0:
+            raise ValueError("window-size must be WIDTH,HEIGHT with positive integers")
+        visual = visual_func(
+            manifest_file=args.output_dir / "city-manifest.json",
+            output_dir=args.output_dir,
+            seed_junction=args.seed_junction,
+            zoom=args.zoom,
+            window_size=window_size,
+            resume=args.resume,
+        )
+        if visual["status"] != "pass":
+            print(json.dumps(visual, ensure_ascii=False, indent=2))
+            return 3 if visual["status"] == "blocked" else 2
+        global_report = global_func(
+            manifest_file=args.output_dir / "city-manifest.json",
+            output_dir=args.output_dir,
+        )
+        completion = build_completion_report(
+            manifest=inventory,
+            visual=visual,
+            global_report=global_report,
+        )
+        completion_file = args.output_dir / "completion.json"
+        write_json_atomic(completion_file, completion, sort_keys=True)
+        print(json.dumps({**completion, "completion_file": str(completion_file)}, ensure_ascii=False, indent=2))
+        return 0 if completion["status"] == "pass" else 3 if global_report["status"] == "blocked" else 2
     if args.phase == "visual":
         window_size = tuple(int(value) for value in args.window_size.split(","))
         if len(window_size) != 2 or min(window_size) <= 0:
@@ -800,6 +1125,26 @@ def main(
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 3 if report["status"] == "blocked" else 2
+    if args.phase == "global":
+        manifest_file = args.output_dir / "city-manifest.json"
+        visual_file = args.output_dir / "visual-summary.json"
+        if not manifest_file.is_file() or not visual_file.is_file():
+            report = {"status": "blocked", "reason": "inventory and visual phases must finish first"}
+            print(json.dumps(report, ensure_ascii=False))
+            return 3
+        global_report = global_func(manifest_file=manifest_file, output_dir=args.output_dir)
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        visual = json.loads(visual_file.read_text(encoding="utf-8"))
+        completion = build_completion_report(
+            manifest=manifest,
+            visual=visual,
+            global_report=global_report,
+        )
+        completion_file = args.output_dir / "completion.json"
+        write_json_atomic(completion_file, completion, sort_keys=True)
+        report = {**completion, "completion_file": str(completion_file)}
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if completion["status"] == "pass" else 3 if global_report["status"] == "blocked" else 2
     if args.phase != "inventory":
         report = {"status": "blocked", "reason": f"phase is not implemented yet: {args.phase}"}
         print(json.dumps(report, ensure_ascii=False))
