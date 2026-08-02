@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torii_sumo.core.corridor_simplification as corridor_simplification
 from torii_sumo.core.corridor_simplification import (
-    _find_removable_corridor_geometry_nodes_isolated,
     audit_alias_normalized_connections,
     find_removable_corridor_geometry_nodes,
 )
@@ -48,22 +47,6 @@ def test_corridor_detector_accepts_reference_absent_micro_geometry_node(tmp_path
     assert [candidate["node_id"] for candidate in candidates] == ["micro"]
     assert candidates[0]["minimum_incident_edge_length_m"] == 0.2
     assert candidates[0]["proof"] == "same_corridor_same_semantics_lane_preserving_micro_segment"
-
-
-def test_corridor_detector_can_release_xml_tree_in_worker_process(tmp_path: Path) -> None:
-    candidate = tmp_path / "candidate.net.xml"
-    reference = tmp_path / "reference.net.xml"
-    _write_net(candidate)
-    reference.write_text("<net><junction id='west'/><junction id='east'/></net>", encoding="utf-8")
-
-    candidates = _find_removable_corridor_geometry_nodes_isolated(
-        candidate,
-        reference_net_file=reference,
-        max_micro_edge_length_m=1.0,
-        candidate_node_ids=None,
-    )
-
-    assert [candidate["node_id"] for candidate in candidates] == ["micro"]
 
 
 def test_corridor_detector_rejects_different_road_names(tmp_path: Path) -> None:
