@@ -15,6 +15,11 @@ from torii_sumo.core.command_runner import CommandResult
 SCRIPT = Path("plugins/torii-sumo/scripts/run_ingolstadt_citywide_visual_gate.py")
 
 
+def test_cli_entrypoint_runs_after_all_helper_definitions() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert source.rfind('if __name__ == "__main__":') > source.rfind("def read_network_inventory(")
+
+
 def _module():
     if not SCRIPT.is_file():
         pytest.fail(f"citywide runner is missing: {SCRIPT}")

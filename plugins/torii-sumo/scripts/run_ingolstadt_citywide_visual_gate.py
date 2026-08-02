@@ -1165,10 +1165,6 @@ def main(
     return 2
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def _location_numbers(path: Path) -> tuple[tuple[float, float], tuple[float, float, float, float]]:
     location = ET.parse(path).getroot().find("location")
     if location is None:
@@ -1335,3 +1331,7 @@ def read_network_inventory(
         "applicable_junction_count": len(rows),
         "junctions": sorted(rows, key=lambda row: row["id"]),
     }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
