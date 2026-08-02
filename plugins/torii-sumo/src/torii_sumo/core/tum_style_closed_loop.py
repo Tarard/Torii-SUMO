@@ -84,15 +84,32 @@ def complete_tum_style_iteration(
         raise ValueError("parent candidate changed after begin")
     if decision not in _DECISIONS:
         raise ValueError(f"decision must be one of {sorted(_DECISIONS)}")
+    after_source = Path(after_net_file).resolve()
+    if not after_source.is_file():
+        raise FileNotFoundError(f"after network does not exist: {after_source}")
     visual_gate = audit.get("visual_connection_gate")
     if decision == "accepted" and (
         not isinstance(visual_gate, Mapping) or visual_gate.get("status") != "pass"
     ):
         raise ValueError("visual Connection gate must pass before accepting a candidate")
+    citywide_gate = audit.get("citywide_gate")
+    if decision == "accepted" and citywide_gate is not None:
+        if not isinstance(citywide_gate, Mapping) or citywide_gate.get("status") != "pass":
+            raise ValueError("citywide gate must pass before accepting a citywide candidate")
+        if citywide_gate.get("candidate_sha256") != file_sha256(after_source):
+            raise ValueError("citywide gate candidate hash does not match after network")
+        count_fields = (
+            "unmapped_teacher_count",
+            "unmapped_candidate_count",
+            "ambiguous_count",
+            "failed_lane_count",
+            "failed_structure_count",
+        )
+        if any(citywide_gate.get(field) != 0 for field in count_fields):
+            raise ValueError("citywide gate contains unmapped, ambiguous, or failed items")
+        if citywide_gate.get("global_load_status") != "pass" or citywide_gate.get("global_routeability_status") != "pass":
+            raise ValueError("citywide global SUMO gates must pass")
     normalized_action = _validate_action(action)
-    after_source = Path(after_net_file).resolve()
-    if not after_source.is_file():
-        raise FileNotFoundError(f"after network does not exist: {after_source}")
     iteration_dir = Path(str(pending["iteration_dir"]))
     after = iteration_dir / "after.net.xml"
     shutil.copy2(after_source, after)

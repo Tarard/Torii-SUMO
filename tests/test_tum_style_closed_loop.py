@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.tum_style_closed_loop import (
     _next_action,
     begin_tum_style_iteration,
@@ -135,3 +136,50 @@ def test_accepted_iteration_requires_visual_connection_pass(tmp_path: Path) -> N
             mcp_evidence={},
             decision="accepted",
         )
+
+
+def test_citywide_acceptance_requires_exact_candidate_hash_and_all_gates(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.net.xml"
+    after = tmp_path / "after.net.xml"
+    _net(baseline, "baseline")
+    _net(after, "after")
+    started = start_tum_style_closed_loop(baseline_net_file=baseline, output_dir=tmp_path / "loop")
+    begun = begin_tum_style_iteration(state_file=Path(started["state_file"]))
+    audit = {
+        "status": "pass",
+        "visual_connection_gate": {"status": "pass"},
+        "citywide_gate": {
+            "status": "pass",
+            "candidate_sha256": "0" * 64,
+            "unmapped_teacher_count": 0,
+            "unmapped_candidate_count": 0,
+            "ambiguous_count": 0,
+            "failed_lane_count": 0,
+            "failed_structure_count": 0,
+            "global_load_status": "pass",
+            "global_routeability_status": "pass",
+        },
+    }
+
+    with pytest.raises(ValueError, match="citywide gate candidate hash"):
+        complete_tum_style_iteration(
+            state_file=Path(started["state_file"]),
+            iteration_id=begun["iteration_id"],
+            after_net_file=after,
+            action={"kind": "connection", "count": 1},
+            audit=audit,
+            mcp_evidence={},
+            decision="accepted",
+        )
+
+    audit["citywide_gate"]["candidate_sha256"] = file_sha256(after)
+    accepted = complete_tum_style_iteration(
+        state_file=Path(started["state_file"]),
+        iteration_id=begun["iteration_id"],
+        after_net_file=after,
+        action={"kind": "connection", "count": 1},
+        audit=audit,
+        mcp_evidence={},
+        decision="accepted",
+    )
+    assert accepted["iteration"]["decision"] == "accepted"
