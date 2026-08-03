@@ -11884,6 +11884,17 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         )
     else:
         missing_desired_endpoint_ids = []
+    approach_plan = candidate.get("approach_endpoint_rebuild_plan", {})
+    if isinstance(approach_plan, dict):
+        approach_missing_endpoint_ids = {
+            str(item)
+            for item in approach_plan.get("missing_desired_endpoint_ids", []) or []
+            if str(item)
+        }
+        junction_ids.update(approach_missing_endpoint_ids)
+        missing_desired_endpoint_ids = sorted(
+            set(missing_desired_endpoint_ids) | approach_missing_endpoint_ids
+        )
     if junction_id and (not raw_endpoint_ids or junction_id in raw_endpoint_ids):
         junction_ids.add(junction_id)
         join_junction_ids.add(junction_id)

@@ -5781,6 +5781,9 @@ def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scop
                 "join_junction_ids": ["a", "j", "n"],
                 "blocked_teacher_edge_ids": ["teacher_neighbor"],
             },
+            "approach_endpoint_rebuild_plan": {
+                "missing_desired_endpoint_ids": ["cluster_other_a_b"],
+            },
         },
         {
             "target_internal_replay": {
@@ -5793,7 +5796,13 @@ def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scop
     )
 
     assert followup is not None
-    assert followup["expanded_rebuild_scope"]["junction_ids"] == ["a", "j", "n", "q"]
+    assert followup["expanded_rebuild_scope"]["junction_ids"] == [
+        "a",
+        "cluster_other_a_b",
+        "j",
+        "n",
+        "q",
+    ]
     assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n"]
     assert "cluster_teacher" not in followup["expanded_rebuild_scope"]["junction_ids"]
 
