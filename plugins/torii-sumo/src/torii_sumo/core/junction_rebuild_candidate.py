@@ -5886,7 +5886,7 @@ def build_teacher_guided_junction_variant(
         *_endpoint_rewrite_old_endpoint_ids(lane_patch_report),
     }
     restore_mutable_edge_ids = set() if structural_osm_boundary_authority else set(edge_map.values())
-    expand_restore_scope = not structural_osm_boundary_authority
+    expand_restore_scope = not (structural_osm_boundary_authority or strict_teacher_replay)
     node_patch_report = write_teacher_endpoint_patch_nodes(
         raw_node_file=raw_node_file,
         teacher_net_file=teacher_net_file,

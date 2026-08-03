@@ -17915,6 +17915,18 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(tmp_p
 
 def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    restore_scope_expansions = []
+    restore_off_scope = restore_off_scope_netconvert_artifacts
+
+    def capture_restore_scope(**kwargs):
+        restore_scope_expansions.append(kwargs["expand_mutable_edge_endpoints"])
+        return restore_off_scope(**kwargs)
+
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "restore_off_scope_netconvert_artifacts",
+        capture_restore_scope,
+    )
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
         """<net>
@@ -18015,6 +18027,7 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
         edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
         prefix="demo",
         replay_target_internal_subgraph=True,
+        strict_teacher_replay=True,
         command_runner=fake_runner,
     )
 
@@ -18023,6 +18036,7 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
     assert report["target_internal_normalize"]["status"] == "pass"
     assert report["sumo_load"]["status"] == "pass"
     assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
+    assert restore_scope_expansions == [False, False]
     assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
 
 
