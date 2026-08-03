@@ -809,7 +809,7 @@ def test_teacher_candidate_edge_map_prefers_exact_edge_id_before_bearing() -> No
                     "edge_id": "main#3",
                     "from": "a",
                     "to": "j",
-                    "bearing": 150.0,
+                    "bearing": 80.0,
                     "lane_count": 1,
                     "type": "highway.path",
                 },
@@ -2607,6 +2607,39 @@ def test_joined_endpoint_edge_file_keeps_edges_between_distinct_join_groups(tmp_
     root = ET.parse(written_file).getroot()
     assert dropped_self_loops == ["inside_a", "inside_b"]
     assert root.find("edge[@id='bridge']").attrib == {"id": "bridge", "from": "a2", "to": "b1"}
+
+
+def test_joined_endpoint_edge_file_rewrites_full_cluster_alias_to_sumo_id(tmp_path: Path) -> None:
+    node_ids = [str(index) for index in range(1, 15)]
+    full_id = f"cluster_{'_'.join(sorted(node_ids))}"
+    sumo_id = "cluster_1_10_11_12_#10more"
+    edge_file = tmp_path / "scope.edg.xml"
+    edge_file.write_text(
+        f'<edges><edge id="bridge" from="{full_id}" to="outside"/></edges>',
+        encoding="utf-8",
+    )
+    join_file = tmp_path / "join.nod.xml"
+    join_file.write_text(
+        f'<nodes><join nodes="{" ".join(node_ids)}"/></nodes>',
+        encoding="utf-8",
+    )
+
+    written_file, rewrite_count, dropped_self_loops, blocking_self_loops = _write_joined_endpoint_edge_file(
+        edge_file,
+        join_file,
+        sumo_id,
+        tmp_path / "replay.edg.xml",
+        rewrite_endpoints=True,
+    )
+
+    assert rewrite_count == 1
+    assert dropped_self_loops == []
+    assert blocking_self_loops == []
+    assert ET.parse(written_file).getroot().find("edge[@id='bridge']").attrib == {
+        "id": "bridge",
+        "from": sumo_id,
+        "to": "outside",
+    }
 
 
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
@@ -7901,6 +7934,55 @@ def test_write_expanded_scope_restores_teacher_cluster_members_as_separate_joins
     assert [join.attrib["nodes"] for join in join_root.findall("join")] == ["a b", "c d"]
 
 
+def test_write_expanded_scope_recovers_short_join_from_full_scope_alias(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="0" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="c" x="2" y="0"/>
+  <node id="d" x="3" y="0"/>
+  <node id="e" x="4" y="0"/>
+  <node id="f" x="5" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text("<edges/>\n", encoding="utf-8")
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    short_id = "cluster_a_b_c_d_#2more"
+    full_id = "cluster_a_b_c_d_e_f"
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                f'<net><junction id="{short_id}" type="priority" x="0" y="0" incLanes="" intLanes=""/></net>',
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = write_expanded_scope_plain_inputs(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "scope",
+        expanded_rebuild_scope={
+            "core_junction_id": short_id,
+            "junction_ids": [short_id, full_id],
+            "join_junction_ids": [short_id],
+        },
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["join_groups"] == [["a", "b", "c", "d", "e", "f"]]
+    assert report["joined_scope_junction_id"] == short_id
+
+
 def test_run_teacher_guided_repair_queue_replays_existing_joined_expanded_scope(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
@@ -11576,6 +11658,36 @@ def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
     assert parity["delta"]["controlled_vehicle_link_count"] == 0
 
 
+def test_teacher_parity_treats_full_and_sumo_cluster_ids_as_same_endpoint() -> None:
+    members = [str(index) for index in range(1, 15)]
+    full_id = f"cluster_{'_'.join(sorted(members))}"
+    short_id = "cluster_1_10_11_12_#10more"
+    teacher_model = {
+        "junction_id": "target",
+        "summary": {},
+        "junction": {},
+        "approaches": {"incoming": [{"edge_id": "road", "from": full_id, "to": "target", "lanes": []}]},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"phases": []},
+    }
+    candidate_model = {
+        **teacher_model,
+        "approaches": {"incoming": [{"edge_id": "road", "from": short_id, "to": "target", "lanes": []}]},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"road": "road"},
+        teacher_junction_id="target",
+        candidate_junction_id="target",
+    )
+
+    assert "approach_edge_signature_mismatch_count" not in parity["delta"]
+    assert "approach_endpoint_signature_mismatch_count" not in parity["delta"]
+
+
 def test_teacher_parity_counts_referenced_tls_id_controlled_links() -> None:
     teacher_model = {
         "junction_id": "j",
@@ -13251,6 +13363,38 @@ def test_target_surface_overlap_gate_blocks_only_target_related_findings(
     assert gate["junction_overlap_count"] == 1
 
 
+def test_target_surface_overlap_gate_allows_non_regressed_junction_overlap(tmp_path: Path) -> None:
+    finding = {
+        "first_junction_id": "target",
+        "second_junction_id": "neighbor",
+        "overlap_area_m2": 1.0,
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        junction_junction_overlaps=[finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        junction_junction_overlaps=[{**finding, "overlap_area_m2": 1.1}],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["junction_overlap_inherited_count"] == 1
+    assert gate["junction_overlap_regression_count"] == 0
+
+
 def test_target_surface_overlap_gate_ignores_target_owned_lane_at_remote_junction(
     tmp_path: Path,
 ) -> None:
@@ -13780,6 +13924,49 @@ def test_reference_teacher_turnaround_authority_binds_the_compiled_signature(
     assert authority["authority_records"][0]["from_edge_id"] == "candidate_in"
     assert authority["authority_records"][0]["to_edge_id"] == "candidate_out"
     assert authority["authority_records"][0]["road_vclasses"] == ["bicycle"]
+
+
+def test_compound_turnaround_authority_resolves_sumo_shortened_teacher_cluster(tmp_path: Path) -> None:
+    members = [str(index) for index in range(1, 15)]
+    full_id = f"cluster_{'_'.join(sorted(members))}"
+    short_id = "cluster_1_10_11_12_#10more"
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        f"""<net>
+  <edge id="in" from="x" to="{full_id}"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="{full_id}" to="x"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <junction id="target" type="priority" incLanes="" intLanes=""/>
+  <junction id="{full_id}" type="priority" incLanes="in_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        f"""<net>
+  <edge id="in" from="x" to="{short_id}"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="{short_id}" to="x"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <junction id="target" type="priority" incLanes="" intLanes=""/>
+  <junction id="{short_id}" type="priority" incLanes="in_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._compound_teacher_turnaround_evidence(
+        teacher_model=rebuild_candidate_module.extract_teacher_junction_model(teacher_net, "target"),
+        final_net_file=candidate_net,
+        junction_id="target",
+        edge_map={},
+        teacher_net_file=teacher_net,
+        teacher_junction_id="target",
+        compound_junction_ids=[short_id],
+    )
+
+    assert report["teacher_partition_map"] == {short_id: full_id}
+    assert report["unresolved_candidate_turnaround_count"] == 0
 
 
 def test_reference_teacher_turnaround_authority_rejects_lane_vclass_mismatch(

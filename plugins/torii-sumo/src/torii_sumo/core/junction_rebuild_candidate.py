@@ -5825,6 +5825,7 @@ def build_teacher_guided_junction_variant(
         "declared_estimator_evidence" if source_conflict_core_node_ids is not None else "plain_join_definition"
     )
     compound_junction_ids = sorted({junction_id, *(str(value) for value in safety_junction_ids if str(value))})
+    movement_replay_junction_ids = [junction_id] if strict_teacher_replay else compound_junction_ids
     control_cleanup_junction_ids = sorted(
         {
             *compound_junction_ids,
@@ -5840,7 +5841,7 @@ def build_teacher_guided_junction_variant(
                 teacher_net_file=teacher_net_file,
                 candidate_net_file=candidate_net_file,
                 edge_map=edge_map,
-                safety_junction_ids=compound_junction_ids,
+                safety_junction_ids=movement_replay_junction_ids,
             )
         )
 
@@ -5916,14 +5917,14 @@ def build_teacher_guided_junction_variant(
     connection_teacher_model = teacher_model
     connection_edge_map = edge_map
     structural_teacher_junction_ids = [teacher_junction_id]
-    if (structural_osm_boundary_authority or strict_structural_replay) and compound_junction_ids:
+    if (structural_osm_boundary_authority or strict_structural_replay) and movement_replay_junction_ids:
         connection_teacher_model = copy.deepcopy(teacher_model)
         connection_edge_map = dict(edge_map)
         teacher_junction_ids = {
             row.attrib["id"] for row in ET.parse(teacher_net_file).getroot().findall("junction") if row.attrib.get("id")
         }
         candidate_edge_ids = set(_edge_file_lane_counts(patched_edge_file))
-        for compound_junction_id in compound_junction_ids:
+        for compound_junction_id in movement_replay_junction_ids:
             if compound_junction_id == teacher_junction_id or compound_junction_id not in teacher_junction_ids:
                 continue
             partition_model = extract_teacher_junction_model(
@@ -5963,7 +5964,7 @@ def build_teacher_guided_junction_variant(
             teacher_junction_id if replay_target_internal_subgraph and not strict_structural_replay else None
         ),
         generate_structural_connections=structural_osm_boundary_authority or strict_structural_replay,
-        structural_junction_ids=compound_junction_ids,
+        structural_junction_ids=movement_replay_junction_ids,
     )
     connection_report["structural_teacher_junction_ids"] = sorted(structural_teacher_junction_ids)
     if connection_report.get("status") != "pass":
@@ -7034,7 +7035,7 @@ def build_teacher_guided_junction_variant(
             "parity": parity,
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "strict_structural_replay": strict_structural_replay,
-            "strict_structural_junction_ids": compound_junction_ids if strict_structural_replay else [],
+            "strict_structural_junction_ids": movement_replay_junction_ids if strict_structural_replay else [],
             "strict_structural_edge_map_additions": strict_structural_edge_map_additions,
             "semantic_replay_gate": semantic_gate,
             "semantic_replay_effective_gate": effective_semantic_gate,
@@ -8081,6 +8082,14 @@ def run_teacher_guided_repair_queue(
                         refreshed_edge_map = {}
                         scope_report["full_network_join_refreshed_edge_map_error"] = f"{type(exc).__name__}: {exc}"
                     if refreshed_edge_map:
+                        refreshed_edge_map = {
+                            teacher_edge_id: (
+                                teacher_edge_id
+                                if replay_edge_map.get(teacher_edge_id) == teacher_edge_id
+                                else candidate_edge_id
+                            )
+                            for teacher_edge_id, candidate_edge_id in refreshed_edge_map.items()
+                        }
                         replacements = {
                             teacher_edge_id: {
                                 "old": replay_edge_map.get(teacher_edge_id, ""),
@@ -8279,7 +8288,6 @@ def run_teacher_guided_repair_queue(
                 compound_safety_junction_ids = sorted(
                     {
                         *joined_scope_junction_ids,
-                        *compound_teacher_junction_ids,
                         *(
                             str(value)
                             for value in (
@@ -9774,6 +9782,24 @@ def write_expanded_scope_plain_inputs(
     ]
     blocked_edge_ids = {str(item) for item in scope.get("blocked_teacher_edge_ids", []) or [] if str(item)}
     teacher_join_groups_by_cluster = teacher_join_groups_by_cluster or {}
+    cluster_members_by_alias = {
+        _canonical_sumo_cluster_id(cluster_id): _sumo_cluster_member_ids(cluster_id)
+        for cluster_id in raw_scope_junction_ids
+        if cluster_id.startswith("cluster_") and len(_sumo_cluster_member_ids(cluster_id)) > 4
+    }
+    cluster_members_by_alias.update(
+        {
+            _canonical_sumo_cluster_id(cluster_id): members
+            for cluster_id, members in teacher_join_groups_by_cluster.items()
+        }
+    )
+
+    def resolved_cluster_members(value: str) -> list[str]:
+        return (
+            teacher_join_groups_by_cluster.get(value)
+            or cluster_members_by_alias.get(_canonical_sumo_cluster_id(value))
+            or _sumo_cluster_member_ids(value)
+        )
 
     raw_nodes = {
         node.attrib["id"]: node
@@ -9784,7 +9810,7 @@ def write_expanded_scope_plain_inputs(
     def expand_scope_ids(values: list[str]) -> set[str]:
         expanded: set[str] = set()
         for value in values:
-            members = _sumo_cluster_member_ids(value)
+            members = resolved_cluster_members(value)
             # Generated cluster ids are only expanded when their member ids
             # are present in the current plain source.  Otherwise retain the
             # id so the report can explain the missing teacher endpoint.
@@ -9813,10 +9839,9 @@ def write_expanded_scope_plain_inputs(
     for cluster_id in raw_scope_junction_ids:
         if not cluster_id.startswith("cluster_"):
             continue
-        mapped_cluster_members = teacher_join_groups_by_cluster.get(cluster_id, [])
         cluster_members = sorted(
             member
-            for member in (mapped_cluster_members if mapped_cluster_members else _sumo_cluster_member_ids(cluster_id))
+            for member in resolved_cluster_members(cluster_id)
             if member in raw_nodes
         )
         if len(cluster_members) < 2:
@@ -9835,12 +9860,9 @@ def write_expanded_scope_plain_inputs(
         for source_cluster_id in raw_scope_junction_ids:
             if not source_cluster_id.startswith("cluster_"):
                 continue
-            mapped_source_members = teacher_join_groups_by_cluster.get(source_cluster_id, [])
             source_members = {
                 member
-                for member in (
-                    mapped_source_members if mapped_source_members else _sumo_cluster_member_ids(source_cluster_id)
-                )
+                for member in resolved_cluster_members(source_cluster_id)
                 if member in raw_nodes
             }
             if source_members and source_members == set(group):
@@ -10900,7 +10922,10 @@ def _compound_teacher_turnaround_evidence(
             for teacher_id in teacher_junction_ids
             if teacher_id.startswith("cluster_")
             and set(_sumo_cluster_member_ids(teacher_id))
-            and set(_sumo_cluster_member_ids(teacher_id)) <= candidate_members
+            and (
+                _canonical_sumo_cluster_id(teacher_id) == candidate_junction_id
+                or set(_sumo_cluster_member_ids(teacher_id)) <= candidate_members
+            )
         ]
         if len(matches) == 1:
             partition_map[candidate_junction_id] = matches[0]
@@ -11538,7 +11563,26 @@ def _target_surface_overlap_gate(
         return value
 
     baseline_owner_overlap_areas: dict[tuple[str, str], float] = {}
+    baseline_junction_overlap_areas: dict[tuple[str, str], float] = {}
     if baseline_valid:
+        for item in audited_baseline_report.get("junction_junction_overlaps", []) or []:
+            if not isinstance(item, dict):
+                continue
+            key = tuple(
+                sorted(
+                    (
+                        str(item.get("first_junction_id", "")),
+                        str(item.get("second_junction_id", "")),
+                    )
+                )
+            )
+            if not all(key):
+                continue
+            try:
+                area = float(item.get("overlap_area_m2", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            baseline_junction_overlap_areas[key] = max(area, baseline_junction_overlap_areas.get(key, 0.0))
         for item in audited_baseline_report.get("external_lane_non_owner_junction_overlaps", []) or []:
             if not isinstance(item, dict):
                 continue
@@ -11556,6 +11600,35 @@ def _target_surface_overlap_gate(
                 area,
                 baseline_owner_overlap_areas.get(key, 0.0),
             )
+    inherited_junction_overlaps = []
+    regressed_junction_overlaps = []
+    for item in junction_overlaps:
+        key = tuple(
+            sorted(
+                (
+                    str(item.get("first_junction_id", "")),
+                    str(item.get("second_junction_id", "")),
+                )
+            )
+        )
+        try:
+            final_area = float(item.get("overlap_area_m2", 0) or 0)
+        except (TypeError, ValueError):
+            final_area = math.inf
+        baseline_area = baseline_junction_overlap_areas.get(key)
+        record = {
+            **item,
+            "baseline_overlap_area_m2": baseline_area,
+            "overlap_area_delta_m2": (
+                round(final_area - baseline_area, 6)
+                if baseline_area is not None and math.isfinite(final_area)
+                else None
+            ),
+        }
+        if baseline_area is not None and final_area <= baseline_area + 1e-4:
+            inherited_junction_overlaps.append(record)
+        else:
+            regressed_junction_overlaps.append(record)
 
     def classify_overlap_regressions(
         overlaps: list[dict[str, Any]],
@@ -11599,7 +11672,7 @@ def _target_surface_overlap_gate(
         report_identity.get("status") != "pass"
         or non_area_exclusions
         or geometry_errors
-        or junction_overlaps
+        or regressed_junction_overlaps
         or regressed_lane_non_owner_overlaps
         or regressed_lane_target_owner_overlaps
     )
@@ -11615,6 +11688,10 @@ def _target_surface_overlap_gate(
         "geometry_errors": geometry_errors,
         "junction_overlap_count": len(junction_overlaps),
         "junction_overlaps": junction_overlaps,
+        "junction_overlap_regression_count": len(regressed_junction_overlaps),
+        "junction_overlap_regressions": regressed_junction_overlaps,
+        "junction_overlap_inherited_count": len(inherited_junction_overlaps),
+        "junction_overlap_inherited": inherited_junction_overlaps,
         "authorized_non_motorized_overlap_count": len(authorized_non_motorized_overlap_keys),
         "authorized_non_motorized_overlaps": authorized_non_motorized_overlaps,
         "lane_non_owner_overlap_count": len(lane_non_owner_overlaps),
@@ -11795,12 +11872,15 @@ def _join_patch_endpoint_rewrites(join_patch_file: Path) -> dict[str, str]:
         return {}
     rewrites: dict[str, str] = {}
     for join in joins:
-        node_ids = [node_id for node_id in join.attrib.get("nodes", "").split() if node_id]
+        node_ids = sorted({node_id for node_id in join.attrib.get("nodes", "").split() if node_id})
         joined_id = _sumo_joined_cluster_id(node_ids)
         if len(node_ids) < 2 or not joined_id:
             continue
         for node_id in node_ids:
             rewrites[node_id] = joined_id
+        full_joined_id = f"cluster_{'_'.join(node_ids)}"
+        if full_joined_id != joined_id:
+            rewrites[full_joined_id] = joined_id
     return rewrites
 
 
@@ -13497,6 +13577,11 @@ def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
     head = "_".join(ids[:4])
     suffix = "" if len(ids) <= 4 else f"_#{len(ids) - 4}more"
     return f"cluster_{head}{suffix}"
+
+
+def _canonical_sumo_cluster_id(value: str) -> str:
+    members = _sumo_cluster_member_ids(value)
+    return _sumo_joined_cluster_id(members) if len(members) > 4 else value
 
 
 def _sumo_cluster_member_ids(node_id: str) -> list[str]:
@@ -19027,8 +19112,12 @@ def _approach_endpoint_signatures(
             edge_id = _mapped_endpoint(str(edge.get("edge_id", "")), edge_map)
             if not edge_id:
                 continue
-            source = _mapped_junction_ref(str(edge.get("from", "")), source_junction_id, target_junction_id)
-            target = _mapped_junction_ref(str(edge.get("to", "")), source_junction_id, target_junction_id)
+            source = _canonical_sumo_cluster_id(
+                _mapped_junction_ref(str(edge.get("from", "")), source_junction_id, target_junction_id)
+            )
+            target = _canonical_sumo_cluster_id(
+                _mapped_junction_ref(str(edge.get("to", "")), source_junction_id, target_junction_id)
+            )
             signatures[f"{direction}:{edge_id}"] = f"from={source}|to={target}"
     return signatures
 
@@ -19118,8 +19207,12 @@ def _approach_edge_signature(
         for lane in lanes
         if isinstance(lane, dict)
     ]
-    source = _mapped_junction_ref(str(edge.get("from", "")), source_junction_id, target_junction_id)
-    target = _mapped_junction_ref(str(edge.get("to", "")), source_junction_id, target_junction_id)
+    source = _canonical_sumo_cluster_id(
+        _mapped_junction_ref(str(edge.get("from", "")), source_junction_id, target_junction_id)
+    )
+    target = _canonical_sumo_cluster_id(
+        _mapped_junction_ref(str(edge.get("to", "")), source_junction_id, target_junction_id)
+    )
     return (
         f"from={source}|to={target}|type={edge.get('type', '')}|"
         f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
