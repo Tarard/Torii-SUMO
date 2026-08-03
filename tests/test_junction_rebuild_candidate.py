@@ -4809,7 +4809,9 @@ def test_run_teacher_guided_repair_queue_uses_composite_base_for_joined_unrestor
     candidate_net = tmp_path / "candidate.net.xml"
     for path in (raw_nodes, raw_edges, raw_connections, teacher_net):
         path.write_text("<xml/>", encoding="utf-8")
-    candidate_net.write_text('<net><junction id="source_a"/></net>', encoding="utf-8")
+    candidate_net.write_text(
+        '<net><junction id="source_a"/><junction id="cluster_joined"/></net>', encoding="utf-8"
+    )
     restore_calls = []
 
     def fake_variant(**kwargs):
@@ -4820,6 +4822,7 @@ def test_run_teacher_guided_repair_queue_uses_composite_base_for_joined_unrestor
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "junction_id": kwargs["junction_id"],
+            "source_conflict_core_node_ids": ["source_a"],
             "final_net_file": str(final_net),
             "parity_gate_status": "pass",
             "target_internal_replay": {
@@ -16911,7 +16914,7 @@ def test_write_teacher_target_internal_replay_net_removes_teacher_absent_cluster
     assert report["removed_cluster_member_residual_junctions"] == ["a", "b"]
 
 
-def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundary_lane_in_junction(
+def test_write_teacher_target_internal_replay_net_replays_same_id_boundary_lane_permissions(
     tmp_path: Path,
 ) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
@@ -16933,7 +16936,7 @@ def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundar
         """<net>
   <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
   <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,20 20,20"/></edge>
-  <edge id="same_foot" from="p" to="j" type="highway.footway"><lane id="same_foot_0" index="0" allow="pedestrian" shape="10,-160 10,-155"/></edge>
+  <edge id="same_foot" from="p" to="j" type="highway.footway"><lane id="same_foot_0" index="0" allow="bicycle" shape="10,-160 10,-155"/></edge>
   <junction id="j" type="priority" x="10" y="20" shape="9,19 11,19" incLanes="cand_in_0 same_foot_0" intLanes=""/>
   <junction id="p" type="priority" x="10" y="-155" incLanes="" intLanes=""/>
 </net>
@@ -16953,6 +16956,7 @@ def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundar
     junction_inc_lanes = root.find("junction[@id='j']").attrib["incLanes"].split()
     assert "cand_in_0" in junction_inc_lanes
     assert "same_foot_0" in junction_inc_lanes
+    assert root.find("edge[@id='same_foot']/lane").attrib["allow"] == "pedestrian"
     assert root.find("connection[@from='same_foot'][@to=':j_w0']") is not None
     assert report["skipped_connection_count"] == 0
 

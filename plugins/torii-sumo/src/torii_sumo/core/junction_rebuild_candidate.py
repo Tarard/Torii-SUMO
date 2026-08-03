@@ -7171,6 +7171,9 @@ def _accepted_target_internal_replay_entry(
         "teacher_junction_id": teacher_junction_id,
         "edge_map": edge_map,
         "prefer_clean_replay_base": _report_used_unrestored_normalized_replay(report),
+        "collapsed_source_junction_ids": sorted(
+            set(_string_list(report.get("source_conflict_core_node_ids"))) - {junction_id}
+        ),
     }
 
 
@@ -8737,6 +8740,8 @@ def run_teacher_guided_repair_queue(
         replay_junction_ids = {str(entry["junction_id"]) for entry in accepted_internal_replays}
         use_clean_replay_base = any(
             entry.get("prefer_clean_replay_base") for entry in accepted_internal_replays
+        ) and not any(
+            entry.get("collapsed_source_junction_ids") for entry in accepted_internal_replays
         ) and _net_contains_normal_junctions(candidate_net_file, replay_junction_ids)
         current_composite_net_file = candidate_net_file if use_clean_replay_base else Path(composite_net_file)
         restore_dir = output_dir / "final_internal_replay"
@@ -15592,8 +15597,14 @@ def _teacher_boundary_edge_needs_replay(
         and candidate_edge.attrib.get("from") == mapped_from
         and candidate_edge.attrib.get("to") == mapped_to
         and candidate_edge.attrib.get("type", "") == teacher_edge.attrib.get("type", "")
+        and _edge_lane_semantic_attrs(candidate_edge) == _edge_lane_semantic_attrs(teacher_edge)
         and _edge_lane_shapes(candidate_edge) == _translated_edge_lane_shapes(teacher_edge, dx, dy)
     )
+
+
+def _edge_lane_semantic_attrs(edge: ET.Element) -> list[tuple[str, ...]]:
+    attrs = ("index", "allow", "disallow", "speed", "width")
+    return [tuple(lane.attrib.get(attr, "") for attr in attrs) for lane in edge.findall("lane")]
 
 
 def _edge_lane_shapes(edge: ET.Element) -> list[str]:
