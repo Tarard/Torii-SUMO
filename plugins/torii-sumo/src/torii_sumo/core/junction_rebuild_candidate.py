@@ -6900,15 +6900,11 @@ def build_teacher_guided_junction_variant(
         final_net_file,
         report_file=surface_overlap_report_file,
     )
-    target_owned_surface_overlaps = [
+    target_related_surface_overlaps = [
         item
         for item in surface_overlap_report.get("external_lane_non_owner_junction_overlaps", []) or []
         if isinstance(item, dict)
-        and set(compound_junction_ids)
-        & {
-            item.get("from_junction_id", ""),
-            item.get("to_junction_id", ""),
-        }
+        and _lane_surface_overlap_touches_junctions(item, set(compound_junction_ids))
     ]
     baseline_surface_overlap_report_file = output_dir / f"{prefix}_baseline_surface_overlap.json"
     baseline_surface_overlap_report = (
@@ -6916,7 +6912,7 @@ def build_teacher_guided_junction_variant(
             candidate_net_file,
             report_file=baseline_surface_overlap_report_file,
         )
-        if target_owned_surface_overlaps
+        if target_related_surface_overlaps
         else None
     )
     target_junction_surface_overlaps = [
@@ -11610,6 +11606,17 @@ def _boundary_vehicle_connectivity(net_file: Path, junction_id: str) -> dict[str
         "unconnected_passenger_incoming_lane_ids": lane_ids(missing_passenger_incoming),
         "unconnected_passenger_outgoing_lane_ids": lane_ids(missing_passenger_outgoing),
     }
+
+
+def _lane_surface_overlap_touches_junctions(overlap: dict[str, Any], junction_ids: set[str]) -> bool:
+    return bool(
+        junction_ids
+        & {
+            str(overlap.get("from_junction_id", "")),
+            str(overlap.get("to_junction_id", "")),
+            str(overlap.get("non_owner_junction_id", "")),
+        }
+    )
 
 
 def _target_surface_overlap_gate(

@@ -20,6 +20,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _endpoint_rewrite_old_endpoint_ids,
     _final_context_parity_gate,
     _hybrid_osm_approach_authority_policy,
+    _lane_surface_overlap_touches_junctions,
     _netedit_review_actions,
     _prune_unmapped_micro_boundary_edges,
     _prune_strict_unmapped_outgoing_boundary_edges,
@@ -13748,6 +13749,16 @@ def test_target_surface_overlap_gate_blocks_only_target_related_findings(
     assert gate["status"] == "fail"
     assert gate["geometry_error_count"] == 0
     assert gate["junction_overlap_count"] == 1
+
+
+def test_lane_surface_overlap_touches_non_owner_junction() -> None:
+    overlap = {
+        "from_junction_id": "a",
+        "to_junction_id": "b",
+        "non_owner_junction_id": "target",
+    }
+
+    assert _lane_surface_overlap_touches_junctions(overlap, {"target"}) is True
 
 
 def test_target_surface_overlap_gate_allows_non_regressed_junction_overlap(tmp_path: Path) -> None:
