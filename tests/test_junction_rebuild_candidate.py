@@ -6410,9 +6410,11 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same
         command_runner=fake_runner,
         variant_builder=fake_variant,
         sequential_accept_passed_variants=True,
+        strict_teacher_replay=True,
     )
 
     assert len(variant_calls) == 2
+    assert variant_calls[1]["teacher_absent_tls_junction_ids"] == ["q"]
     assert report["expanded_scope_followup_candidate_count"] == 1
     assert report["composite_applied_candidate_count"] == 1
     assert report["status"] == "pass"

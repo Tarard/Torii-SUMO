@@ -8467,6 +8467,34 @@ def run_teacher_guided_repair_queue(
                         if str(value)
                     }
                 )
+                join_member_ids = {
+                    str(value)
+                    for group in scope_report.get("join_groups", []) or []
+                    for value in (group if isinstance(group, list) else [])
+                    if str(value)
+                }
+                teacher_absent_corridor_junction_ids = sorted(
+                    (
+                        {
+                            str(value)
+                            for value in (
+                                expanded_scope_value.get("junction_ids", [])
+                                if isinstance(expanded_scope_value, dict)
+                                else []
+                            )
+                            if str(value)
+                        }
+                        & _plain_node_ids(replay_node_file)
+                    )
+                    - _net_junction_ids(teacher_net_file)
+                    - join_member_ids
+                    if strict_teacher_replay and is_followup_candidate
+                    else set()
+                )
+                teacher_absent_tls_junction_ids = sorted(
+                    {*teacher_absent_tls_junction_ids, *teacher_absent_corridor_junction_ids}
+                )
+                scope_report["teacher_absent_corridor_junction_ids"] = teacher_absent_corridor_junction_ids
                 compound_safety_junction_ids = sorted(
                     {
                         *joined_scope_junction_ids,
