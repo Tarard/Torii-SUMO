@@ -2114,6 +2114,19 @@ def write_teacher_target_internal_replay_net(
 
     dx = float(target_candidate_junction.attrib.get("x", "0") or 0) - float(teacher_junction.attrib.get("x", "0") or 0)
     dy = float(target_candidate_junction.attrib.get("y", "0") or 0) - float(teacher_junction.attrib.get("y", "0") or 0)
+    translation_source = "junction_position"
+    candidate_location = candidate_root.find("location")
+    teacher_location = teacher_root.find("location")
+    try:
+        candidate_offset = [float(value) for value in candidate_location.attrib["netOffset"].split(",")[:2]]
+        teacher_offset = [float(value) for value in teacher_location.attrib["netOffset"].split(",")[:2]]
+        offset_dx = candidate_offset[0] - teacher_offset[0]
+        offset_dy = candidate_offset[1] - teacher_offset[1]
+        if math.hypot(dx - offset_dx, dy - offset_dy) > 100.0:
+            dx, dy = offset_dx, offset_dy
+            translation_source = "network_location_offset"
+    except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+        pass
 
     removed_internal_edges = []
     insert_index = None
@@ -3299,6 +3312,7 @@ def write_teacher_target_internal_replay_net(
         "net_file": str(output_file),
         "dx": round(dx, 6),
         "dy": round(dy, 6),
+        "translation_source": translation_source,
         "removed_internal_edge_count": len(removed_internal_edges),
         "copied_internal_edge_count": len(teacher_internal_edges),
         "copied_boundary_edge_count": len(copied_boundary_edges),

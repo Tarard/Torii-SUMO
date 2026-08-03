@@ -14430,6 +14430,49 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert report["copied_connection_count"] == 3
 
 
+def test_target_internal_replay_uses_network_offset_when_junction_position_is_in_stale_frame(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <location netOffset="-1000,-2000"/>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,1"/></edge>
+  <junction id="j" type="priority" x="0" y="0" shape="-1,-1 1,-1 1,1 -1,1" incLanes="in_0" intLanes=":j_0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <location netOffset="-900,-1800"/>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="90,200 100,200"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="100,200 110,200"/></edge>
+  <junction id="j" type="priority" x="0" y="0" shape="99,199 101,199 101,201 99,201" incLanes="in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"in": "in", "out": "out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert report["dx"] == 100.0
+    assert report["dy"] == 200.0
+    assert report["translation_source"] == "network_location_offset"
+    assert root.find("junction[@id='j']").attrib["x"] == "100.00"
+    assert root.find("junction[@id='j']").attrib["y"] == "200.00"
+    assert root.find("edge[@id=':j_0']/lane").attrib["shape"] == "100.00,200.00 101.00,201.00"
+
+
 def test_write_scoped_teacher_tls_cell_replay_collapses_split_member_and_preserves_lane_capacity(
     tmp_path: Path,
 ) -> None:
