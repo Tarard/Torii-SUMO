@@ -12379,13 +12379,24 @@ def _expand_fragmented_tls_join_scope_candidate(
     if not isinstance(scope_value, dict):
         return candidate
     requested_ids = {str(value) for value in scope_value.get("join_junction_ids", []) or [] if str(value)}
+    original_requested_ids = set(requested_ids)
+    exact_reference_ids = {
+        str(value) for value in candidate.get("matched_reference_source_node_ids", []) or [] if str(value)
+    }
+    preserve_exact_reference_membership = len(exact_reference_ids) >= 2 and exact_reference_ids <= requested_ids
+    if preserve_exact_reference_membership:
+        requested_ids = exact_reference_ids
     report: dict[str, object] = {
         "status": "pass",
         "claim_status": "diagnostic-demo",
-        "requested_join_junction_ids": sorted(requested_ids),
+        "requested_join_junction_ids": sorted(original_requested_ids),
         "automatic_expansion_applied": False,
         "max_controller_span_m": max_controller_span_m,
     }
+    if preserve_exact_reference_membership:
+        report["exact_reference_join_membership_preserved"] = True
+        report["exact_reference_join_junction_ids"] = sorted(exact_reference_ids)
+        report["excluded_non_reference_join_junction_ids"] = sorted(original_requested_ids - exact_reference_ids)
     if not requested_ids:
         report["reason"] = "no_requested_join_junction_ids"
         return {**candidate, "tls_join_scope_expansion": report}
@@ -12527,6 +12538,8 @@ def _expand_fragmented_tls_join_scope_candidate(
                 else:
                     other_reference_partition_node_ids.add(reference_id)
             directly_adjacent_controller_ids -= other_reference_partition_node_ids
+        if preserve_exact_reference_membership:
+            directly_adjacent_controller_ids.clear()
         expansion_node_ids = requested_ids | directly_adjacent_controller_ids
         main_partition_node_ids = set(expansion_node_ids)
         unpartitioned_controller_node_ids = (

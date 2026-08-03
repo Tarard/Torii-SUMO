@@ -3734,6 +3734,38 @@ def test_join_candidate_absorbs_shared_controller_satellites_without_dropping_co
     assert expanded["tls_join_scope_expansion"]["automatic_expansion_applied"] is True
 
 
+def test_join_candidate_preserves_exact_teacher_membership_on_followup(tmp_path: Path) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="core_a" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="core_b" x="20" y="0" type="traffic_light" tl="tls"/>
+  <node id="extra" x="24" y="0" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text('<edges><edge id="direct" from="extra" to="core_b"/></edges>', encoding="utf-8")
+    candidate = {
+        "learned_rule": "tum_like_join_candidate",
+        "matched_reference_source_node_ids": ["core_a", "core_b"],
+        "expanded_rebuild_scope": {
+            "junction_ids": ["core_a", "core_b", "extra"],
+            "join_junction_ids": ["core_a", "core_b", "extra"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == ["core_a", "core_b"]
+    assert expanded["expanded_rebuild_scope"]["junction_ids"] == ["core_a", "core_b", "extra"]
+    assert expanded["tls_join_scope_expansion"]["exact_reference_join_membership_preserved"] is True
+
+
 def test_join_candidate_does_not_expand_from_one_incidental_controller_node(
     tmp_path: Path,
 ) -> None:
