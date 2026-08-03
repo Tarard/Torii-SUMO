@@ -15646,6 +15646,8 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="8.17" shape="10,0 20,0" length="10.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="50,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-1 9,1" outlineShape="8,-1 10,-1 10,1 8,1"/></edge>
+  <junction id="a" type="priority" x="0" y="0" shape="0,-1 0,1" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" shape="20,-1 20,1" incLanes="out_0" intLanes=""/>
   <junction id="j" type="traffic_light" x="10" y="0" shape="9,-1 11,-1 11,1 9,1" incLanes="in_0" intLanes=":j_c0_0">
     <request index="0" response="101" foes="111" cont="1"/>
   </junction>
@@ -15662,6 +15664,8 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="6.98" shape="11,0 20,0" length="9.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="51,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-2 9,2" outlineShape="bad"/></edge>
+  <junction id="a" type="priority" x="0" y="0" shape="bad-a" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" shape="bad-b" incLanes="out_0" intLanes=""/>
   <junction id="j" type="traffic_light" x="10" y="0" shape="bad" incLanes="in_0" intLanes=":j_c0_0">
     <request index="0" response="100" foes="111" cont="1"/>
   </junction>
@@ -15686,8 +15690,11 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
     assert root.find("junction[@id='j']").attrib["shape"] == "9,-1 11,-1 11,1 9,1"
+    assert root.find("junction[@id='a']").attrib["shape"] == "0,-1 0,1"
+    assert root.find("junction[@id='b']").attrib["shape"] == "20,-1 20,1"
     assert root.find("junction[@id='j']/request").attrib["response"] == "101"
     assert report["restored_junction_attr_count"] == 1
+    assert report["restored_adjacent_junction_ids"] == ["a", "b"]
     assert report["restored_request_count"] == 1
 
 

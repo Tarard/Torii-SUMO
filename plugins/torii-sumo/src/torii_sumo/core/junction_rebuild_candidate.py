@@ -18005,6 +18005,20 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
 
     source_edges = {edge.attrib.get("id", ""): edge for edge in source_root.findall("edge") if edge.attrib.get("id")}
     target_edges = {edge.attrib.get("id", ""): edge for edge in target_root.findall("edge") if edge.attrib.get("id")}
+    source_junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    adjacent_junctions = {
+        endpoint_id: source_junctions[endpoint_id]
+        for edge_id in restored_edge_ids
+        for edge in [source_edges.get(edge_id)]
+        if edge is not None
+        for endpoint_id in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if endpoint_id and endpoint_id != junction_id and endpoint_id in source_junctions
+    }
+    restored_adjacent_junctions = _restore_geometry_anchor_junctions(target_root, adjacent_junctions)
     missing_edge_ids = []
     restored_lane_count = 0
     for edge_id in sorted(edge_id for edge_id in restored_edge_ids if edge_id):
@@ -18058,6 +18072,8 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids),
         "restored_lane_count": restored_lane_count,
         "restored_junction_attr_count": restored_junction_attr_count,
+        "restored_adjacent_junction_count": len(restored_adjacent_junctions),
+        "restored_adjacent_junction_ids": restored_adjacent_junctions,
         "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,
