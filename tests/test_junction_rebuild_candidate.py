@@ -10492,6 +10492,7 @@ def test_write_teacher_connection_plan_removes_crossings_with_missing_patched_ed
         """<connections>
   <crossing node="other_j" edges="ghost other"/>
   <crossing node="kept_j" edges="other"/>
+  <crossing node="stale_j" edges="cand_out"/>
 </connections>
 """,
         encoding="utf-8",
@@ -10501,7 +10502,7 @@ def test_write_teacher_connection_plan_removes_crossings_with_missing_patched_ed
         """<edges>
   <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
   <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
-  <edge id="other" from="x" to="y"><lane index="0"/></edge>
+  <edge id="other" from="kept_j" to="y"><lane index="0"/></edge>
 </edges>
 """,
         encoding="utf-8",
@@ -10519,7 +10520,10 @@ def test_write_teacher_connection_plan_removes_crossings_with_missing_patched_ed
 
     root = ET.parse(report["connection_file"]).getroot()
     assert [item.attrib["node"] for item in root.findall("crossing")] == ["kept_j"]
-    assert report["removed_target_children"] == 1
+    assert report["removed_target_children"] == 2
+    assert report["removed_nonadjacent_crossings"] == [
+        {"node": "stale_j", "edges": "cand_out", "nonadjacent_edges": ["cand_out"]}
+    ]
 
 
 def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_without_replacing_edge_geometry(

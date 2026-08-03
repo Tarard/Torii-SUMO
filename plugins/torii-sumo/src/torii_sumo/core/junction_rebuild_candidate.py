@@ -701,6 +701,7 @@ def write_teacher_connection_plan(
     removed = 0
     removed_invalid_lane_connections = []
     removed_nonadjacent_connections = []
+    removed_nonadjacent_crossings = []
     removed_incompatible_lane_connections = []
     lane_compatibility_repairs = []
     kept_connection_keys: set[tuple[str, str, str, str]] = set()
@@ -748,6 +749,18 @@ def write_teacher_connection_plan(
         if child.tag == "crossing" and present_candidate_edges is not None:
             crossing_edges = set(_split(child.attrib.get("edges", "")))
             if crossing_edges and not crossing_edges <= present_candidate_edges:
+                removed += 1
+                continue
+            crossing_node = child.attrib.get("node", "")
+            nonadjacent_edges = sorted(
+                edge_id
+                for edge_id in crossing_edges
+                if crossing_node not in patched_edge_endpoints.get(edge_id, ())
+            )
+            if nonadjacent_edges:
+                removed_nonadjacent_crossings.append(
+                    {"node": crossing_node, "edges": child.attrib.get("edges", ""), "nonadjacent_edges": nonadjacent_edges}
+                )
                 removed += 1
                 continue
         if child.tag == "crossing" and child.attrib.get("node") == junction_id:
@@ -1052,6 +1065,8 @@ def write_teacher_connection_plan(
         "removed_invalid_lane_connections": removed_invalid_lane_connections,
         "removed_nonadjacent_connection_count": len(removed_nonadjacent_connections),
         "removed_nonadjacent_connections": removed_nonadjacent_connections,
+        "removed_nonadjacent_crossing_count": len(removed_nonadjacent_crossings),
+        "removed_nonadjacent_crossings": removed_nonadjacent_crossings,
         "removed_incompatible_lane_connection_count": len(removed_incompatible_lane_connections),
         "removed_incompatible_lane_connections": removed_incompatible_lane_connections,
         "lane_compatibility_repair_count": len(lane_compatibility_repairs),
