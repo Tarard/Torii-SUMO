@@ -13430,6 +13430,16 @@ def _teacher_guided_repair_candidate(
             "error": f"{type(exc).__name__}: {exc}",
         }
     teacher_summary = teacher_model.get("summary", {}) if isinstance(teacher_model.get("summary"), dict) else {}
+    teacher_approach_edge_ids = {
+        edge_id
+        for edge_id, edge in teacher_edges.items()
+        if reference_id in {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+    }
+    case_edge_map = {
+        teacher_edge_id: candidate_edge_id
+        for teacher_edge_id, candidate_edge_id in case_edge_map.items()
+        if teacher_edge_id in teacher_approach_edge_ids
+    }
     if not any(
         int(teacher_summary.get(field, 0) or 0)
         for field in ("incoming_vehicle_edge_count", "outgoing_vehicle_edge_count", "vehicle_connection_count")

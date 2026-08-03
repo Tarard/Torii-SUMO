@@ -2942,6 +2942,50 @@ def test_build_teacher_guided_repair_queue_does_not_trust_stale_case_edge_map(
     assert candidate["expanded_rebuild_scope"]["join_junction_ids"] == ["j", "split_a", "split_b"]
 
 
+def test_build_teacher_guided_repair_queue_drops_remote_case_edge_map_keys(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" allow="passenger" shape="20,0 30,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "j",
+                    "matched_candidate_node_ids": ["j", "x", "y"],
+                    "edge_map": {"in": "in", "out": "out", "remote": "remote"},
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["repair_candidates"][0]["edge_map"] == {"in": "in", "out": "out"}
+
+
 def test_build_teacher_guided_repair_queue_uses_first_pair_when_no_source_match(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
