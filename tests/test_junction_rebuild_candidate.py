@@ -3516,6 +3516,10 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
             "junction_id": kwargs["junction_id"],
             "final_net_file": str(kwargs["output_dir"] / "final.net.xml"),
             "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "removed_stale_replaced_edge_connection_count": 1,
+                "removed_stale_replaced_edge_connections": [{"from": "cand_in", "to": "retired"}],
+            },
             "report_file": str(variant_report),
         }
 
@@ -3557,6 +3561,7 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert report["attempted_candidate_count"] == 1
     assert report["skipped_candidate_count"] == 2
     assert report["max_ready_candidates"] == 1
+    assert report["expanded_scope_followup_candidate_count"] == 0
     assert calls[0]["junction_id"] == "cluster_a_b"
     assert calls[0]["teacher_junction_id"] == "cluster_a_b"
     assert calls[0]["strict_teacher_replay"] is True

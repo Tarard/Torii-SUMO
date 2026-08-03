@@ -8391,6 +8391,7 @@ def run_teacher_guided_repair_queue(
                     attached_report,
                     replay_edge_file,
                     junction_id=junction_id,
+                    strict_teacher_replay=strict_teacher_replay,
                 )
                 if followup_candidate is not None:
                     attached_report["expanded_scope_followup_emitted"] = True
@@ -8521,6 +8522,7 @@ def run_teacher_guided_repair_queue(
             attached_report,
             current_raw_edge_file,
             junction_id=junction_id,
+            strict_teacher_replay=strict_teacher_replay,
         )
         if followup_candidate is not None:
             attached_report["expanded_scope_followup_emitted"] = True
@@ -12030,7 +12032,10 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     raw_edge_file: Path,
     *,
     junction_id: str,
+    strict_teacher_replay: bool = False,
 ) -> dict[str, object] | None:
+    if strict_teacher_replay and variant_report.get("parity_gate_status") == "pass":
+        return None
     followup_depth = int(candidate.get("followup_depth", 0) or 0)
     if followup_depth >= 1:
         return None
