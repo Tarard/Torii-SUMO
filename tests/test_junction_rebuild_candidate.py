@@ -1349,6 +1349,36 @@ def test_approach_endpoint_rebuild_plan_requires_neighbor_scope_for_endpoint_mis
     ]
 
 
+def test_approach_endpoint_rebuild_plan_accepts_canonical_sumo_cluster_endpoint() -> None:
+    teacher_model = {
+        "approaches": {
+            "incoming": [
+                {"edge_id": "in", "from": "cluster_a_b_c_d_e_f", "to": "teacher_j"},
+            ],
+            "outgoing": [],
+        },
+    }
+    candidate_model = {
+        "approaches": {
+            "incoming": [
+                {"edge_id": "in", "from": "cluster_a_b_c_d_#2more", "to": "candidate_j"},
+            ],
+            "outgoing": [],
+        },
+    }
+
+    plan = _approach_endpoint_rebuild_plan(
+        teacher_model,
+        candidate_model,
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+        candidate_junction_ids={"candidate_j", "cluster_a_b_c_d_#2more"},
+    )
+
+    assert plan["status"] == "pass"
+    assert plan["edge_rebuilds"] == []
+
+
 def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(tmp_path: Path) -> None:
     net_file = tmp_path / "fixture.net.xml"
     net_file.write_text(

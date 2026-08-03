@@ -19549,8 +19549,8 @@ def _approach_endpoint_rebuild_plan(
             candidate_edge = candidate_by_edge.get(mapped_edge_id)
             if not mapped_edge_id or candidate_edge is None:
                 continue
-            candidate_from = str(candidate_edge.get("from", ""))
-            candidate_to = str(candidate_edge.get("to", ""))
+            candidate_from = _canonical_sumo_cluster_id(str(candidate_edge.get("from", "")))
+            candidate_to = _canonical_sumo_cluster_id(str(candidate_edge.get("to", "")))
             desired_from = _mapped_junction_ref(
                 str(teacher_edge.get("from", "")), teacher_junction_id, candidate_junction_id
             )
