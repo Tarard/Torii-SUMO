@@ -5962,6 +5962,51 @@ def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scop
     assert "cluster_teacher" not in followup["expanded_rebuild_scope"]["junction_ids"]
 
 
+def test_expanded_scope_followup_adds_teacher_cluster_for_invalid_neighbor_internal_lane(
+    tmp_path: Path,
+) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text('<edges><edge id="main" from="a" to="j"/></edges>', encoding="utf-8")
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        '<net><junction id="neighbor_raw"/><junction id="target"/></net>', encoding="utf-8"
+    )
+
+    followup = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+        {
+            "junction_id": "target",
+            "matched_candidate_node_ids": ["target_a", "target_b"],
+            "expanded_rebuild_scope": {
+                "junction_ids": ["target_a", "target_b"],
+                "join_junction_ids": ["target_a", "target_b"],
+            },
+        },
+        {
+            "candidate_net_file": str(candidate_net),
+            "non_target_internal_restore": {
+                "internal_artifact_restore": {
+                    "skipped_non_target_internal_connection_invalid_lanes": [
+                        {"from": "changed", "to": "far", "via": ":neighbor_raw_3_0"}
+                    ]
+                }
+            },
+        },
+        raw_edges,
+        junction_id="target",
+        teacher_join_groups_by_cluster={"cluster_neighbor": ["neighbor_raw", "neighbor_other"]},
+    )
+
+    assert followup is not None
+    assert followup["expanded_rebuild_scope"]["junction_ids"] == [
+        "cluster_neighbor",
+        "neighbor_raw",
+        "target_a",
+        "target_b",
+    ]
+    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["target_a", "target_b"]
+    assert followup["followup_reason"] == "non_target_internal_restore_invalid_lane"
+
+
 def test_teacher_guided_promotion_gate_keeps_applied_followup_report(tmp_path: Path) -> None:
     gate = _write_teacher_guided_promotion_gate(
         output_file=tmp_path / "promotion.json",

@@ -8458,6 +8458,7 @@ def run_teacher_guided_repair_queue(
                     replay_edge_file,
                     junction_id=junction_id,
                     strict_teacher_replay=strict_teacher_replay,
+                    teacher_join_groups_by_cluster=teacher_join_groups_by_cluster,
                 )
                 if followup_candidate is not None:
                     attached_report["expanded_scope_followup_emitted"] = True
@@ -8589,6 +8590,7 @@ def run_teacher_guided_repair_queue(
             current_raw_edge_file,
             junction_id=junction_id,
             strict_teacher_replay=strict_teacher_replay,
+            teacher_join_groups_by_cluster=teacher_join_groups_by_cluster,
         )
         if followup_candidate is not None:
             attached_report["expanded_scope_followup_emitted"] = True
@@ -12174,6 +12176,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     *,
     junction_id: str,
     strict_teacher_replay: bool = False,
+    teacher_join_groups_by_cluster: dict[str, list[str]] | None = None,
 ) -> dict[str, object] | None:
     if strict_teacher_replay and variant_report.get("parity_gate_status") == "pass":
         return None
@@ -12181,16 +12184,30 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     if followup_depth >= 1:
         return None
     replay = variant_report.get("target_internal_replay")
-    if not isinstance(replay, dict):
-        return None
-    removed_count = int(replay.get("removed_stale_replaced_edge_connection_count", 0) or 0)
+    removed_connections = []
+    followup_reason = "target_internal_replay_removed_non_target_connections"
+    if isinstance(replay, dict):
+        removed_connections = [
+            connection
+            for connection in replay.get("removed_stale_replaced_edge_connections", []) or []
+            if isinstance(connection, dict)
+        ]
+    if not removed_connections:
+        restore = variant_report.get("non_target_internal_restore", {})
+        internal_restore = restore.get("internal_artifact_restore", {}) if isinstance(restore, dict) else {}
+        removed_connections = [
+            connection
+            for connection in (
+                internal_restore.get("skipped_non_target_internal_connection_invalid_lanes", [])
+                if isinstance(internal_restore, dict)
+                else []
+            )
+            if isinstance(connection, dict)
+        ]
+        followup_reason = "non_target_internal_restore_invalid_lane"
+    removed_count = len(removed_connections)
     if not removed_count:
         return None
-    removed_connections = [
-        connection
-        for connection in replay.get("removed_stale_replaced_edge_connections", []) or []
-        if isinstance(connection, dict)
-    ]
     removed_edge_ids = sorted(
         {
             str(connection.get(field, ""))
@@ -12233,6 +12250,27 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         join_junction_ids.add(junction_id)
     for edge_id in removed_edge_ids:
         junction_ids.update(endpoint for endpoint in endpoints_by_edge.get(edge_id, ()) if endpoint)
+    candidate_net_value = str(variant_report.get("candidate_net_file", ""))
+    candidate_junction_ids = _net_junction_ids(Path(candidate_net_value)) if candidate_net_value else set()
+    affected_internal_junction_ids = {
+        owner
+        for connection in removed_connections
+        for owner in [
+            next(
+                (
+                    candidate_id
+                    for candidate_id in sorted(candidate_junction_ids, key=len, reverse=True)
+                    if str(connection.get("via", "")).startswith(f":{candidate_id}_")
+                ),
+                "",
+            )
+        ]
+        if owner
+    }
+    junction_ids.update(affected_internal_junction_ids)
+    for cluster_id, member_ids in (teacher_join_groups_by_cluster or {}).items():
+        if affected_internal_junction_ids & set(member_ids):
+            junction_ids.add(cluster_id)
     edge_map = _valid_edge_map(candidate.get("edge_map", {}))
     blocked_teacher_edge_ids = sorted(
         teacher_edge_id
@@ -12243,7 +12281,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     followup.update(
         {
             "candidate_status": "needs_expanded_rebuild_scope",
-            "followup_reason": "target_internal_replay_removed_non_target_connections",
+            "followup_reason": followup_reason,
             "followup_depth": followup_depth + 1,
             "unsafe_removed_connection_count": removed_count,
             "unsafe_removed_connections": removed_connections,
