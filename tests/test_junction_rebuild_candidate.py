@@ -3853,11 +3853,12 @@ def test_candidate_connection_mode_scope_ids_maps_joined_cluster_scope() -> None
                 "junction_ids": ["a", "b", "boundary"],
                 "join_junction_ids": ["a", "b"],
             },
+            "normalization_scope_junction_ids": ["cluster_c_d", "neighbor"],
         }
     )
 
-    assert source_ids == ["a", "b", "boundary"]
-    assert candidate_ids == ["a", "b", "boundary", "cluster_a_b"]
+    assert source_ids == ["a", "b", "boundary", "c", "cluster_c_d", "d", "neighbor"]
+    assert candidate_ids == ["a", "b", "boundary", "cluster_a_b", "cluster_c_d", "neighbor"]
 
 
 def test_fragmented_tls_join_scope_expands_compact_shared_controller(
@@ -16230,7 +16231,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert report["status"] == "pass"
     assert root.find("edge[@id='in']/lane").attrib["shape"] == "0,0 10,0"
     assert root.find("edge[@id='in']/lane").attrib["speed"] == "8.17"
-    assert root.find("edge[@id='out']/lane").attrib["length"] == "10.00"
+    assert root.find("edge[@id='out']/lane").attrib["length"] == "9.00"
     assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
     assert root.find("junction[@id='j']").attrib["shape"] == "9,-1 11,-1 11,1 9,1"
@@ -16240,6 +16241,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert report["restored_junction_attr_count"] == 1
     assert report["restored_adjacent_junction_ids"] == ["a"]
     assert report["excluded_adjacent_junction_ids"] == ["b"]
+    assert report["excluded_adjacent_edge_ids"] == ["out"]
     assert report["restored_request_count"] == 1
 
 

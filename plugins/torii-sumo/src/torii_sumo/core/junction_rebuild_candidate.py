@@ -6322,7 +6322,6 @@ def build_teacher_guided_junction_variant(
     )
     target_internal_replay_report = None
     compound_internal_replay_reports: list[dict[str, object]] = []
-    compound_internal_replay_junction_ids: set[str] = set()
     target_internal_replay_fallback = False
     target_internal_replay_fallback_tl_logic_report = None
     target_internal_replay_fallback_sumo_report = None
@@ -6437,7 +6436,6 @@ def build_teacher_guided_junction_variant(
                 )
                 compound_report["junction_id"] = compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
-                compound_internal_replay_junction_ids.add(compound_junction_id)
                 restore_mutable_edge_ids.update(
                     _valid_edge_map(compound_report.get("effective_edge_map", {})).values()
                 )
@@ -6456,6 +6454,14 @@ def build_teacher_guided_junction_variant(
                     for edge in compound_boundary_edges
                     for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
                     if endpoint
+                )
+                restore_mutable_edge_ids.update(
+                    edge.attrib["id"]
+                    for edge in compound_output_root.findall("edge")
+                    if edge.attrib.get("id")
+                    and not edge.attrib["id"].startswith(":")
+                    and internal_restore_exclude_junction_ids
+                    & {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
                 )
                 del compound_output_root, compound_boundary_edges
                 if compound_report.get("status") != "pass":
@@ -6766,7 +6772,7 @@ def build_teacher_guided_junction_variant(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
                 junction_id=junction_id,
-                exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
+                exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
             )
             normalized_tl_logic_report = write_teacher_tllogic_net(
                 candidate_net_file=target_internal_normalized_net_file,
@@ -6798,7 +6804,7 @@ def build_teacher_guided_junction_variant(
                         source_file=target_internal_replay_file,
                         target_file=target_internal_normalized_unrestored_net_file,
                         junction_id=junction_id,
-                        exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
+                        exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
                     )
                     unrestored_tl_logic_report = write_teacher_tllogic_net(
                         candidate_net_file=target_internal_normalized_unrestored_net_file,
@@ -6856,7 +6862,7 @@ def build_teacher_guided_junction_variant(
                 source_file=final_net_file,
                 target_file=teacher_guided_normalized_net_file,
                 junction_id=junction_id,
-                exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
+                exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
             )
             normalized_final_sumo_command = [
                 sumo_binary,
@@ -7280,6 +7286,7 @@ def build_teacher_guided_junction_variant(
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
             "compound_internal_replays": compound_internal_replay_reports,
+            "normalization_scope_junction_ids": sorted(internal_restore_exclude_junction_ids),
             "target_internal_replay_fallback_tl_logic": target_internal_replay_fallback_tl_logic_report,
             "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
             "target_internal_normalize": target_internal_normalize_report,
@@ -12946,6 +12953,19 @@ def _candidate_connection_mode_scope_ids(
             source_ids.add(original_junction_id)
 
     candidate_ids = set(source_ids)
+    normalization_scope_ids = {
+        str(value)
+        for value in report.get("normalization_scope_junction_ids", []) or []
+        if str(value)
+    }
+    source_ids.update(normalization_scope_ids)
+    candidate_ids.update(normalization_scope_ids)
+    source_ids.update(
+        member_id
+        for cluster_id in normalization_scope_ids
+        if cluster_id.startswith("cluster_")
+        for member_id in _sumo_cluster_member_ids(cluster_id)
+    )
     candidate_junction_id = str(report.get("junction_id", ""))
     if candidate_junction_id:
         candidate_ids.add(candidate_junction_id)
@@ -18656,9 +18676,20 @@ def _restore_replayed_geometry_attrs(
         and endpoint_id in source_junctions
     }
     restored_adjacent_junctions = _restore_geometry_anchor_junctions(target_root, adjacent_junctions)
+    excluded_adjacent_edge_ids = {
+        edge_id
+        for edge_id in restored_edge_ids
+        for edge in [source_edges.get(edge_id)]
+        if edge is not None
+        and not edge_id.startswith(internal_prefix)
+        and excluded_adjacent_ids
+        & {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+    }
     missing_edge_ids = []
     restored_lane_count = 0
     for edge_id in sorted(edge_id for edge_id in restored_edge_ids if edge_id):
+        if edge_id in excluded_adjacent_edge_ids:
+            continue
         source_edge = source_edges.get(edge_id)
         target_edge = target_edges.get(edge_id)
         if source_edge is None or target_edge is None:
@@ -18706,7 +18737,8 @@ def _restore_replayed_geometry_attrs(
         "restored_internal_junction_count": len(source_internal_junctions),
         "removed_connection_count": removed_connection_count,
         "restored_connection_count": restored_connection_count,
-        "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids),
+        "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids) - len(excluded_adjacent_edge_ids),
+        "excluded_adjacent_edge_ids": sorted(excluded_adjacent_edge_ids),
         "restored_lane_count": restored_lane_count,
         "restored_junction_attr_count": restored_junction_attr_count,
         "restored_adjacent_junction_count": len(restored_adjacent_junctions),
