@@ -9948,7 +9948,7 @@ def write_expanded_scope_plain_inputs(
         edge_root.append(copied_edge)
 
     join_node_ids = sorted({node_id for group in join_groups for node_id in group})
-    if len(join_groups) == 1 and joined_scope_junction_ids:
+    if explicit_join_groups and len(join_groups) == 1 and joined_scope_junction_ids:
         joined_scope_junction_id = joined_scope_junction_ids[0]
     elif core_junction_id in raw_nodes:
         joined_scope_junction_id = core_junction_id

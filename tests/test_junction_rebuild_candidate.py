@@ -7784,6 +7784,47 @@ def test_write_expanded_scope_defaults_join_to_core_junction(tmp_path: Path) -> 
     assert commands[0][commands[0].index("--node-files") + 1] == "expanded_scope.nod.xml"
 
 
+def test_write_expanded_scope_keeps_individual_core_when_context_cluster_is_joined(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        '<nodes><node id="j" x="0" y="0"/><node id="a" x="10" y="0"/>'
+        '<node id="b" x="12" y="0"/></nodes>',
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text("<edges/>", encoding="utf-8")
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                '<net><junction id="j"/><junction id="cluster_a_b"/></net>',
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = write_expanded_scope_plain_inputs(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "scope",
+        expanded_rebuild_scope={
+            "core_junction_id": "j",
+            "junction_ids": ["j", "cluster_a_b"],
+            "join_junction_ids": ["j"],
+        },
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["join_groups"] == [["a", "b"]]
+    assert report["joined_scope_junction_id"] == "j"
+
+
 def test_write_expanded_scope_keeps_boundary_context_out_of_join(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
