@@ -12393,6 +12393,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
             "unsafe_removed_connection_count": removed_count,
             "unsafe_removed_connections": removed_connections,
             "unsafe_removed_edge_ids": removed_edge_ids,
+            "approach_endpoint_rebuild_plan": copy.deepcopy(approach_plan),
             "expanded_rebuild_scope": {
                 "status": "review",
                 "recommended_action": "rebuild_plain_xml_scope",
