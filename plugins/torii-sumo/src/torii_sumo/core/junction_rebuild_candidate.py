@@ -12375,9 +12375,10 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         )
     else:
         missing_desired_endpoint_ids = []
-    approach_plan = variant_report.get("approach_endpoint_rebuild_plan") or candidate.get(
-        "approach_endpoint_rebuild_plan", {}
-    )
+    candidate_approach_plan = candidate.get("approach_endpoint_rebuild_plan", {})
+    approach_plan = variant_report.get("approach_endpoint_rebuild_plan") or candidate_approach_plan
+    if _endpoint_rewrites(candidate_approach_plan) and not _endpoint_rewrites(approach_plan):
+        approach_plan = candidate_approach_plan
     if isinstance(approach_plan, dict):
         approach_missing_endpoint_ids = {
             str(item)

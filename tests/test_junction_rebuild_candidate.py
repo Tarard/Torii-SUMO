@@ -6149,6 +6149,38 @@ def test_run_teacher_guided_repair_queue_expands_followup_scope_after_expanded_r
     }
 
 
+def test_expanded_scope_followup_retains_actionable_candidate_endpoint_plan(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        '<edges><edge id="road" from="target" to="old"/></edges>',
+        encoding="utf-8",
+    )
+    original_plan = {
+        "status": "review",
+        "edge_rebuilds": [{"edge_id": "road", "desired_from": "target", "desired_to": "remote"}],
+    }
+
+    followup = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+        {
+            "junction_id": "target",
+            "edge_map": {"road": "road"},
+            "approach_endpoint_rebuild_plan": original_plan,
+        },
+        {
+            "parity_gate_status": "fail",
+            "approach_endpoint_rebuild_plan": {"status": "pass", "edge_rebuilds": []},
+            "target_internal_replay": {
+                "removed_stale_replaced_edge_connections": [{"from": "road", "to": "other"}],
+            },
+        },
+        raw_edges,
+        junction_id="target",
+    )
+
+    assert followup is not None
+    assert followup["approach_endpoint_rebuild_plan"] == original_plan
+
+
 def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scope(
     tmp_path: Path,
 ) -> None:
