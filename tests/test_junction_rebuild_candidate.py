@@ -12331,14 +12331,31 @@ def test_teacher_parity_fails_on_main_junction_signature_mismatch_after_translat
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["junction_signature"] == (
-        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|intLanes=:candidate_j_0_0|shape=-1.00,-1.00 1.00,-1.00"
+        "type=traffic_light|incLanes=:candidate_j_0_0 cand_in_0|intLanes=:candidate_j_0_0|shape=-1.00,-1.00 1.00,-1.00"
     )
     assert parity["candidate"]["junction_signature"] == (
-        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|intLanes=:candidate_j_0_0|shape=-2.00,-2.00 2.00,-2.00"
+        "type=traffic_light|incLanes=:candidate_j_0_0 cand_in_0|intLanes=:candidate_j_0_0|shape=-2.00,-2.00 2.00,-2.00"
     )
     assert parity["delta"]["junction_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
     assert gate["failures"] == [{"report": "parity", "field": "junction_signature_mismatch_count", "count": 1}]
+
+
+def test_teacher_parity_ignores_main_junction_inc_lane_order() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "junction": {"type": "priority", "incLanes": "west_0 east_0", "intLanes": ":j_0_0"},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {}, "phases": []},
+    }
+    candidate_model = json.loads(json.dumps(teacher_model))
+    candidate_model["junction"]["incLanes"] = "east_0 west_0"
+
+    parity = _compare_teacher_models(teacher_model, candidate_model, edge_map={})
+
+    assert "junction_signature_mismatch_count" not in parity["delta"]
 
 
 def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> None:
@@ -12421,7 +12438,14 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert "approach_endpoint_signature_mismatch_count" not in parity["delta"]
     assert gate["status"] == "fail"
-    assert gate["failures"] == [{"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1}]
+    assert gate["failures"] == [
+        {"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1},
+        {
+            "report": "parity",
+            "field": "approach_edge_operational_signature_mismatch_count",
+            "count": 1,
+        },
+    ]
 
 
 def test_teacher_parity_normalizes_mapped_approach_shape_by_junction_origin() -> None:
@@ -13724,6 +13748,34 @@ def test_hybrid_osm_approach_authority_accepts_strict_teacher_replay_boundary_co
     assert report["status"] == "pass"
     assert report["policy"] == "strict_teacher_replay"
     assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
+
+
+def test_strict_teacher_replay_accepts_verified_remote_approach_geometry() -> None:
+    fixture = _hybrid_authority_fixture()
+    geometry_failure = {
+        "report": "parity",
+        "field": "approach_edge_signature_mismatch_count",
+        "count": 2,
+    }
+
+    report = _hybrid_osm_approach_authority_policy(
+        {"status": "fail", "failures": [geometry_failure]},
+        replay_target_internal_subgraph=True,
+        preserve_teacher_lane_shapes=False,
+        strict_teacher_replay=True,
+        approach_geometry_only_mismatch=True,
+        edge_map=fixture["edge_map"],
+        lane_patch=fixture["lane_patch"],
+        target_internal_replay=fixture["target_internal_replay"],
+        tls_movement_parity={"status": "pass"},
+        pedestrian_crossing_parity={"status": "pass"},
+        boundary_edge_preservation={"status": "pass"},
+        boundary_vehicle_connectivity={"status": "pass"},
+        target_surface_overlap_gate={"status": "pass"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["waived_raw_failures"] == [geometry_failure]
 
 
 def test_strict_teacher_replay_defers_shape_only_signature_delta_to_visual_gate() -> None:

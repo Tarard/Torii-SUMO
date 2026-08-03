@@ -7192,6 +7192,13 @@ def build_teacher_guided_junction_variant(
         target_surface_overlap_gate=target_surface_overlap_gate,
         turnaround_audit=turnaround_audit,
         strict_teacher_replay=strict_teacher_replay,
+        approach_geometry_only_mismatch=(
+            int(parity.get("delta", {}).get("approach_edge_signature_mismatch_count", 0) or 0) > 0
+            and not int(
+                parity.get("delta", {}).get("approach_edge_operational_signature_mismatch_count", 0) or 0
+            )
+            and not int(parity.get("delta", {}).get("approach_endpoint_signature_mismatch_count", 0) or 0)
+        ),
         preserved_target_shape_only_mismatch=(
             preserve_target_junction_shape
             and _junction_signature_mismatch_fields(parity) == {"shape"}
@@ -19176,6 +19183,25 @@ def _compare_teacher_models(
         candidate_summary["approach_edge_signatures"] = candidate_approach_signatures
         if approach_mismatch_count:
             delta["approach_edge_signature_mismatch_count"] = approach_mismatch_count
+        teacher_approach_operational_signatures = _approach_edge_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+            include_geometry=False,
+        )
+        candidate_approach_operational_signatures = _approach_edge_signatures(
+            candidate_model,
+            include_geometry=False,
+        )
+        approach_operational_mismatch_count = _dict_mismatch_count(
+            teacher_approach_operational_signatures,
+            candidate_approach_operational_signatures,
+        )
+        teacher_summary["approach_edge_operational_signatures"] = teacher_approach_operational_signatures
+        candidate_summary["approach_edge_operational_signatures"] = candidate_approach_operational_signatures
+        if approach_operational_mismatch_count:
+            delta["approach_edge_operational_signature_mismatch_count"] = approach_operational_mismatch_count
         teacher_approach_endpoint_signatures = _approach_endpoint_signatures(
             teacher_model,
             edge_map=edge_map,
@@ -19301,6 +19327,7 @@ def _hybrid_osm_approach_authority_policy(
     replay_target_internal_subgraph: bool,
     preserve_teacher_lane_shapes: bool,
     strict_teacher_replay: bool = False,
+    approach_geometry_only_mismatch: bool = False,
     preserved_target_shape_only_mismatch: bool = False,
     structural_osm_boundary_authority: bool = False,
     edge_map: dict[str, str],
@@ -19326,6 +19353,8 @@ def _hybrid_osm_approach_authority_policy(
 
     if strict_teacher_replay:
         target_internal_replay = target_internal_replay or {}
+        boundary_edge_preservation = boundary_edge_preservation or {}
+        boundary_vehicle_connectivity = boundary_vehicle_connectivity or {}
         target_surface_overlap_gate = target_surface_overlap_gate or {}
         all_raw_failures = [
             dict(failure) for failure in raw_semantic_gate.get("failures", []) if isinstance(failure, dict)
@@ -19338,12 +19367,26 @@ def _hybrid_osm_approach_authority_policy(
                     "count": 1,
                 }
             )
+        remote_approach_geometry_verified = (
+            approach_geometry_only_mismatch
+            and boundary_edge_preservation.get("status") == "pass"
+            and boundary_vehicle_connectivity.get("status") == "pass"
+            and target_surface_overlap_gate.get("status") == "pass"
+        )
         waived_raw_failures = [
             failure
             for failure in all_raw_failures
-            if preserved_target_shape_only_mismatch
-            and failure.get("report") == "parity"
-            and failure.get("field") == "junction_signature_mismatch_count"
+            if failure.get("report") == "parity"
+            and (
+                (
+                    preserved_target_shape_only_mismatch
+                    and failure.get("field") == "junction_signature_mismatch_count"
+                )
+                or (
+                    remote_approach_geometry_verified
+                    and failure.get("field") == "approach_edge_signature_mismatch_count"
+                )
+            )
         ]
         raw_failures = [failure for failure in all_raw_failures if failure not in waived_raw_failures]
         invariant_failures = []
@@ -19379,6 +19422,7 @@ def _hybrid_osm_approach_authority_policy(
             "requires_exact_tls_parity": True,
             "requires_exact_pedestrian_parity": True,
             "waived_raw_failures": waived_raw_failures,
+            "remote_approach_geometry_verified": remote_approach_geometry_verified,
             "retained_raw_failures": effective_failures,
             "invariant_failures": invariant_failures,
             "effective_semantic_gate": effective_gate,
@@ -19923,7 +19967,13 @@ def _junction_signature(
     target_junction_id: str = "",
 ) -> str:
     junction = model.get("junction", {}) if isinstance(model.get("junction"), dict) else {}
-    inc_lanes = _mapped_lane_refs(str(junction.get("incLanes", "")), edge_map, source_junction_id, target_junction_id)
+    inc_lanes = " ".join(
+        sorted(
+            _mapped_lane_refs(
+                str(junction.get("incLanes", "")), edge_map, source_junction_id, target_junction_id
+            ).split()
+        )
+    )
     int_lanes = _mapped_lane_refs(str(junction.get("intLanes", "")), edge_map, source_junction_id, target_junction_id)
     shape = _relative_shape(
         str(junction.get("shape", "")),
@@ -19939,6 +19989,7 @@ def _approach_edge_signatures(
     edge_map: dict[str, str] | None = None,
     source_junction_id: str = "",
     target_junction_id: str = "",
+    include_geometry: bool = True,
 ) -> dict[str, str]:
     approaches = model.get("approaches", {}) if isinstance(model.get("approaches"), dict) else {}
     origin_x, origin_y = _model_junction_origin(model)
@@ -19958,6 +20009,7 @@ def _approach_edge_signatures(
                 target_junction_id=target_junction_id,
                 origin_x=origin_x,
                 origin_y=origin_y,
+                include_geometry=include_geometry,
             )
     return signatures
 
@@ -20063,13 +20115,15 @@ def _approach_edge_signature(
     target_junction_id: str = "",
     origin_x: str = "0",
     origin_y: str = "0",
+    include_geometry: bool = True,
 ) -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
         f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
-        f"{lane.get('speed', '')}:{_lane_length_signature(lane)}:{lane.get('width', '')}:"
-        f"{_relative_shape(str(lane.get('shape', '')), origin_x, origin_y)}:"
-        f"{_relative_shape(str(lane.get('outlineShape', '')), origin_x, origin_y)}"
+        f"{lane.get('speed', '')}:"
+        f"{_lane_length_signature(lane) if include_geometry else ''}:{lane.get('width', '')}:"
+        f"{_relative_shape(str(lane.get('shape', '')), origin_x, origin_y) if include_geometry else ''}:"
+        f"{_relative_shape(str(lane.get('outlineShape', '')), origin_x, origin_y) if include_geometry else ''}"
         for lane in lanes
         if isinstance(lane, dict)
     ]
