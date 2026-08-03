@@ -6438,6 +6438,26 @@ def build_teacher_guided_junction_variant(
                 compound_report["junction_id"] = compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
                 compound_internal_replay_junction_ids.add(compound_junction_id)
+                restore_mutable_edge_ids.update(
+                    _valid_edge_map(compound_report.get("effective_edge_map", {})).values()
+                )
+                compound_output_root = ET.parse(compound_output_file).getroot()
+                compound_boundary_edges = [
+                    edge
+                    for edge in compound_output_root.findall("edge")
+                    if edge.attrib.get("id")
+                    and not edge.attrib["id"].startswith(":")
+                    and compound_junction_id
+                    in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                ]
+                restore_mutable_edge_ids.update(edge.attrib["id"] for edge in compound_boundary_edges)
+                internal_restore_exclude_junction_ids.update(
+                    endpoint
+                    for edge in compound_boundary_edges
+                    for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                    if endpoint
+                )
+                del compound_output_root, compound_boundary_edges
                 if compound_report.get("status") != "pass":
                     return _write_teacher_guided_report(
                         report_file,
