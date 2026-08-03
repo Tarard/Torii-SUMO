@@ -7325,6 +7325,19 @@ def _prune_plain_tls_against_teacher(
     }
 
 
+def _sequential_candidate_node_ids(candidate: Mapping[str, Any], junction_id: str) -> set[str]:
+    matched = {str(item) for item in candidate.get("matched_candidate_node_ids", []) or [] if str(item)}
+    exact = {
+        str(item)
+        for item in candidate.get("matched_reference_source_node_ids", []) or []
+        if str(item)
+    }
+    node_ids = exact if exact and exact <= matched else matched
+    if junction_id:
+        node_ids.add(junction_id)
+    return node_ids
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -7563,9 +7576,7 @@ def run_teacher_guided_repair_queue(
             or strict_teacher_replay
             or _candidate_requests_target_internal_replay(candidate)
         )
-        candidate_node_ids = {str(item) for item in candidate.get("matched_candidate_node_ids", []) or [] if str(item)}
-        if junction_id:
-            candidate_node_ids.add(junction_id)
+        candidate_node_ids = _sequential_candidate_node_ids(candidate, junction_id)
         candidate_edge_ids = {str(item) for item in edge_map.values() if str(item)}
         overlap_edge_ids = candidate_edge_ids & applied_candidate_edge_ids
         overlap_node_ids = candidate_node_ids & applied_candidate_node_ids

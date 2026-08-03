@@ -34,6 +34,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _restore_replayed_geometry_attrs,
     _road_continuity_probe_summary,
     _semantic_layer_gates,
+    _sequential_candidate_node_ids,
     _sumo_allowed_classes,
     _strict_teacher_structural_context,
     _teacher_candidate_edge_map,
@@ -9732,6 +9733,19 @@ def test_write_teacher_connection_plan_leaves_joined_scope_for_netconvert_genera
     assert root.findall("delete") == []
     assert report["structural_connection_generation"] is True
     assert report["structural_regenerated_source_edge_ids"] == ["cand_in"]
+
+
+def test_sequential_candidate_node_ids_prefers_exact_reference_members() -> None:
+    candidate = {
+        "matched_candidate_node_ids": ["a", "b", "unrelated"],
+        "matched_reference_source_node_ids": ["a", "b"],
+    }
+
+    assert _sequential_candidate_node_ids(candidate, "cluster_a_b") == {
+        "a",
+        "b",
+        "cluster_a_b",
+    }
 
 
 def test_structural_connection_plan_does_not_count_raw_turnaround_as_connectivity(
