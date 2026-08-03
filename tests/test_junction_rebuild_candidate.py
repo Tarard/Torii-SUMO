@@ -104,6 +104,55 @@ def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() 
     assert root.find("connection[@from='short_a']") is None
 
 
+def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="keep_neg" from="target" to="remote"><lane id="keep_neg_0" index="0"/></edge>
+  <edge id="keep_pos" from="remote" to="target"><lane id="keep_pos_0" index="0"/></edge>
+  <junction id="target" incLanes="keep_pos_0"/>
+  <junction id="remote" incLanes="keep_neg_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="keep_neg" from="target" to="remote"><lane id="keep_neg_0" index="0"/></edge>
+  <edge id="keep_pos" from="remote" to="target"><lane id="keep_pos_0" index="0"/></edge>
+  <edge id="residual_a" from="target" to="absent_a"><lane id="residual_a_0" index="0"/></edge>
+  <edge id="residual_b" from="absent_a" to="absent_b"><lane id="residual_b_0" index="0"/></edge>
+  <edge id="residual_c" from="absent_b" to="target"><lane id="residual_c_0" index="0"/></edge>
+  <edge id=":absent_a_0" function="internal"><lane id=":absent_a_0_0" index="0"/></edge>
+  <junction id="target" incLanes="keep_pos_0 residual_c_0"/>
+  <junction id="remote" incLanes="keep_neg_0"/>
+  <junction id="absent_a" incLanes="residual_a_0" intLanes=":absent_a_0_0"/>
+  <junction id="absent_b" incLanes="residual_b_0"/>
+  <junction id=":absent_a_0_0" type="internal" incLanes=":absent_a_0_0"/>
+  <connection from="residual_a" to="residual_b" via=":absent_a_0_0"/>
+  <connection from="keep_pos" to="keep_neg"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._prune_teacher_absent_residual_corridor(
+        net_file=candidate,
+        teacher_net_file=teacher,
+        junction_ids={"absent_a", "absent_b"},
+    )
+
+    root = ET.parse(candidate).getroot()
+    assert report["status"] == "pass"
+    assert report["removed_node_ids"] == ["absent_a", "absent_b"]
+    assert report["removed_external_edge_ids"] == ["residual_a", "residual_b", "residual_c"]
+    assert root.find("edge[@id='keep_neg']") is not None
+    assert root.find("edge[@id='keep_pos']") is not None
+    assert root.find("connection[@from='keep_pos']") is not None
+    assert root.find("junction[@id='absent_a']") is None
+    assert root.find("edge[@id=':absent_a_0']") is None
+    assert root.find("junction[@id='target']").attrib["incLanes"] == "keep_pos_0"
+
+
 def test_teacher_cluster_ids_restore_full_ids_for_sumo_shortened_join_groups() -> None:
     full_id = "cluster_a_b_c_d_e_f"
 

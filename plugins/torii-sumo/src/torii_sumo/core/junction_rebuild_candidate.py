@@ -6427,8 +6427,13 @@ def build_teacher_guided_junction_variant(
 
     teacher_absent_geometry_contraction_report = None
     if teacher_absent_tls_junction_ids:
-        contraction_scope_not_needed = False
         expected_contraction_ids = {str(value) for value in teacher_absent_tls_junction_ids if str(value)}
+        residual_corridor_prune = _prune_teacher_absent_residual_corridor(
+            net_file=final_net_file,
+            teacher_net_file=teacher_net_file,
+            junction_ids=expected_contraction_ids,
+        )
+        contraction_scope_not_needed = residual_corridor_prune.get("status") == "pass"
         contraction_source_file = final_net_file
         contraction_source_root = ET.parse(contraction_source_file).getroot()
         contraction_mutable_edge_ids = {
@@ -6453,16 +6458,19 @@ def build_teacher_guided_junction_variant(
             if endpoint
         }
         contraction_neighbor_junction_ids = contraction_mutable_junction_ids - expected_contraction_ids
-        teacher_absent_geometry_contraction_report = build_corridor_geometry_simplification_variant(
-            net_file=final_net_file,
-            output_dir=output_dir / "geometry",
-            prefix="absent",
-            reference_net_file=teacher_net_file,
-            candidate_node_ids=expected_contraction_ids,
-            netconvert_binary=netconvert_binary,
-            timeout_seconds=timeout_seconds,
-            command_runner=command_runner,
-        )
+        teacher_absent_geometry_contraction_report = residual_corridor_prune
+        if not contraction_scope_not_needed:
+            teacher_absent_geometry_contraction_report = build_corridor_geometry_simplification_variant(
+                net_file=final_net_file,
+                output_dir=output_dir / "geometry",
+                prefix="absent",
+                reference_net_file=teacher_net_file,
+                candidate_node_ids=expected_contraction_ids,
+                netconvert_binary=netconvert_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            teacher_absent_geometry_contraction_report["residual_corridor_prune"] = residual_corridor_prune
         contraction_variant_file = Path(str(teacher_absent_geometry_contraction_report.get("variant_file", "")))
         contraction_scope_valid = (
             int(teacher_absent_geometry_contraction_report.get("candidate_node_count", 0) or 0)
@@ -16038,6 +16046,107 @@ def _prune_strict_unmapped_outgoing_boundary_edges(
         "policy": "strict replay only: remove unmapped non-motorized outgoing boundary edges with movement evidence absent from the teacher",
         "removed_edge_ids": sorted(removable_edge_ids),
         "removed_connection_count": removed_connection_count,
+    }
+
+
+def _prune_teacher_absent_residual_corridor(
+    *,
+    net_file: Path,
+    teacher_net_file: Path,
+    junction_ids: set[str],
+) -> dict[str, object]:
+    """Remove a residual corridor only when every incident edge is absent from the teacher."""
+
+    candidate_tree = ET.parse(net_file)
+    candidate_root = candidate_tree.getroot()
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    expected_ids = {str(value) for value in junction_ids if str(value)}
+    teacher_junction_ids = {row.attrib.get("id", "") for row in teacher_root.findall("junction")}
+    candidate_junction_ids = {row.attrib.get("id", "") for row in candidate_root.findall("junction")}
+    teacher_edge_ids = {row.attrib.get("id", "") for row in teacher_root.findall("edge")}
+    incident_edges = [
+        edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+        and not edge.attrib["id"].startswith(":")
+        and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+        and {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
+    ]
+    blocking_edge_ids = sorted(edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] in teacher_edge_ids)
+    missing_candidate_ids = sorted(expected_ids - candidate_junction_ids)
+    teacher_present_ids = sorted(expected_ids & teacher_junction_ids)
+    if blocking_edge_ids or missing_candidate_ids or teacher_present_ids:
+        return {
+            "status": "not_applicable",
+            "candidate_node_count": len(expected_ids - set(missing_candidate_ids)),
+            "removed_node_ids": [],
+            "unexpected_removed_node_ids": [],
+            "blocking_teacher_edge_ids": blocking_edge_ids,
+            "missing_candidate_node_ids": missing_candidate_ids,
+            "teacher_present_node_ids": teacher_present_ids,
+        }
+
+    internal_prefixes = tuple(f":{junction_id}_" for junction_id in expected_ids)
+    removed_external_edge_ids = {edge.attrib["id"] for edge in incident_edges}
+    removed_edges = [
+        edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id", "") in removed_external_edge_ids
+        or edge.attrib.get("id", "").startswith(internal_prefixes)
+    ]
+    removed_edge_ids = {edge.attrib.get("id", "") for edge in removed_edges}
+    removed_lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in removed_edges
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    removed_connection_count = 0
+    for connection in list(candidate_root.findall("connection")):
+        if (
+            {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removed_edge_ids
+            or connection.attrib.get("via", "") in removed_lane_ids
+            or connection.attrib.get("tl", "") in expected_ids
+        ):
+            candidate_root.remove(connection)
+            removed_connection_count += 1
+    for edge in removed_edges:
+        candidate_root.remove(edge)
+    removed_internal_junction_ids = []
+    for junction in list(candidate_root.findall("junction")):
+        junction_id = junction.attrib.get("id", "")
+        if junction_id in expected_ids or junction_id.startswith(internal_prefixes):
+            candidate_root.remove(junction)
+            if junction_id not in expected_ids:
+                removed_internal_junction_ids.append(junction_id)
+            continue
+        for attribute in ("incLanes", "intLanes"):
+            lanes = junction.attrib.get(attribute, "").split()
+            if lanes:
+                junction.set(attribute, " ".join(lane for lane in lanes if lane not in removed_lane_ids))
+    removed_tllogic_ids = []
+    for logic in list(candidate_root.findall("tlLogic")):
+        if logic.attrib.get("id", "") in expected_ids:
+            removed_tllogic_ids.append(logic.attrib.get("id", ""))
+            candidate_root.remove(logic)
+
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "policy": "strict teacher-negative evidence: prune only incident edge IDs absent from the teacher",
+        "variant_file": str(net_file),
+        "candidate_node_count": len(expected_ids),
+        "removed_node_ids": sorted(expected_ids),
+        "unexpected_removed_node_ids": [],
+        "removed_external_edge_ids": sorted(removed_external_edge_ids),
+        "removed_internal_edge_ids": sorted(removed_edge_ids - removed_external_edge_ids),
+        "removed_internal_junction_ids": sorted(removed_internal_junction_ids),
+        "removed_tllogic_ids": sorted(removed_tllogic_ids),
+        "removed_connection_count": removed_connection_count,
+        "scope_not_needed": True,
+        "scope_not_needed_reason": "teacher-absent residual corridor was pruned by exact edge-id negative evidence",
     }
 
 
