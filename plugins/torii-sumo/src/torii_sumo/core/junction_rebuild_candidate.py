@@ -8506,6 +8506,7 @@ def run_teacher_guided_repair_queue(
                 crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
                 or crossing_edge_overrides_by_junction.get(teacher_junction_id),
                 replay_target_internal_subgraph=candidate_replay_target_internal_subgraph,
+                strict_teacher_replay=strict_teacher_replay,
                 netconvert_binary=netconvert_binary,
                 sumo_binary=sumo_binary,
                 timeout_seconds=timeout_seconds,

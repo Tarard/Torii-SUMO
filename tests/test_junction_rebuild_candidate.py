@@ -3550,6 +3550,7 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
         output_dir=tmp_path / "run",
         max_ready_candidates=1,
         variant_builder=fake_variant,
+        strict_teacher_replay=True,
     )
 
     assert report["status"] == "pass"
@@ -3558,6 +3559,7 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert report["max_ready_candidates"] == 1
     assert calls[0]["junction_id"] == "cluster_a_b"
     assert calls[0]["teacher_junction_id"] == "cluster_a_b"
+    assert calls[0]["strict_teacher_replay"] is True
     assert report["variant_reports"][0]["teacher_pattern_key"] == "three_way|control=right_before_left"
     assert report["variant_reports"][0]["teacher_pattern_family"] == "three_way"
     assert report["variant_reports"][0]["teacher_pattern_template_count"] == 127
