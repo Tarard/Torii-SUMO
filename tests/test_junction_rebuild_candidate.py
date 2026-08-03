@@ -6620,8 +6620,15 @@ def test_run_teacher_guided_repair_queue_prefers_full_context_join_replay_for_si
     )
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
-    for path in (teacher_net, candidate_net):
-        path.write_text("<net/>", encoding="utf-8")
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="x" to="a"><lane index="0" shape="90,200 0,0"/></edge>
+  <edge id="context_edge" from="y" to="context"><lane index="0" shape="999,999 1000,1000"/></edge>
+  <junction id="x" x="90" y="200" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
 
     variant_calls = []
 
@@ -6685,9 +6692,18 @@ def test_run_teacher_guided_repair_queue_prefers_full_context_join_replay_for_si
     assert report["status"] == "pass"
     assert report["expanded_scope_reports"][0]["replay_scope"] == "full_network_join_patch"
     assert variant_calls[0]["candidate_net_file"].name == "full_network_join_replay.net.xml"
-    assert variant_calls[0]["raw_edge_file"] == raw_edges
+    assert variant_calls[0]["raw_edge_file"].name == "full_network_join_aligned.edg.xml"
     assert "context_edge" in variant_calls[0]["raw_edge_file"].read_text(encoding="utf-8")
     assert '<join nodes="a b"' in variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
+    seed_node = ET.parse(variant_calls[0]["raw_node_file"]).getroot().find("node[@id='x']")
+    assert seed_node is not None
+    assert (seed_node.attrib["x"], seed_node.attrib["y"]) == ("90", "200")
+    alignment = report["expanded_scope_reports"][0]["full_network_join_coordinate_alignment"]
+    assert alignment["status"] == "pass"
+    assert alignment["repaired_node_count"] == 1
+    aligned_edges = ET.parse(variant_calls[0]["raw_edge_file"]).getroot()
+    assert aligned_edges.find("edge[@id='cand_in']").attrib["shape"] == "90,200 0,0"
+    assert aligned_edges.find("edge[@id='context_edge']").attrib["shape"] == "10,0 20,0"
 
 
 def test_run_teacher_guided_repair_queue_filters_join_scope_dead_end_connections_for_full_network_seed(

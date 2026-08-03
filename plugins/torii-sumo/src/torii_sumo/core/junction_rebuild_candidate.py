@@ -7943,8 +7943,30 @@ def run_teacher_guided_repair_queue(
                     replay_edge_endpoint_rewrite_count = 0
                     scope_report["replay_scope"] = "full_network"
                 elif use_full_network_join_patch_replay:
+                    (
+                        aligned_raw_node_file,
+                        full_network_join_edge_file,
+                        coordinate_alignment,
+                    ) = _write_candidate_aligned_plain_geometry(
+                        node_file=current_raw_node_file,
+                        edge_file=full_network_join_edge_file,
+                        candidate_net_file=current_candidate_net_file,
+                        output_node_file=output_dir / safe_junction_id / "full_network_join_aligned.nod.xml",
+                        output_edge_file=output_dir / safe_junction_id / "full_network_join_aligned.edg.xml",
+                    )
+                    scope_report["full_network_join_coordinate_alignment"] = coordinate_alignment
+                    if coordinate_alignment.get("status") != "pass":
+                        scope_report["status"] = "review"
+                        skipped_candidates.append(
+                            {
+                                "index": index,
+                                "junction_id": junction_id,
+                                "candidate_status": "full_network_join_coordinate_alignment_failed",
+                            }
+                        )
+                        continue
                     replay_node_file = _write_replay_node_file(
-                        current_raw_node_file,
+                        aligned_raw_node_file,
                         join_patch_file,
                         output_dir / safe_junction_id / "full_network_join_replay.nod.xml",
                     )
@@ -11906,6 +11928,79 @@ def _plain_node_ids(node_file: Path) -> set[str]:
         return {node.attrib["id"] for node in ET.parse(node_file).getroot().findall("node") if node.attrib.get("id")}
     except (ET.ParseError, OSError):
         return set()
+
+
+def _write_candidate_aligned_plain_geometry(
+    *,
+    node_file: Path,
+    edge_file: Path,
+    candidate_net_file: Path,
+    output_node_file: Path,
+    output_edge_file: Path,
+) -> tuple[Path, Path, dict[str, object]]:
+    try:
+        node_tree = ET.parse(node_file)
+        edge_tree = ET.parse(edge_file)
+        candidate_root = ET.parse(candidate_net_file).getroot()
+    except (ET.ParseError, OSError):
+        return node_file, edge_file, {"status": "fail", "reason": "coordinate_alignment_parse_failed"}
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    repaired_node_ids = set()
+    for node in node_tree.getroot().findall("node"):
+        candidate_junction = candidate_junctions.get(node.attrib.get("id", ""))
+        if candidate_junction is None:
+            continue
+        changed = False
+        for attr in ("x", "y", "z"):
+            value = candidate_junction.attrib.get(attr)
+            if value is not None and node.attrib.get(attr) != value:
+                node.set(attr, value)
+                changed = True
+        if changed:
+            repaired_node_ids.add(node.attrib.get("id", ""))
+    candidate_edges = {
+        edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")
+    }
+    repaired_edge_count = 0
+    for edge in edge_tree.getroot().findall("edge"):
+        if not repaired_node_ids.intersection((edge.attrib.get("from", ""), edge.attrib.get("to", ""))):
+            continue
+        candidate_edge = candidate_edges.get(edge.attrib.get("id", ""))
+        if candidate_edge is None:
+            continue
+        changed = False
+        candidate_shape = _primary_edge_shape(candidate_edge)
+        if candidate_shape and edge.attrib.get("shape") != candidate_shape:
+            edge.set("shape", candidate_shape)
+            changed = True
+        candidate_lanes = {
+            lane.attrib.get("index", ""): lane
+            for lane in candidate_edge.findall("lane")
+            if lane.attrib.get("index") is not None
+        }
+        for lane in edge.findall("lane"):
+            candidate_lane = candidate_lanes.get(lane.attrib.get("index", ""))
+            candidate_lane_shape = candidate_lane.attrib.get("shape", "") if candidate_lane is not None else ""
+            if candidate_lane_shape and lane.attrib.get("shape") != candidate_lane_shape:
+                lane.set("shape", candidate_lane_shape)
+                changed = True
+        repaired_edge_count += int(changed)
+    output_node_file.parent.mkdir(parents=True, exist_ok=True)
+    output_edge_file.parent.mkdir(parents=True, exist_ok=True)
+    node_tree.write(output_node_file, encoding="utf-8", xml_declaration=True)
+    edge_tree.write(output_edge_file, encoding="utf-8", xml_declaration=True)
+    return output_node_file, output_edge_file, {
+        "status": "pass",
+        "repaired_node_count": len(repaired_node_ids),
+        "repaired_node_ids": sorted(repaired_node_ids),
+        "repaired_edge_count": repaired_edge_count,
+        "node_file": str(output_node_file),
+        "edge_file": str(output_edge_file),
+    }
 
 
 def _join_internal_self_loop_drop_has_witness(
