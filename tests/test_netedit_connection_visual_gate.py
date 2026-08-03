@@ -18,6 +18,11 @@ from torii_sumo.core.netedit_connection_visual_gate import (
 
 def test_geometry_and_missing_conflict_layer(tmp_path: Path) -> None:
     assert point_before_lane_end(((0.0, 0.0), (20.0, 0.0)), distance_m=5.0) == (15.0, 0.0)
+    assert visual_gate.lane_click_points(((0.0, 0.0), (10.0, 0.0))) == (
+        (2.0, 0.0),
+        (6.0, 0.0),
+        (8.0, 0.0),
+    )
     assert canvas_click_for_world_point(
         point=(1330.18, 1889.68),
         center=(1365.74, 1922.36),

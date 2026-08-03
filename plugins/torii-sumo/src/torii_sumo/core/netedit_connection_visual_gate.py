@@ -38,6 +38,10 @@ def point_before_lane_end(
     return points[0]
 
 
+def lane_click_points(points: Sequence[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
+    return tuple(dict.fromkeys(point_before_lane_end(points, distance_m=distance) for distance in (8.0, 4.0, 2.0)))
+
+
 def canvas_click_for_world_point(
     *,
     point: tuple[float, float],
@@ -437,21 +441,25 @@ def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size
             "expected_screenshot_sha256": latest["screenshot_sha256"],
         })
         canvas = netedit_canvas_rect(session.hwnd)
-        click = canvas_click_for_world_point(
-            point=point_before_lane_end(spec["shape"]), center=spec["center"],
-            conv_boundary=spec["conv_boundary"], canvas_rect=canvas, zoom=zoom,
-        )
-        selected = session.act({
-            "type": "click", "x": click[0], "y": click[1],
-            "expected_screenshot_sha256": mode["screenshot_sha256"],
-        })
         destination = output_dir / "connection.png"
+        selected, click, source_pixels = mode, (0, 0), 0
+        for point in lane_click_points(spec["shape"]):
+            click = canvas_click_for_world_point(
+                point=point, center=spec["center"], conv_boundary=spec["conv_boundary"],
+                canvas_rect=canvas, zoom=zoom,
+            )
+            selected = session.act({
+                "type": "click", "x": click[0], "y": click[1],
+                "expected_screenshot_sha256": selected["screenshot_sha256"],
+            })
+            with Image.open(selected["screenshot_file"]) as opened:
+                source_pixels = _point_stats(
+                    _palette_points(opened.crop(canvas), 12)["source"],
+                    (click[0] - canvas[0], click[1] - canvas[1]),
+                )["pixel_count"]
+            if source_pixels >= 20:
+                break
         shutil.copy2(selected["screenshot_file"], destination)
-        with Image.open(destination) as opened:
-            source_pixels = _point_stats(
-                _palette_points(opened.crop(canvas), 12)["source"],
-                (click[0] - canvas[0], click[1] - canvas[1]),
-            )["pixel_count"]
         status = "pass" if source_pixels >= 20 else "review_required"
         return {
             "status": status,
