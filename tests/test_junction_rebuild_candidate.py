@@ -5781,11 +5781,11 @@ def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scop
                 "join_junction_ids": ["a", "j", "n"],
                 "blocked_teacher_edge_ids": ["teacher_neighbor"],
             },
+        },
+        {
             "approach_endpoint_rebuild_plan": {
                 "missing_desired_endpoint_ids": ["cluster_other_a_b"],
             },
-        },
-        {
             "target_internal_replay": {
                 "removed_stale_replaced_edge_connection_count": 1,
                 "removed_stale_replaced_edge_connections": [{"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}],
