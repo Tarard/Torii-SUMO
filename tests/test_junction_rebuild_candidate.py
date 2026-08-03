@@ -16201,6 +16201,42 @@ def test_restore_off_scope_netconvert_artifacts_preserves_only_declared_replay_s
     assert root.find("junction[@id='j']").attrib["shape"] == "11,-2 13,-2 13,2 11,2"
 
 
+def test_restore_off_scope_restores_declared_mutable_geometry_anchor(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="changed" from="neighbor" to="target"><lane id="changed_0" index="0"/></edge>
+  <junction id="neighbor" type="priority" x="1" y="2" shape="0,0 2,0 2,2 0,2"/>
+  <junction id="target" type="priority" x="10" y="2" shape="9,1 11,1 11,3 9,3"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="changed" from="neighbor" to="target"><lane id="changed_0" index="0"/><lane id="changed_1" index="1"/></edge>
+  <junction id="neighbor" type="priority" x="1" y="2" shape="-5,-5 5,-5 5,5 -5,5"><request index="0" response="1" foes="0"/></junction>
+  <junction id="target" type="priority" x="10" y="2" shape="8,0 12,0 12,4 8,4"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids={"neighbor", "target"},
+        mutable_edge_ids={"changed"},
+        geometry_anchor_junction_ids={"neighbor"},
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_geometry_anchor_junction_ids"] == ["neighbor"]
+    assert root.find("junction[@id='neighbor']").attrib["shape"] == "0,0 2,0 2,2 0,2"
+    assert root.find("junction[@id='neighbor']/request").attrib["response"] == "1"
+    assert root.find("junction[@id='target']").attrib["shape"] == "8,0 12,0 12,4 8,4"
+
+
 def test_restore_off_scope_preserves_boundary_edge_of_mutable_junction(
     tmp_path: Path,
 ) -> None:

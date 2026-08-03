@@ -5989,6 +5989,7 @@ def build_teacher_guided_junction_variant(
         for value in lane_patch_report.get("lane_cardinality_changed_endpoint_junction_ids", []) or []
         if str(value)
     }
+    lane_cardinality_geometry_anchor_junction_ids = lane_cardinality_neighbor_junction_ids - {junction_id}
     compound_junction_ids = sorted({*compound_junction_ids, *lane_cardinality_neighbor_junction_ids})
     internal_restore_exclude_junction_ids = {
         *compound_junction_ids,
@@ -6236,6 +6237,7 @@ def build_teacher_guided_junction_variant(
         mutable_junction_ids=internal_restore_exclude_junction_ids,
         mutable_edge_ids=restore_mutable_edge_ids,
         expand_mutable_edge_endpoints=expand_restore_scope,
+        geometry_anchor_junction_ids=lane_cardinality_geometry_anchor_junction_ids,
     )
     if non_target_internal_restore_report.get("status") != "pass":
         return _write_teacher_guided_report(
@@ -6655,6 +6657,7 @@ def build_teacher_guided_junction_variant(
                 mutable_junction_ids=internal_restore_exclude_junction_ids,
                 mutable_edge_ids=restore_mutable_edge_ids,
                 expand_mutable_edge_endpoints=expand_restore_scope,
+                geometry_anchor_junction_ids=lane_cardinality_geometry_anchor_junction_ids,
             )
         if (
             target_internal_normalize_report.get("status") == "pass"
@@ -6742,6 +6745,7 @@ def build_teacher_guided_junction_variant(
                 mutable_junction_ids=internal_restore_exclude_junction_ids,
                 mutable_edge_ids=restore_mutable_edge_ids,
                 expand_mutable_edge_endpoints=expand_restore_scope,
+                geometry_anchor_junction_ids=lane_cardinality_geometry_anchor_junction_ids,
             )
         if (
             teacher_guided_normalize_report.get("status") == "pass"
@@ -16105,6 +16109,7 @@ def restore_off_scope_netconvert_artifacts(
     mutable_junction_ids: set[str],
     mutable_edge_ids: set[str],
     expand_mutable_edge_endpoints: bool = True,
+    geometry_anchor_junction_ids: set[str] | None = None,
     junction_aliases: dict[str, str] | None = None,
     declared_absorbed_edge_ids: set[str] | None = None,
 ) -> dict[str, object]:
@@ -16121,7 +16126,9 @@ def restore_off_scope_netconvert_artifacts(
     its source geometry while one endpoint changes from an absorbed member to
     the joined cluster id.  When ``declared_absorbed_edge_ids`` is supplied,
     only those source edges may disappear and each must collapse completely
-    inside one alias target.
+    inside one alias target.  ``geometry_anchor_junction_ids`` restores only
+    x/y/z/shape for mutable boundary junctions whose connections must remain
+    regenerated after a lane-cardinality change.
     """
 
     if not source_file.exists():
@@ -16220,6 +16227,22 @@ def restore_off_scope_netconvert_artifacts(
 
     target_tree = ET.parse(target_file)
     target_root = target_tree.getroot()
+    source_junctions = {
+        junction.attrib["id"]: junction
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    geometry_anchor_ids = {
+        str(value) for value in (geometry_anchor_junction_ids or set()) if str(value)
+    }
+    restored_geometry_anchor_junction_ids = _restore_geometry_anchor_junctions(
+        target_root,
+        {
+            junction_id: source_junctions[junction_id]
+            for junction_id in geometry_anchor_ids
+            if junction_id in source_junctions
+        },
+    )
     target_edges = {
         edge.attrib["id"]: edge
         for edge in target_root.findall("edge")
@@ -16350,7 +16373,7 @@ def restore_off_scope_netconvert_artifacts(
             for edge_id in undeleted_declared_absorbed_edge_ids
         )
 
-    if restored_lane_count or restored_edge_centerline_ids:
+    if restored_lane_count or restored_edge_centerline_ids or restored_geometry_anchor_junction_ids:
         ET.indent(target_root, space="    ")
         target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
 
@@ -16387,6 +16410,7 @@ def restore_off_scope_netconvert_artifacts(
         "restored_external_edge_centerline_count": len(restored_edge_centerline_ids),
         "restored_external_edge_centerline_ids": restored_edge_centerline_ids,
         "restored_external_lane_count": restored_lane_count,
+        "restored_geometry_anchor_junction_ids": restored_geometry_anchor_junction_ids,
         "failure_count": len(failures) + sum(internal_failures.values()),
         "failures": failures,
         "internal_failure_counts": internal_failures,
