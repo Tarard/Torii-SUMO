@@ -1263,9 +1263,44 @@ def test_legacy_regression_gate_does_not_cancel_equal_category_witnesses(
     assert comparison["outside_scope_new_review_finding_count"] == 1
     assert comparison["outside_scope_resolved_review_finding_count"] == 1
     assert comparison["outside_scope_review_regressions"][0]["finding_witness"] == (
-        "connection_mode:lane_rank_jump:7:0.750"
+        "connection_mode:lane_rank_jump:movement[S_in|1|N_out|1|:J0_7_0]:0.750"
     )
     assert comparison["outside_scope_review_category_regressions"] == []
+
+
+def test_connection_mode_regression_uses_stable_movement_identity() -> None:
+    source_audit = {
+        "traffic_side": "right",
+        "junctions": [
+            {
+                "junction_id": "J0",
+                "connection_mode_audit": {
+                    "review_findings": ["connection_mode:lane_rank_jump:7:0.750"],
+                    "structural_failures": [],
+                    "movement_checks": [
+                        {
+                            "connection_index": 7,
+                            "from": "west",
+                            "fromLane": "0",
+                            "to": "east",
+                            "toLane": "0",
+                            "via": ":J0_0_0",
+                        }
+                    ],
+                },
+                "tls_link_binding_audit": {"review_findings": [], "structural_failures": []},
+            }
+        ],
+    }
+    candidate_audit = json.loads(json.dumps(source_audit))
+    candidate_record = candidate_audit["junctions"][0]["connection_mode_audit"]
+    candidate_record["review_findings"] = ["connection_mode:lane_rank_jump:107:0.750"]
+    candidate_record["movement_checks"][0]["connection_index"] = 107
+
+    comparison = compare_connection_mode_audits(source_audit, candidate_audit)
+
+    assert comparison["status"] == "pass"
+    assert comparison["outside_scope_new_review_finding_count"] == 0
 
 
 def test_network_connection_mode_audit_flags_foe_movements_with_protected_green(

@@ -599,12 +599,10 @@ def compare_connection_mode_audits(
     target_source_junction_ids: Sequence[str] = (),
     target_candidate_junction_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Compare exact per-junction findings and retain category counts as diagnostics.
+    """Compare per-junction findings using stable movement identities when available.
 
-    This legacy comparator now fails closed when one witness is resolved and a
-    different witness of the same category appears.  The corridor stage-1
-    comparator remains the promotion-grade path because it first maps raw
-    connection indices to stable movement identities.
+    Unmapped witnesses remain exact and fail closed when one witness is
+    resolved and another of the same category appears.
     """
 
     source_records = {
@@ -777,7 +775,7 @@ def compare_connection_mode_audits(
         "status": status,
         "claim_status": "verified" if status == "pass" else "construction-invalid",
         "automatic_promotion_gate": "pass" if status == "pass" else "blocked",
-        "audit_engine": "static_net_xml_connection_graph_delta",
+        "audit_engine": "static_net_xml_stable_movement_graph_delta",
         "source_traffic_side": source_traffic_side,
         "candidate_traffic_side": candidate_traffic_side,
         "netedit_required_for_gate": False,
@@ -831,7 +829,7 @@ def compare_connection_mode_audits(
         "blockers": blockers,
         "warnings": [
             "new target-scope review findings require review and block automatic promotion",
-            "raw finding witnesses can contain unstable connection indices; use the stable corridor exact-semantic audit for promotion",
+            "unmapped raw finding witnesses remain exact; use the corridor exact-semantic audit when stable movement evidence is unavailable",
         ],
     }
 
@@ -2048,9 +2046,38 @@ def _junction_findings(
     key = "review_findings" if finding_kind == "review" else "structural_failures"
     connection_audit = record.get("connection_mode_audit", {})
     tls_audit = record.get("tls_link_binding_audit", {})
+    movement_by_index = {
+        str(row.get("connection_index")): "|".join(
+            str(row.get(attr, ""))
+            for attr in ("from", "fromLane", "to", "toLane", "via")
+        )
+        for row in connection_audit.get("movement_checks", []) or []
+        if row.get("connection_index") is not None
+    }
+
+    def stable_witness(finding: object) -> str:
+        parts = str(finding).split(":")
+        if len(parts) > 2 and (
+            parts[0] == "connection_mode"
+            or (
+                parts[0] == "tls_link_binding"
+                and parts[1]
+                in {
+                    "controller_logic_missing",
+                    "link_index2_invalid",
+                    "link_index_invalid",
+                    "link_index_out_of_program_state",
+                }
+            )
+        ):
+            movement = movement_by_index.get(parts[2])
+            if movement:
+                parts[2] = f"movement[{movement}]"
+        return ":".join(parts)
+
     return [
-        *map(str, connection_audit.get(key, []) or []),
-        *map(str, tls_audit.get(key, []) or []),
+        *map(stable_witness, connection_audit.get(key, []) or []),
+        *map(stable_witness, tls_audit.get(key, []) or []),
     ]
 
 
