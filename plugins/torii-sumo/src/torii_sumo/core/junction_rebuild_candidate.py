@@ -19637,7 +19637,7 @@ def _lane_length_signature(lane: dict[str, Any]) -> str:
 def _mapped_junction_ref(value: str, source_junction_id: str, target_junction_id: str) -> str:
     if source_junction_id and target_junction_id and value == source_junction_id:
         return target_junction_id
-    return value
+    return _canonical_sumo_cluster_id(value)
 
 
 def _relative_shape(shape: str, x: str, y: str) -> str:
