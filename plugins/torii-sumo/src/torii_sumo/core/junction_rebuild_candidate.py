@@ -8258,6 +8258,9 @@ def run_teacher_guided_repair_queue(
                 compound_teacher_junction_ids = _teacher_cluster_ids_for_join_groups(
                     scope_report.get("join_groups", []),
                     teacher_join_groups_by_cluster,
+                    expanded_scope_value.get("junction_ids", [])
+                    if isinstance(expanded_scope_value, dict)
+                    else [],
                 )
                 teacher_absent_tls_junction_ids = sorted(
                     {
@@ -15396,17 +15399,25 @@ def _prune_unmapped_micro_boundary_edges(
 def _teacher_cluster_ids_for_join_groups(
     join_groups: object,
     teacher_join_groups_by_cluster: Mapping[str, Sequence[str]] | None,
+    scope_junction_ids: Sequence[str] = (),
 ) -> list[str]:
     joined_member_sets = {
         frozenset(str(item) for item in group if str(item))
         for group in (join_groups if isinstance(join_groups, list) else [])
         if isinstance(group, list)
     }
-    return sorted(
-        cluster_id
+    known_groups = {
+        str(cluster_id): frozenset(str(item) for item in members if str(item))
         for cluster_id, members in (teacher_join_groups_by_cluster or {}).items()
-        if frozenset(str(item) for item in members if str(item)) in joined_member_sets
+    }
+    known_groups.update(
+        {
+            str(cluster_id): frozenset(_sumo_cluster_member_ids(str(cluster_id)))
+            for cluster_id in scope_junction_ids
+            if str(cluster_id).startswith("cluster_")
+        }
     )
+    return sorted(cluster_id for cluster_id, members in known_groups.items() if members in joined_member_sets)
 
 
 def _prune_strict_unmapped_outgoing_boundary_edges(

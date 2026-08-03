@@ -108,7 +108,8 @@ def test_teacher_cluster_ids_restore_full_ids_for_sumo_shortened_join_groups() -
 
     assert rebuild_candidate_module._teacher_cluster_ids_for_join_groups(
         [["a", "b", "c", "d", "e", "f"], ["x", "y"]],
-        {full_id: ["a", "b", "c", "d", "e", "f"], "cluster_m_n": ["m", "n"]},
+        {"cluster_m_n": ["m", "n"]},
+        [full_id],
     ) == [full_id]
 
 
