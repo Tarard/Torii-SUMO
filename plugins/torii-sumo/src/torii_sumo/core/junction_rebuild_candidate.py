@@ -8385,7 +8385,6 @@ def run_teacher_guided_repair_queue(
                             mutable_edge_ids=join_mutable_edge_ids,
                             expand_mutable_edge_endpoints=False,
                             junction_aliases=join_aliases,
-                            declared_absorbed_edge_ids=set(preabsorbed_join_internal_edge_ids),
                         )
                         if join_restore_applicable
                         else {
