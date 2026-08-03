@@ -103,6 +103,15 @@ def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() 
     assert root.find("connection[@from='short_a']") is None
 
 
+def test_teacher_cluster_ids_restore_full_ids_for_sumo_shortened_join_groups() -> None:
+    full_id = "cluster_a_b_c_d_e_f"
+
+    assert rebuild_candidate_module._teacher_cluster_ids_for_join_groups(
+        [["a", "b", "c", "d", "e", "f"], ["x", "y"]],
+        {full_id: ["a", "b", "c", "d", "e", "f"], "cluster_m_n": ["m", "n"]},
+    ) == [full_id]
+
+
 def test_prune_strict_unmapped_outgoing_boundary_edges_removes_only_unmapped_modal_edge() -> None:
     root = ET.fromstring(
         """<net>

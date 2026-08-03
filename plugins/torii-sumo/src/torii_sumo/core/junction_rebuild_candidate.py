@@ -8255,6 +8255,10 @@ def run_teacher_guided_repair_queue(
                 )
                 expanded_scope_value = candidate.get("expanded_rebuild_scope", {})
                 tls_scope_expansion = candidate.get("tls_join_scope_expansion", {})
+                compound_teacher_junction_ids = _teacher_cluster_ids_for_join_groups(
+                    scope_report.get("join_groups", []),
+                    teacher_join_groups_by_cluster,
+                )
                 teacher_absent_tls_junction_ids = sorted(
                     {
                         str(value)
@@ -8272,6 +8276,7 @@ def run_teacher_guided_repair_queue(
                 compound_safety_junction_ids = sorted(
                     {
                         *joined_scope_junction_ids,
+                        *compound_teacher_junction_ids,
                         *(
                             str(value)
                             for value in (
@@ -8284,6 +8289,7 @@ def run_teacher_guided_repair_queue(
                     }
                 )
                 scope_report["compound_safety_junction_ids"] = compound_safety_junction_ids
+                scope_report["compound_teacher_junction_ids"] = compound_teacher_junction_ids
                 try:
                     variant_report = variant_builder(
                         raw_node_file=replay_node_file,
@@ -15385,6 +15391,22 @@ def _prune_unmapped_micro_boundary_edges(
         "removed_connection_count": removed_connections,
         "protected_edge_ids": sorted(protected),
     }
+
+
+def _teacher_cluster_ids_for_join_groups(
+    join_groups: object,
+    teacher_join_groups_by_cluster: Mapping[str, Sequence[str]] | None,
+) -> list[str]:
+    joined_member_sets = {
+        frozenset(str(item) for item in group if str(item))
+        for group in (join_groups if isinstance(join_groups, list) else [])
+        if isinstance(group, list)
+    }
+    return sorted(
+        cluster_id
+        for cluster_id, members in (teacher_join_groups_by_cluster or {}).items()
+        if frozenset(str(item) for item in members if str(item)) in joined_member_sets
+    )
 
 
 def _prune_strict_unmapped_outgoing_boundary_edges(
