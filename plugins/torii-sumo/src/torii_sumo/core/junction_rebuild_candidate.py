@@ -13689,6 +13689,24 @@ def _teacher_guided_repair_candidate(
         blocked_teacher_edge_ids=uncopyable_missing,
         fallback_junction_ids=scope_node_ids,
     )
+    joined_source_node_ids = list(dict.fromkeys(reference_source_node_ids or matched_reference_source_node_ids))
+    candidate_normal_junction_ids = _real_junction_ids(candidate_root)
+    if (
+        expanded_rebuild_scope["status"] != "review"
+        and candidate_junction_id == reference_id
+        and len(joined_source_node_ids) >= 2
+        and set(joined_source_node_ids) <= candidate_normal_junction_ids
+    ):
+        expanded_rebuild_scope = {
+            "status": "review",
+            "recommended_action": "rebuild_plain_xml_scope",
+            "core_junction_id": candidate_junction_id,
+            "junction_ids": sorted([candidate_junction_id, *joined_source_node_ids]),
+            "join_junction_ids": [candidate_junction_id],
+            "blocked_teacher_edge_ids": [],
+            "missing_desired_endpoint_ids": [],
+            "reason": "joined cluster still has all source member junctions",
+        }
     if stale_case_edge_map:
         stale_endpoint_ids = sorted(
             {

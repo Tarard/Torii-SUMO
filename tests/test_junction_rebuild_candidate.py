@@ -2681,6 +2681,64 @@ def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_
     assert candidate["uncopyable_missing_teacher_edge_ids"] == []
 
 
+def test_build_teacher_guided_queue_expands_joined_cluster_with_all_source_members_still_present(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="cluster_j1_j2"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="cluster_j1_j2" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="cluster_j1_j2" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="cluster_j1_j2"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="cluster_j1_j2" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="cluster_j1_j2" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="j1" type="priority" x="-1" y="0" incLanes="" intLanes=""/>
+  <junction id="j2" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_j1_j2",
+                    "reference_joined_source_nodes": ["j1", "j2"],
+                    "matched_reference_source_node_ids": ["j1", "j2"],
+                    "matched_candidate_node_ids": ["j1", "j2"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert candidate["expanded_rebuild_scope"] == {
+        "status": "review",
+        "recommended_action": "rebuild_plain_xml_scope",
+        "core_junction_id": "cluster_j1_j2",
+        "junction_ids": ["cluster_j1_j2", "j1", "j2"],
+        "join_junction_ids": ["cluster_j1_j2"],
+        "blocked_teacher_edge_ids": [],
+        "missing_desired_endpoint_ids": [],
+        "reason": "joined cluster still has all source member junctions",
+    }
+
+
 def test_build_teacher_guided_repair_queue_scopes_endpoint_mismatched_approach_copyable(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
