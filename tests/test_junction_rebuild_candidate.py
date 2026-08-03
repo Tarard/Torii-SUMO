@@ -2309,6 +2309,40 @@ def test_teacher_guided_queue_prefers_existing_exact_split_edge_over_case_family
     assert candidate["edge_map"]["walk#1"] == "walk#1"
 
 
+def test_teacher_guided_queue_discards_stale_spatial_nodes_for_existing_join(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    net = """<net>
+  <edge id="in" from="remote" to="cluster_a_b"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="remote"><lane id="out_0" index="0"/></edge>
+  <junction id="cluster_a_b" type="priority" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="t"/>
+</net>"""
+    teacher.write_text(net, encoding="utf-8")
+    candidate.write_text(net, encoding="utf-8")
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher,
+        candidate_net_file=candidate,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "matched_reference_source_node_ids": ["a", "b"],
+                    "matched_candidate_node_ids": ["stale_a", "stale_b", "stale_c"],
+                    "edge_map": {"in": "in", "out": "out"},
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+    )
+
+    repair = report["repair_candidates"][0]
+    assert repair["junction_id"] == "cluster_a_b"
+    assert repair["matched_candidate_node_ids"] == ["a", "b"]
+
+
 def test_missing_joined_candidate_scope_keeps_missing_teacher_edge_endpoints(
     tmp_path: Path,
 ) -> None:
@@ -10842,6 +10876,8 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     assert "length" not in lanes[0].attrib
     assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
+    assert report["lane_cardinality_changed_edge_ids"] == ["cand"]
+    assert report["lane_cardinality_changed_endpoint_junction_ids"] == ["a", "j"]
     assert report["lane_shape_translation_applied"] is True
 
 

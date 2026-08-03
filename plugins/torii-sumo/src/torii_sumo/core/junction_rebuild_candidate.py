@@ -1168,6 +1168,8 @@ def write_teacher_lane_patch_edges(
             "pruned_boundary_edges": [],
             "retained_unmapped_boundary_edge_count": 0,
             "retained_unmapped_boundary_edges": [],
+            "lane_cardinality_changed_edge_ids": [],
+            "lane_cardinality_changed_endpoint_junction_ids": [],
             "lane_shape_translation_applied": False,
             "preserve_lane_shapes": True,
             "preserve_osm_lane_profiles": True,
@@ -1189,6 +1191,8 @@ def write_teacher_lane_patch_edges(
     tree = ET.parse(raw_edge_file)
     root = tree.getroot()
     patched = []
+    lane_cardinality_changed_edge_ids = []
+    lane_cardinality_changed_endpoint_junction_ids: set[str] = set()
     added_missing_mapped_edges = []
     pruned_boundary_edges = []
     retained_unmapped_boundary_edges = []
@@ -1244,6 +1248,11 @@ def write_teacher_lane_patch_edges(
         teacher_lanes = teacher_edge.findall("lane")
         if not teacher_lanes:
             continue
+        if len(edge.findall("lane")) != len(teacher_lanes):
+            lane_cardinality_changed_edge_ids.append(edge_id)
+            lane_cardinality_changed_endpoint_junction_ids.update(
+                endpoint for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")) if endpoint
+            )
         rebased_endpoints = {}
         endpoint_rewritten = {}
         endpoint_rewrite = endpoint_rewrites.get(edge_id)
@@ -1423,6 +1432,8 @@ def write_teacher_lane_patch_edges(
         "pruned_boundary_edges": pruned_boundary_edges,
         "retained_unmapped_boundary_edge_count": len(retained_unmapped_boundary_edges),
         "retained_unmapped_boundary_edges": retained_unmapped_boundary_edges,
+        "lane_cardinality_changed_edge_ids": sorted(lane_cardinality_changed_edge_ids),
+        "lane_cardinality_changed_endpoint_junction_ids": sorted(lane_cardinality_changed_endpoint_junction_ids),
         "lane_shape_translation_applied": lane_shape_delta is not None,
         "preserve_lane_shapes": preserve_lane_shapes,
         "preserve_osm_lane_profiles": False,
@@ -5973,6 +5984,12 @@ def build_teacher_guided_junction_variant(
         preserve_lane_shapes=preserve_teacher_lane_shapes,
         preserve_osm_lane_profiles=structural_osm_boundary_authority,
     )
+    lane_cardinality_neighbor_junction_ids = {
+        str(value)
+        for value in lane_patch_report.get("lane_cardinality_changed_endpoint_junction_ids", []) or []
+        if str(value)
+    }
+    compound_junction_ids = sorted({*compound_junction_ids, *lane_cardinality_neighbor_junction_ids})
     internal_restore_exclude_junction_ids = {
         *compound_junction_ids,
         *(str(value) for value in teacher_absent_tls_junction_ids if str(value)),
@@ -13934,9 +13951,15 @@ def _teacher_guided_repair_candidate(
         len(turnaround_only_lane_gaps),
     )
     review_actions = ["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []
+    current_candidate_node_ids = (
+        joined_source_node_ids
+        if candidate_junction_id == reference_id and len(joined_source_node_ids) >= 2
+        else candidate_node_ids
+    )
     return {
         **base,
         "junction_id": candidate_junction_id,
+        "matched_candidate_node_ids": current_candidate_node_ids,
         "candidate_status": candidate_status,
         "edge_map": edge_map,
         "slot_edge_map": slot_edge_map_from_exemplar(movement_exemplar, edge_map),
