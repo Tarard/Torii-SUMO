@@ -6321,6 +6321,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
     )
     target_internal_replay_report = None
+    compound_internal_replay_reports: list[dict[str, object]] = []
     target_internal_replay_fallback = False
     target_internal_replay_fallback_tl_logic_report = None
     target_internal_replay_fallback_sumo_report = None
@@ -6393,6 +6394,59 @@ def build_teacher_guided_junction_variant(
                 },
             )
         tl_logic_input_file = target_internal_replay_file
+        if strict_teacher_replay:
+            for replay_index, compound_junction_id in enumerate(
+                sorted(
+                    {
+                        str(value)
+                        for value in safety_junction_ids
+                        if str(value) and str(value) not in {junction_id, teacher_junction_id}
+                    }
+                ),
+                start=1,
+            ):
+                if compound_junction_id not in _net_junction_ids(teacher_net_file):
+                    continue
+                compound_edge_map = dict(edge_map)
+                for boundary_edge_id in (
+                    _external_boundary_edge_ids(teacher_net_file, compound_junction_id)
+                    & _external_boundary_edge_ids(tl_logic_input_file, compound_junction_id)
+                ):
+                    compound_edge_map.setdefault(boundary_edge_id, boundary_edge_id)
+                compound_output_file = _stage_file(
+                    output_dir,
+                    prefix,
+                    f"compound_internal_{replay_index}.net.xml",
+                )
+                compound_report = write_teacher_target_internal_replay_net(
+                    candidate_net_file=tl_logic_input_file,
+                    teacher_net_file=teacher_net_file,
+                    output_file=compound_output_file,
+                    junction_id=compound_junction_id,
+                    edge_map=compound_edge_map,
+                    teacher_junction_id=compound_junction_id,
+                    copy_unmapped_boundary_edges=True,
+                    preserve_mapped_boundary_endpoints=True,
+                    preserve_unmapped_boundary_edges=True,
+                    prune_unmapped_micro_boundary_edges=True,
+                    prune_strict_unmapped_outgoing_boundary_edges=True,
+                    preserve_target_junction_shape=preserve_target_junction_shape,
+                )
+                compound_report["junction_id"] = compound_junction_id
+                compound_internal_replay_reports.append(compound_report)
+                if compound_report.get("status") != "pass":
+                    return _write_teacher_guided_report(
+                        report_file,
+                        {
+                            "status": "fail",
+                            "claim_status": "construction-invalid",
+                            "junction_id": junction_id,
+                            "target_internal_replay": target_internal_replay_report,
+                            "compound_internal_replays": compound_internal_replay_reports,
+                        },
+                    )
+                tl_logic_input_file = compound_output_file
+            target_internal_replay_file = tl_logic_input_file
 
     tl_logic_report = write_teacher_tllogic_net(
         candidate_net_file=tl_logic_input_file,
@@ -6846,17 +6900,32 @@ def build_teacher_guided_junction_variant(
     boundary_vehicle_connectivity_by_junction = {}
     micro_boundary_excluded_edge_ids = set()
     strict_unmapped_boundary_excluded_edge_ids = set()
-    if isinstance(target_internal_replay_report, dict):
-        micro_report = target_internal_replay_report.get("micro_boundary_prune", {})
+    residual_corridor_excluded_edge_ids = set()
+    for replay_report in [target_internal_replay_report, *compound_internal_replay_reports]:
+        if not isinstance(replay_report, dict):
+            continue
+        micro_report = replay_report.get("micro_boundary_prune", {})
         if isinstance(micro_report, dict):
-            micro_boundary_excluded_edge_ids = {
+            micro_boundary_excluded_edge_ids.update(
                 str(edge_id) for edge_id in micro_report.get("removed_edge_ids", []) if str(edge_id)
-            }
-        strict_report = target_internal_replay_report.get("strict_unmapped_boundary_prune", {})
+            )
+        strict_report = replay_report.get("strict_unmapped_boundary_prune", {})
         if isinstance(strict_report, dict):
-            strict_unmapped_boundary_excluded_edge_ids = {
+            strict_unmapped_boundary_excluded_edge_ids.update(
                 str(edge_id) for edge_id in strict_report.get("removed_edge_ids", []) if str(edge_id)
-            }
+            )
+    if isinstance(teacher_absent_geometry_contraction_report, dict):
+        residual_reports = [
+            teacher_absent_geometry_contraction_report,
+            teacher_absent_geometry_contraction_report.get("residual_corridor_prune", {}),
+        ]
+        residual_corridor_excluded_edge_ids = {
+            str(edge_id)
+            for residual_report in residual_reports
+            if isinstance(residual_report, dict)
+            for edge_id in residual_report.get("removed_external_edge_ids", [])
+            if str(edge_id)
+        }
     for compound_junction_id in compound_junction_ids:
         if compound_junction_id not in final_junction_ids:
             continue
@@ -6883,12 +6952,17 @@ def build_teacher_guided_junction_variant(
             edge_id: "unmapped_non_motorized_outgoing_boundary_edge"
             for edge_id in sorted(raw_missing_boundary_edge_ids & strict_unmapped_boundary_excluded_edge_ids)
         }
+        residual_corridor_exclusions = {
+            edge_id: "teacher_absent_residual_corridor_edge"
+            for edge_id in sorted(raw_missing_boundary_edge_ids & residual_corridor_excluded_edge_ids)
+        }
         missing_boundary_edge_ids = sorted(
             raw_missing_boundary_edge_ids
             - set(internalized_boundary_edge_aliases)
             - set(replaced_boundary_edge_aliases)
             - set(micro_boundary_exclusions)
             - set(strict_unmapped_boundary_exclusions)
+            - set(residual_corridor_exclusions)
         )
         boundary_edge_preservation_by_junction[compound_junction_id] = {
             "status": "pass" if not missing_boundary_edge_ids else "fail",
@@ -6901,6 +6975,7 @@ def build_teacher_guided_junction_variant(
             "excluded_with_reason": {
                 **micro_boundary_exclusions,
                 **strict_unmapped_boundary_exclusions,
+                **residual_corridor_exclusions,
             },
             "added_boundary_edge_ids": sorted(final_boundary_edge_ids - source_boundary_edge_ids),
         }
@@ -7177,6 +7252,7 @@ def build_teacher_guided_junction_variant(
             "pedestrian_ring": pedestrian_ring_report,
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
+            "compound_internal_replays": compound_internal_replay_reports,
             "target_internal_replay_fallback_tl_logic": target_internal_replay_fallback_tl_logic_report,
             "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
             "target_internal_normalize": target_internal_normalize_report,

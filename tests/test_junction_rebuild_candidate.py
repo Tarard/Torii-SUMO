@@ -18275,6 +18275,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="teacher_in_0 teacher_ped_0" intLanes=":j_c0_0 :j_w0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
+  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes=""/>
   <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
   <connection from="teacher_ped" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
@@ -18293,13 +18294,14 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
   <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0" shape="0,0 10,0"/></edge>
   <edge id="cand_ped" from="p" to="j" type="highway.footway"><lane id="cand_ped_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0 cand_ped_0" intLanes=""/>
+  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes=""/>
 </net>
 """,
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
     raw_nodes.write_text(
-        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/><node id="s" x="20" y="0"/></nodes>',
         encoding="utf-8",
     )
     raw_edges = Path("raw.edg.xml")
@@ -18342,6 +18344,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
   <edge id=":j_cA" function="crossing" crossingEdges="cand_in"><lane id=":j_cA_0" index="0" allow="pedestrian"/></edge>
   <edge id=":j_wKeep" function="walkingarea"><lane id=":j_wKeep_0" index="0" allow="pedestrian"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0 cand_ped_0 :j_wKeep_0" intLanes=":j_cA_0 :j_wKeep_0"/>
+  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes=""/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="rr"/></tlLogic>
   <connection from=":j_wKeep" to=":j_cA" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
 </net>
@@ -18385,6 +18388,8 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
         prefix="demo",
         raw_tllogic_file=raw_tllogics,
         replay_target_internal_subgraph=True,
+        safety_junction_ids=["s"],
+        strict_teacher_replay=True,
         command_runner=fake_runner,
     )
 
@@ -18394,6 +18399,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["review_policy"].startswith("diagnostic")
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
+    assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
     assert report["connection_plan"]["emit_crossings"] is False
     assert report["connection_plan"]["emitted_crossing_count"] == 0
     assert report["target_internal_normalize"] is None
