@@ -119,6 +119,20 @@ def test_mapped_junction_ref_canonicalizes_remote_sumo_cluster_id() -> None:
     assert rebuild_candidate_module._mapped_junction_ref(full_id, "teacher", "candidate") == "cluster_a_b_c_d_#2more"
 
 
+def test_mapped_spatial_attrs_canonicalizes_remote_sumo_cluster_ids() -> None:
+    attrs = rebuild_candidate_module._mapped_spatial_attrs(
+        {"id": "edge", "from": "cluster_a_b_c_d_e_f", "to": "candidate"},
+        0.0,
+        0.0,
+        {},
+        "teacher",
+        "candidate",
+    )
+
+    assert attrs["from"] == "cluster_a_b_c_d_#2more"
+    assert attrs["to"] == "candidate"
+
+
 def test_prune_strict_unmapped_outgoing_boundary_edges_removes_only_unmapped_modal_edge() -> None:
     root = ET.fromstring(
         """<net>

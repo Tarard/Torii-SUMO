@@ -15486,6 +15486,9 @@ def _mapped_spatial_attrs(
         for attr in ("id", "from", "to", "tl"):
             if mapped.get(attr) == teacher_junction_id:
                 mapped[attr] = candidate_junction_id
+    for attr in ("id", "from", "to", "tl"):
+        if attr in mapped:
+            mapped[attr] = _canonical_sumo_cluster_id(mapped[attr])
     if "x" in mapped:
         mapped["x"] = _format_xy(float(mapped["x"]) + dx)
     if "y" in mapped:
