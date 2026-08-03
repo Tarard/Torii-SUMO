@@ -299,6 +299,32 @@ def test_boundary_edge_replacement_aliases_require_physical_edge_match(tmp_path:
     assert aliases == {"-path": "path"}
 
 
+def test_boundary_edge_replacement_aliases_accept_unique_split_segment(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        '<net><edge id="road#1" from="remote" to="j" type="highway.tertiary"/></net>',
+        encoding="utf-8",
+    )
+    final = tmp_path / "final.net.xml"
+    final.write_text(
+        """<net>
+  <edge id="road#1" from="remote" to="split" type="highway.tertiary"/>
+  <edge id="road#1.103" from="split" to="j" type="highway.tertiary"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    aliases = _boundary_edge_replacement_aliases(
+        source,
+        final,
+        source_boundary_edge_ids={"road#1"},
+        final_boundary_edge_ids={"road#1.103"},
+        missing_boundary_edge_ids={"road#1"},
+    )
+
+    assert aliases == {"road#1": "road#1.103"}
+
+
 def test_teacher_endpoint_patch_nodes_copies_candidate_joined_endpoint(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text("<nodes><join nodes=\"a b\" /></nodes>", encoding="utf-8")

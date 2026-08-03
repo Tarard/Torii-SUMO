@@ -10861,6 +10861,22 @@ def _boundary_edge_replacement_aliases(
         }
         if not all(source_endpoints):
             continue
+        split_candidates = [
+            final_edge_id
+            for final_edge_id in sorted(final_boundary_edge_ids - source_boundary_edge_ids)
+            if (
+                (final_edge := final_edges.get(final_edge_id)) is not None
+                and _signed_edge_family_id(final_edge_id) == _signed_edge_family_id(source_edge_id)
+                and final_edge.attrib.get("type", "") == source_type
+                and (
+                    final_edge.attrib.get("from", "") == source_edge.attrib.get("from", "")
+                    or final_edge.attrib.get("to", "") == source_edge.attrib.get("to", "")
+                )
+            )
+        ]
+        if len(split_candidates) == 1:
+            aliases[source_edge_id] = split_candidates[0]
+            continue
         candidates = [
             final_edge_id
             for final_edge_id in sorted(final_boundary_edge_ids - source_boundary_edge_ids)
