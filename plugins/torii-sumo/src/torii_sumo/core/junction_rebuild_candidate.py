@@ -12209,7 +12209,10 @@ def _endpoint_rewrites(approach_endpoint_rebuild_plan: object | None) -> dict[st
         desired_from = str(item.get("desired_from", ""))
         desired_to = str(item.get("desired_to", ""))
         if edge_id and desired_from and desired_to:
-            rewrites[edge_id] = (desired_from, desired_to)
+            rewrites[edge_id] = (
+                _canonical_sumo_cluster_id(desired_from),
+                _canonical_sumo_cluster_id(desired_to),
+            )
     return rewrites
 
 

@@ -133,6 +133,22 @@ def test_mapped_spatial_attrs_canonicalizes_remote_sumo_cluster_ids() -> None:
     assert attrs["to"] == "candidate"
 
 
+def test_endpoint_rewrites_canonicalizes_sumo_cluster_ids() -> None:
+    rewrites = rebuild_candidate_module._endpoint_rewrites(
+        {
+            "edge_rebuilds": [
+                {
+                    "edge_id": "edge",
+                    "desired_from": "cluster_a_b_c_d_e_f",
+                    "desired_to": "target",
+                }
+            ]
+        }
+    )
+
+    assert rewrites == {"edge": ("cluster_a_b_c_d_#2more", "target")}
+
+
 def test_prune_strict_unmapped_outgoing_boundary_edges_removes_only_unmapped_modal_edge() -> None:
     root = ET.fromstring(
         """<net>
