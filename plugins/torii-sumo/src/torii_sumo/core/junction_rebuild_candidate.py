@@ -5994,7 +5994,7 @@ def build_teacher_guided_junction_variant(
     internal_restore_exclude_junction_ids = {
         *compound_junction_ids,
         *(str(value) for value in teacher_absent_tls_junction_ids if str(value)),
-        *_endpoint_rewrite_old_endpoint_ids(lane_patch_report),
+        *_endpoint_rewrite_endpoint_ids(lane_patch_report),
     }
     restore_mutable_edge_ids = set() if structural_osm_boundary_authority else set(edge_map.values())
     expand_restore_scope = not (structural_osm_boundary_authority or strict_teacher_replay)
@@ -18847,8 +18847,8 @@ def _command_report(result: Any) -> dict[str, object]:
     return payload
 
 
-def _endpoint_rewrite_old_endpoint_ids(lane_patch_report: dict[str, object]) -> set[str]:
-    old_ids: set[str] = set()
+def _endpoint_rewrite_endpoint_ids(lane_patch_report: dict[str, object]) -> set[str]:
+    endpoint_ids: set[str] = set()
     for field in ("endpoint_rewritten_existing_mapped_edges", "endpoint_rewritten_missing_mapped_edges"):
         entries = lane_patch_report.get(field, [])
         if not isinstance(entries, list):
@@ -18862,9 +18862,10 @@ def _endpoint_rewrite_old_endpoint_ids(lane_patch_report: dict[str, object]) -> 
                     continue
                 old = str(change.get("old", ""))
                 new = str(change.get("new", ""))
-                if old and old != new and not old.startswith(":"):
-                    old_ids.add(old)
-    return old_ids
+                if old == new:
+                    continue
+                endpoint_ids.update(value for value in (old, new) if value and not value.startswith(":"))
+    return endpoint_ids
 
 
 def _compare_teacher_models(

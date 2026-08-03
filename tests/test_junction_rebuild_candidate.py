@@ -17,7 +17,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _expand_fragmented_tls_join_scope_candidate,
     _compare_teacher_models,
     _expanded_scope_followup_candidate_for_unsafe_internal_replay,
-    _endpoint_rewrite_old_endpoint_ids,
+    _endpoint_rewrite_endpoint_ids,
     _final_context_parity_gate,
     _hybrid_osm_approach_authority_policy,
     _lane_surface_overlap_touches_junctions,
@@ -11601,8 +11601,8 @@ def test_write_teacher_lane_patch_edges_applies_approach_endpoint_rewrites(tmp_p
     assert report["endpoint_rewritten_existing_mapped_edge_count"] == 1
 
 
-def test_endpoint_rewrite_old_endpoint_ids_returns_replaced_plain_nodes() -> None:
-    assert _endpoint_rewrite_old_endpoint_ids(
+def test_endpoint_rewrite_endpoint_ids_returns_both_changed_plain_nodes() -> None:
+    assert _endpoint_rewrite_endpoint_ids(
         {
             "endpoint_rewritten_existing_mapped_edges": [
                 {"from": {"old": "old_upstream", "new": "teacher_upstream"}},
@@ -11613,7 +11613,7 @@ def test_endpoint_rewrite_old_endpoint_ids_returns_replaced_plain_nodes() -> Non
                 {"to": {"old": "old_downstream", "new": "teacher_downstream"}},
             ],
         }
-    ) == {"old_downstream", "old_upstream"}
+    ) == {"external", "old_downstream", "old_upstream", "teacher_downstream", "teacher_upstream"}
 
 
 def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:
