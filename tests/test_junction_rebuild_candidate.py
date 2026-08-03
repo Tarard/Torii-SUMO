@@ -8196,8 +8196,10 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
         node_file = output_dir / "joined.nod.xml"
         edge_file = output_dir / "joined.edg.xml"
         connection_file = output_dir / "joined.con.xml"
+        tllogic_file = output_dir / "joined.tll.xml"
         node_file.write_text(
-            '<nodes><node id="cluster_a_b" x="0" y="0"/></nodes>',
+            '<nodes><node id="cluster_a_b" x="0" y="0"/>'
+            '<node id="stale" x="20" y="0" type="traffic_light" tl="stale"/></nodes>',
             encoding="utf-8",
         )
         edge_file.write_text(
@@ -8207,14 +8209,22 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
 </edges>""",
             encoding="utf-8",
         )
-        connection_file.write_text("<connections/>", encoding="utf-8")
+        connection_file.write_text(
+            '<connections><connection from="west" to="east" tl="stale" linkIndex="47"/></connections>',
+            encoding="utf-8",
+        )
+        tllogic_file.write_text(
+            '<tlLogics><tlLogic id="stale" type="static" programID="0" offset="0">'
+            '<phase duration="30" state="G"/></tlLogic></tlLogics>',
+            encoding="utf-8",
+        )
         return {
             "status": "pass",
             "raw_node_file": str(node_file),
             "raw_edge_file": str(edge_file),
             "raw_connection_file": str(connection_file),
             "raw_type_file": "",
-            "raw_tllogic_file": "",
+            "raw_tllogic_file": str(tllogic_file),
         }
 
     def fake_variant(**kwargs):
@@ -8223,6 +8233,15 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
         joined_edges = ET.parse(kwargs["raw_edge_file"]).getroot()
         assert joined_edges.find("edge[@id='west']").attrib["to"] == "cluster_a_b"
         assert joined_edges.find("edge[@id='east']").attrib["from"] == "cluster_a_b"
+        joined_nodes = ET.parse(kwargs["raw_node_file"]).getroot()
+        assert joined_nodes.find("node[@id='stale']").attrib["type"] == "priority"
+        joined_connections = ET.parse(kwargs["raw_connection_file"]).getroot()
+        assert joined_connections.find("connection").attrib == {
+            "from": "west",
+            "to": "east",
+            "uncontrolled": "true",
+        }
+        assert ET.parse(kwargs["raw_tllogic_file"]).getroot().find("tlLogic") is None
         materialized_plain_checked = True
         final_net = kwargs["output_dir"] / "final.net.xml"
         final_net.write_text(

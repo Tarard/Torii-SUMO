@@ -8127,6 +8127,23 @@ def run_teacher_guided_repair_queue(
                         replay_type_file = Path(raw_type_value) if raw_type_value else None
                         raw_tllogic_value = str(join_plain_report.get("raw_tllogic_file", ""))
                         replay_tllogic_file = Path(raw_tllogic_value) if raw_tllogic_value else None
+                        join_plain_tls_cleanup = _prune_plain_tls_against_teacher(
+                            teacher_net_file=teacher_net_file,
+                            node_file=replay_node_file,
+                            connection_file=replay_connection_file,
+                            tllogic_file=replay_tllogic_file,
+                        )
+                        scope_report["full_network_join_plain_teacher_tls_cleanup"] = join_plain_tls_cleanup
+                        if join_plain_tls_cleanup.get("status") == "fail":
+                            scope_report["status"] = "review"
+                            skipped_candidates.append(
+                                {
+                                    "index": index,
+                                    "junction_id": junction_id,
+                                    "candidate_status": "full_network_join_plain_tls_cleanup_failed",
+                                }
+                            )
+                            continue
                         partition_shape_report = _write_partition_aware_joined_junction_shapes(
                             joined_node_file=replay_node_file,
                             source_node_file=current_raw_node_file,
