@@ -433,6 +433,7 @@ def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size
         target_source_junction_ids=(spec["junction_id"],),
         target_candidate_junction_ids=(spec["junction_id"],),
         window_size=f"{window_size[0]},{window_size[1]}",
+        window_timeout_seconds=60.0,
     )
     session.open()
     try:
