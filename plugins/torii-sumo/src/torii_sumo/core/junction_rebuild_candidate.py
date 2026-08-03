@@ -6322,6 +6322,7 @@ def build_teacher_guided_junction_variant(
     )
     target_internal_replay_report = None
     compound_internal_replay_reports: list[dict[str, object]] = []
+    compound_internal_replay_junction_ids: set[str] = set()
     target_internal_replay_fallback = False
     target_internal_replay_fallback_tl_logic_report = None
     target_internal_replay_fallback_sumo_report = None
@@ -6425,15 +6426,18 @@ def build_teacher_guided_junction_variant(
                     junction_id=compound_junction_id,
                     edge_map=compound_edge_map,
                     teacher_junction_id=compound_junction_id,
+                    geometry_anchor_edge_file=tl_logic_input_file,
+                    blend_geometry_anchor_at_target=True,
                     copy_unmapped_boundary_edges=True,
                     preserve_mapped_boundary_endpoints=True,
                     preserve_unmapped_boundary_edges=True,
                     prune_unmapped_micro_boundary_edges=True,
                     prune_strict_unmapped_outgoing_boundary_edges=True,
-                    preserve_target_junction_shape=preserve_target_junction_shape,
+                    preserve_target_junction_shape=True,
                 )
                 compound_report["junction_id"] = compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
+                compound_internal_replay_junction_ids.add(compound_junction_id)
                 if compound_report.get("status") != "pass":
                     return _write_teacher_guided_report(
                         report_file,
@@ -6742,6 +6746,7 @@ def build_teacher_guided_junction_variant(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
                 junction_id=junction_id,
+                exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
             )
             normalized_tl_logic_report = write_teacher_tllogic_net(
                 candidate_net_file=target_internal_normalized_net_file,
@@ -6773,6 +6778,7 @@ def build_teacher_guided_junction_variant(
                         source_file=target_internal_replay_file,
                         target_file=target_internal_normalized_unrestored_net_file,
                         junction_id=junction_id,
+                        exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
                     )
                     unrestored_tl_logic_report = write_teacher_tllogic_net(
                         candidate_net_file=target_internal_normalized_unrestored_net_file,
@@ -6830,6 +6836,7 @@ def build_teacher_guided_junction_variant(
                 source_file=final_net_file,
                 target_file=teacher_guided_normalized_net_file,
                 junction_id=junction_id,
+                exclude_adjacent_junction_ids=compound_internal_replay_junction_ids,
             )
             normalized_final_sumo_command = [
                 sumo_binary,
@@ -18533,7 +18540,13 @@ def _restore_non_target_internal_artifacts(
     }
 
 
-def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, junction_id: str) -> dict[str, object]:
+def _restore_replayed_geometry_attrs(
+    *,
+    source_file: Path,
+    target_file: Path,
+    junction_id: str,
+    exclude_adjacent_junction_ids: set[str] | None = None,
+) -> dict[str, object]:
     if not source_file.exists():
         return _failure(f"source net file does not exist: {source_file}")
     if not target_file.exists():
@@ -18610,13 +18623,17 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         for junction in source_root.findall("junction")
         if junction.attrib.get("id")
     }
+    excluded_adjacent_ids = exclude_adjacent_junction_ids or set()
     adjacent_junctions = {
         endpoint_id: source_junctions[endpoint_id]
         for edge_id in restored_edge_ids
         for edge in [source_edges.get(edge_id)]
         if edge is not None
         for endpoint_id in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
-        if endpoint_id and endpoint_id != junction_id and endpoint_id in source_junctions
+        if endpoint_id
+        and endpoint_id != junction_id
+        and endpoint_id not in excluded_adjacent_ids
+        and endpoint_id in source_junctions
     }
     restored_adjacent_junctions = _restore_geometry_anchor_junctions(target_root, adjacent_junctions)
     missing_edge_ids = []
@@ -18674,6 +18691,7 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "restored_junction_attr_count": restored_junction_attr_count,
         "restored_adjacent_junction_count": len(restored_adjacent_junctions),
         "restored_adjacent_junction_ids": restored_adjacent_junctions,
+        "excluded_adjacent_junction_ids": sorted(excluded_adjacent_ids),
         "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,

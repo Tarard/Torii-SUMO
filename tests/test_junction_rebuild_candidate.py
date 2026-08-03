@@ -16223,6 +16223,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
         source_file=replayed,
         target_file=normalized,
         junction_id="j",
+        exclude_adjacent_junction_ids={"b"},
     )
 
     root = ET.parse(normalized).getroot()
@@ -16234,10 +16235,11 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
     assert root.find("junction[@id='j']").attrib["shape"] == "9,-1 11,-1 11,1 9,1"
     assert root.find("junction[@id='a']").attrib["shape"] == "0,-1 0,1"
-    assert root.find("junction[@id='b']").attrib["shape"] == "20,-1 20,1"
+    assert root.find("junction[@id='b']").attrib["shape"] == "bad-b"
     assert root.find("junction[@id='j']/request").attrib["response"] == "101"
     assert report["restored_junction_attr_count"] == 1
-    assert report["restored_adjacent_junction_ids"] == ["a", "b"]
+    assert report["restored_adjacent_junction_ids"] == ["a"]
+    assert report["excluded_adjacent_junction_ids"] == ["b"]
     assert report["restored_request_count"] == 1
 
 
@@ -18400,6 +18402,8 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
+    assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
+    assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is True
     assert report["connection_plan"]["emit_crossings"] is False
     assert report["connection_plan"]["emitted_crossing_count"] == 0
     assert report["target_internal_normalize"] is None
