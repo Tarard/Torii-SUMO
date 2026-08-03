@@ -3302,6 +3302,18 @@ def write_teacher_target_internal_replay_net(
             unblended_geometry_anchor_edge_ids,
         )
 
+    final_connection_keys = {_connection_key(connection) for connection in candidate_root.findall("connection")}
+    removed_stale_replaced_edge_connections = [
+        connection
+        for connection in removed_stale_replaced_edge_connections
+        if (
+            str(connection.get("from", "")),
+            str(connection.get("to", "")),
+            str(connection.get("fromLane", "0")),
+            str(connection.get("toLane", "0")),
+        )
+        not in final_connection_keys
+    ]
     junction_shape_sanitization = _sanitize_junction_shapes(candidate_root)
 
     ET.indent(candidate_root, space="    ")

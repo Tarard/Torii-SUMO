@@ -15665,6 +15665,45 @@ def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boun
     assert report["removed_stale_replaced_edge_connection_count"] == 1
 
 
+def test_target_internal_replay_preserves_valid_neighbor_internal_connection_to_replaced_boundary(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="main" from="old" to="teacher_j"><lane id="main_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="main" from="old" to="j"><lane id="main_0" index="0" shape="0,1 10,1"/></edge>
+  <edge id=":old_0" function="internal"><lane id=":old_0_0" index="0"/></edge>
+  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=":old_0_0"/>
+  <junction id="j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
+  <connection from=":old_0" to="main" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"main": "main"},
+        preserve_mapped_boundary_endpoints=True,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("connection[@from=':old_0'][@to='main']") is not None
+    assert report["removed_stale_replaced_edge_connection_count"] == 0
+
+
 def test_write_teacher_target_internal_replay_net_removes_any_invalid_lane_connection(
     tmp_path: Path,
 ) -> None:
