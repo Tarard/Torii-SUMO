@@ -7968,8 +7968,12 @@ def test_run_teacher_guided_repair_queue_replays_existing_joined_expanded_scope(
     assert scope_report["missing_node_ids"] == ["a", "b"]
     assert report["attempted_candidate_count"] == 1
     assert report["skipped_candidate_count"] == 0
+    assert report["local_scope_candidate_count"] == 0
+    assert report["global_candidate_eligible_count"] == 1
+    assert report["variant_reports"][0]["candidate_scope_status"] == "full_network"
     assert variant_calls[0]["junction_id"] == "cluster_a_b"
-    assert variant_calls[0]["raw_node_file"] == Path(scope_report["node_file"])
+    assert variant_calls[0]["raw_node_file"] == raw_nodes
+    assert variant_calls[0]["candidate_net_file"] == candidate_net
 
 
 def test_write_expanded_scope_plain_inputs_drops_stale_joined_node_before_join_patch(

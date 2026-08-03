@@ -7700,9 +7700,17 @@ def run_teacher_guided_repair_queue(
                 for node_id in item.get("missing_endpoint_ids", []) or []
                 if str(node_id)
             }
+            existing_joined_scope_materialized = (
+                joined_scope_junction_id == junction_id
+                and joined_scope_junction_id in _plain_node_ids(current_raw_node_file)
+            )
             use_full_network_replay = (
                 not str(scope_report.get("join_nodes_patch_file", ""))
-                and (not missing_node_ids or missing_node_ids <= skipped_endpoint_missing_ids)
+                and (
+                    existing_joined_scope_materialized
+                    or not missing_node_ids
+                    or missing_node_ids <= skipped_endpoint_missing_ids
+                )
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("missing_blocked_edge_ids")
             )
