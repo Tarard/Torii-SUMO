@@ -39,7 +39,9 @@ def point_before_lane_end(
 
 
 def lane_click_points(points: Sequence[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
-    return tuple(dict.fromkeys(point_before_lane_end(points, distance_m=distance) for distance in (8.0, 4.0, 2.0)))
+    length = sum(math.dist(start, end) for start, end in zip(points, points[1:], strict=False))
+    distances = (min(8.0, length * 0.75), min(4.0, length * 0.5), min(2.0, length * 0.25))
+    return tuple(dict.fromkeys(point_before_lane_end(points, distance_m=distance) for distance in distances))
 
 
 def canvas_click_for_world_point(
