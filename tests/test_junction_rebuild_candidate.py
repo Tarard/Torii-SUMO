@@ -18763,8 +18763,20 @@ def test_build_teacher_guided_junction_variant_uses_unrestored_normalized_replay
     ]
 
 
-def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_net(tmp_path: Path, monkeypatch) -> None:
+def test_build_teacher_guided_junction_variant_normalizes_pruned_final_net(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "_prune_teacher_absent_residual_corridor",
+        lambda **kwargs: {
+            "status": "pass",
+            "variant_file": str(kwargs["net_file"]),
+            "candidate_node_count": 1,
+            "removed_node_ids": ["absent"],
+            "unexpected_removed_node_ids": [],
+            "removed_external_edge_ids": ["residual"],
+        },
+    )
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
         """<net>
@@ -18866,18 +18878,19 @@ def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_n
         edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
         prefix="demo",
         replay_target_internal_subgraph=True,
+        teacher_absent_tls_junction_ids=["absent"],
         command_runner=fake_runner,
     )
 
     assert report["status"] == "pass"
     assert report["target_internal_replay_fallback"] is False
-    assert report["target_internal_normalize"]["status"] == "pass"
+    assert report["target_internal_normalize"] is None
     assert report["teacher_guided_normalize"]["status"] == "pass"
     assert report["teacher_guided_normalize"]["geometry_restore"]["status"] == "pass"
     assert report["final_net_file"].endswith("tg_norm.net.xml")
     assert report["teacher_guided_normalized_net_file"].endswith("tg_norm.net.xml")
-    assert sumo_inputs == ["demo_teacher_guided.net.xml", "demo_teacher_guided.net.xml", "tg_norm.net.xml"]
-    assert normalized_outputs == ["demo_target_internal_normalized.net.xml", "tg_norm.net.xml"]
+    assert sumo_inputs == ["demo_teacher_guided.net.xml", "tg_norm.net.xml"]
+    assert normalized_outputs == ["tg_norm.net.xml"]
 
 
 def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_map(tmp_path: Path, monkeypatch) -> None:

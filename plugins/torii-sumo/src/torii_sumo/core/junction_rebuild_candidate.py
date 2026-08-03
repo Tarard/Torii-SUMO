@@ -6426,6 +6426,7 @@ def build_teacher_guided_junction_variant(
         )
 
     teacher_absent_geometry_contraction_report = None
+    teacher_absent_geometry_changed = False
     if teacher_absent_tls_junction_ids:
         expected_contraction_ids = {str(value) for value in teacher_absent_tls_junction_ids if str(value)}
         residual_corridor_prune = _prune_teacher_absent_residual_corridor(
@@ -6623,6 +6624,9 @@ def build_teacher_guided_junction_variant(
             )
         if not contraction_scope_not_needed:
             final_net_file = contraction_variant_file
+        teacher_absent_geometry_changed = bool(
+            teacher_absent_geometry_contraction_report.get("removed_node_ids", [])
+        )
 
     sumo_command = [
         sumo_binary,
@@ -6640,6 +6644,7 @@ def build_teacher_guided_junction_variant(
     sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
     if (
         sumo_report.get("status") != "pass"
+        and not teacher_absent_geometry_changed
         and replay_target_internal_subgraph
         and isinstance(target_internal_replay_report, dict)
         and target_internal_replay_report.get("status") == "pass"
@@ -6794,6 +6799,7 @@ def build_teacher_guided_junction_variant(
                 sumo_report = normalized_final_sumo_report
     if (
         sumo_report.get("status") != "pass"
+        and not teacher_absent_geometry_changed
         and replay_target_internal_subgraph
         and isinstance(target_internal_replay_report, dict)
         and target_internal_replay_report.get("status") == "pass"
