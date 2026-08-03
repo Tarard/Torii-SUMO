@@ -153,6 +153,26 @@ def test_visual_comparison_rejects_wrong_target_direction(tmp_path: Path) -> Non
     assert "target_direction_missing" in report["reasons"]
 
 
+def test_visual_comparison_ignores_tiny_palette_speckles(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (600, 500), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((220, 250, 380, 250), fill=(0, 255, 255), width=4)
+    candidate_draw = ImageDraw.Draw(candidate)
+    candidate_draw.line((10, 10, 590, 10), fill=(0, 255, 255), width=8)
+    for x in range(10, 590, 10):
+        candidate_draw.point((x, 20 + x % 30), fill=(0, 255, 255))
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    report = analyze_connection_pair(teacher_file, candidate_file)
+
+    assert report["status"] == "pass"
+    assert report["layers"]["source"]["teacher_component_count"] == 1
+    assert report["layers"]["source"]["candidate_component_count"] == 1
+
+
 def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:
     class FakeSession:
         hwnd = 17

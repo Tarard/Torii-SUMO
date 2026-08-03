@@ -165,19 +165,24 @@ def _numbers(value: str, count: int, label: str) -> tuple[float, ...]:
     return numbers
 
 
-def _component_count(points: set[tuple[int, int]]) -> int:
+def _meaningful_components(points: set[tuple[int, int]], minimum_size: int = 20) -> list[set[tuple[int, int]]]:
     remaining = set(points)
-    count = 0
+    components = []
     while remaining:
-        count += 1
-        queue = collections.deque([remaining.pop()])
+        component = {remaining.pop()}
+        queue = collections.deque(component)
         while queue:
             x, y = queue.popleft()
-            for neighbor in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                if neighbor in remaining:
-                    remaining.remove(neighbor)
-                    queue.append(neighbor)
-    return count
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    neighbor = x + dx, y + dy
+                    if neighbor in remaining:
+                        remaining.remove(neighbor)
+                        component.add(neighbor)
+                        queue.append(neighbor)
+        if len(component) >= minimum_size:
+            components.append(component)
+    return components
 
 
 def _palette_points(image: Image.Image, tolerance: int) -> dict[str, set[tuple[int, int]]]:
@@ -195,6 +200,13 @@ def _palette_points(image: Image.Image, tolerance: int) -> dict[str, set[tuple[i
 
 
 def _point_stats(points: set[tuple[int, int]], center: tuple[int, int]) -> dict[str, Any]:
+    points = {
+        point
+        for point in points
+        if (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 <= 160**2
+    }
+    components = _meaningful_components(points)
+    points = set().union(*components) if components else set()
     return {
         "pixel_count": len(points),
         "bbox": (
@@ -211,7 +223,7 @@ def _point_stats(points: set[tuple[int, int]], center: tuple[int, int]) -> dict[
             int((math.degrees(math.atan2(center[1] - y, x - center[0])) % 360.0) // 45.0)
             for x, y in points
         }),
-        "component_count": _component_count(points),
+        "component_count": len(components),
     }
 
 
@@ -436,7 +448,10 @@ def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size
         destination = output_dir / "connection.png"
         shutil.copy2(selected["screenshot_file"], destination)
         with Image.open(destination) as opened:
-            source_pixels = len(_palette_points(opened.crop(canvas), 12)["source"])
+            source_pixels = _point_stats(
+                _palette_points(opened.crop(canvas), 12)["source"],
+                (click[0] - canvas[0], click[1] - canvas[1]),
+            )["pixel_count"]
         status = "pass" if source_pixels >= 20 else "review_required"
         return {
             "status": status,
