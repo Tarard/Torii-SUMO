@@ -6652,7 +6652,7 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert variant_calls[0]["raw_edge_file"] != raw_edges
     assert variant_calls[0]["replay_target_internal_subgraph"] is True
     assert variant_calls[0]["preserve_teacher_lane_shapes"] is False
-    assert variant_calls[0]["preserve_target_junction_shape"] is True
+    assert variant_calls[0]["preserve_target_junction_shape"] is False
     assert variant_calls[0]["structural_osm_boundary_authority"] is False
     assert variant_calls[0]["strict_teacher_replay"] is True
     assert variant_calls[0]["safety_junction_ids"] == ["cluster_a_b"]

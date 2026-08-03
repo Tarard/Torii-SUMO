@@ -6330,10 +6330,18 @@ def build_teacher_guided_junction_variant(
             # Single-junction replay keeps teacher geometry for parity.
             geometry_anchor_edge_file=(
                 candidate_net_file
-                if len(joined_source_node_ids) > 1 and not preserve_target_junction_shape
+                if (
+                    len(joined_source_node_ids) > 1
+                    and not preserve_target_junction_shape
+                    and not strict_teacher_replay
+                )
                 else None
             ),
-            blend_geometry_anchor_at_target=len(joined_source_node_ids) > 1 and not preserve_target_junction_shape,
+            blend_geometry_anchor_at_target=(
+                len(joined_source_node_ids) > 1
+                and not preserve_target_junction_shape
+                and not strict_teacher_replay
+            ),
             # Strict TUM replay retains teacher-only modal boundary edges when
             # their transformed endpoints exist; default hybrid replay keeps
             # the candidate boundary and reports unmapped edges instead.
@@ -8480,7 +8488,7 @@ def run_teacher_guided_repair_queue(
                         preserve_teacher_lane_shapes=(
                             False if strict_teacher_replay else not use_full_network_join_patch_replay
                         ),
-                        preserve_target_junction_shape=strict_teacher_replay,
+                        preserve_target_junction_shape=False,
                         structural_osm_boundary_authority=(
                             use_full_network_join_patch_replay and not strict_teacher_replay
                         ),
