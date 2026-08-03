@@ -8324,6 +8324,88 @@ def run_teacher_guided_repair_queue(
                             }
                         )
                         continue
+                    join_groups = [
+                        [str(value) for value in group if str(value)]
+                        for group in scope_report.get("join_groups", []) or []
+                        if isinstance(group, list)
+                    ]
+                    teacher_cluster_ids = _teacher_cluster_ids_for_join_groups(
+                        join_groups,
+                        teacher_join_groups_by_cluster,
+                        scope_report.get("joined_scope_junction_ids", []) or [],
+                    )
+                    join_aliases = {
+                        member_id: cluster_id
+                        for cluster_id in teacher_cluster_ids
+                        for group in join_groups
+                        if set(group) == set(_sumo_cluster_member_ids(cluster_id))
+                        for member_id in group
+                    }
+                    join_mutable_junction_ids = {
+                        *join_aliases,
+                        *join_aliases.values(),
+                        *(
+                            str(value)
+                            for value in scope_report.get("expanded_rebuild_scope", {}).get(
+                                "junction_ids", []
+                            )
+                            if str(value)
+                        ),
+                    }
+                    join_source_root = ET.parse(current_candidate_net_file).getroot()
+                    join_target_root = ET.parse(replay_candidate_net_file).getroot()
+                    join_mutable_edge_ids = {
+                        edge.attrib["id"]
+                        for root in (join_source_root, join_target_root)
+                        for edge in root.findall("edge")
+                        if edge.attrib.get("id")
+                        and not edge.attrib["id"].startswith(":")
+                        and join_mutable_junction_ids
+                        & {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+                    }
+                    join_source_junction_ids = {
+                        junction.attrib.get("id", "")
+                        for junction in join_source_root.findall("junction")
+                        if junction.attrib.get("id")
+                    }
+                    join_target_junction_ids = {
+                        junction.attrib.get("id", "")
+                        for junction in join_target_root.findall("junction")
+                        if junction.attrib.get("id")
+                    }
+                    join_restore_applicable = bool(
+                        (join_source_junction_ids & join_target_junction_ids) - join_mutable_junction_ids
+                    )
+                    del join_source_root, join_target_root
+                    full_network_join_restore = (
+                        restore_off_scope_netconvert_artifacts(
+                            source_file=current_candidate_net_file,
+                            target_file=replay_candidate_net_file,
+                            mutable_junction_ids=join_mutable_junction_ids,
+                            mutable_edge_ids=join_mutable_edge_ids,
+                            expand_mutable_edge_endpoints=False,
+                            junction_aliases=join_aliases,
+                            declared_absorbed_edge_ids=set(preabsorbed_join_internal_edge_ids),
+                        )
+                        if join_restore_applicable
+                        else {
+                            "status": "pass",
+                            "claim_status": "diagnostic-demo",
+                            "scope_not_needed": True,
+                            "reason": "source or joined fixture has no junction graph",
+                        }
+                    )
+                    scope_report["full_network_join_off_scope_restore"] = full_network_join_restore
+                    if full_network_join_restore.get("status") != "pass":
+                        scope_report["status"] = "review"
+                        skipped_candidates.append(
+                            {
+                                "index": index,
+                                "junction_id": junction_id,
+                                "candidate_status": "full_network_join_off_scope_restore_failed",
+                            }
+                        )
+                        continue
                     edge_map_candidate_net_file = replay_candidate_net_file
                     if rewrite_joined_endpoints:
                         mapping_candidate_net_file = (
