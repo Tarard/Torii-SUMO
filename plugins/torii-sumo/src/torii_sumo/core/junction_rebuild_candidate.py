@@ -2266,6 +2266,43 @@ def write_teacher_target_internal_replay_net(
         if mapped_edge_id in needed_boundary_edge_id_set or mapped_boundary_counts[mapped_edge_id] > 1:
             replay_edge_map[edge_id] = edge_id
             preserved_colliding_boundary_edges.append(edge_id)
+    restored_teacher_split_boundary_edges = []
+    for edge_id in needed_boundary_edge_ids:
+        mapped_edge_id = replay_edge_map.get(edge_id, edge_id)
+        teacher_boundary_edge = teacher_edges.get(edge_id)
+        teacher_continuation_edge = teacher_edges.get(mapped_edge_id)
+        candidate_unsplit_edge = candidate_edges_by_id.get(mapped_edge_id)
+        if (
+            mapped_edge_id == edge_id
+            or teacher_boundary_edge is None
+            or teacher_continuation_edge is None
+            or candidate_unsplit_edge is None
+            or _signed_edge_family_id(edge_id) != _signed_edge_family_id(mapped_edge_id)
+            or teacher_junction_id
+            not in (
+                teacher_boundary_edge.attrib.get("from", ""),
+                teacher_boundary_edge.attrib.get("to", ""),
+            )
+            or teacher_junction_id
+            in (
+                teacher_continuation_edge.attrib.get("from", ""),
+                teacher_continuation_edge.attrib.get("to", ""),
+            )
+            or len(
+                {
+                    teacher_boundary_edge.attrib.get("from", ""),
+                    teacher_boundary_edge.attrib.get("to", ""),
+                }
+                & {
+                    teacher_continuation_edge.attrib.get("from", ""),
+                    teacher_continuation_edge.attrib.get("to", ""),
+                }
+            )
+            != 1
+        ):
+            continue
+        replay_edge_map[edge_id] = edge_id
+        restored_teacher_split_boundary_edges.append(edge_id)
     same_family_continuation_edge_map = _same_family_continuation_edge_map(
         teacher_edges,
         candidate_edges_by_id,
@@ -2910,7 +2947,10 @@ def write_teacher_target_internal_replay_net(
                     continuation_edge is None
                     or boundary_edge is None
                     or continuation_edge_id in stale_split_replacements
-                    or continuation_edge_id in candidate_edges_by_id
+                    or (
+                        continuation_edge_id in candidate_edges_by_id
+                        and boundary_edge_id not in restored_teacher_split_boundary_edges
+                    )
                     or continuation_edge_id in teacher_boundary_edge_id_set
                     or continuation_edge_id.startswith(":")
                     or not _edge_is_vehicle_continuation_candidate(continuation_edge)
@@ -2963,6 +3003,15 @@ def write_teacher_target_internal_replay_net(
                 teacher_junction_id,
                 junction_id,
             )
+            replaced_continuation_edge = candidate_edges_by_id.get(edge_id)
+            if replaced_continuation_edge is not None:
+                _remove_edge_lanes_from_destination_junction(
+                    candidate_root,
+                    replaced_continuation_edge,
+                    all_junctions=True,
+                )
+                candidate_root.remove(replaced_continuation_edge)
+                candidate_edge_ids.discard(edge_id)
             candidate_root.insert(continuation_insert_at, copied_edge)
             continuation_insert_at += 1
             candidate_edge_ids.add(edge_id)
@@ -3286,6 +3335,7 @@ def write_teacher_target_internal_replay_net(
             candidate_root,
             junction_id=junction_id,
             mapped_candidate_edge_ids=set(replay_edge_map.values()),
+            teacher_edge_ids=set(teacher_edges),
         )
 
     unblended_geometry_anchor_edge_ids = geometry_anchor_edge_ids - set(blended_geometry_anchor_edge_ids)
@@ -3396,6 +3446,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_split_tllogic_ids": removed_stale_split_tllogic_ids,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
+        "restored_teacher_split_boundary_edge_count": len(restored_teacher_split_boundary_edges),
+        "restored_teacher_split_boundary_edges": restored_teacher_split_boundary_edges,
         "same_family_continuation_edge_map_count": len(same_family_continuation_edge_map),
         "same_family_continuation_edge_map": dict(sorted(same_family_continuation_edge_map.items())),
         "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
@@ -15829,6 +15881,7 @@ def _prune_strict_unmapped_outgoing_boundary_edges(
     *,
     junction_id: str,
     mapped_candidate_edge_ids: set[str],
+    teacher_edge_ids: set[str] | None = None,
 ) -> dict[str, object]:
     """Remove modal outgoing approaches that have no teacher movement mapping."""
 
@@ -15840,6 +15893,7 @@ def _prune_strict_unmapped_outgoing_boundary_edges(
         and not edge.attrib.get("function")
     }
     candidate_edge_ids = set(mapped_candidate_edge_ids)
+    teacher_family_ids = {_edge_family_id(edge_id) for edge_id in teacher_edge_ids or set()}
     removable_edge_ids = []
     for edge_id, edge in edges_by_id.items():
         if edge_id in candidate_edge_ids or edge.attrib.get("from") != junction_id:
@@ -15856,7 +15910,27 @@ def _prune_strict_unmapped_outgoing_boundary_edges(
             continue
         removable_edge_ids.append(edge_id)
 
+    for edge_id, edge in edges_by_id.items():
+        if edge_id in candidate_edge_ids or edge.attrib.get("from") != junction_id:
+            continue
+        reverse_edge_id = edge_id.removeprefix("-") if edge_id.startswith("-") else f"-{edge_id}"
+        reverse_edge = edges_by_id.get(reverse_edge_id)
+        family_id = _edge_family_id(edge_id)
+        if (
+            not teacher_edge_ids
+            or edge_id in teacher_edge_ids
+            or reverse_edge_id in teacher_edge_ids
+            or family_id not in teacher_family_ids
+            or reverse_edge is None
+            or reverse_edge_id in candidate_edge_ids
+            or reverse_edge.attrib.get("from") != edge.attrib.get("to")
+            or reverse_edge.attrib.get("to") != junction_id
+        ):
+            continue
+        removable_edge_ids.extend((edge_id, reverse_edge_id))
+
     removed_connection_count = 0
+    removable_edge_ids = sorted(set(removable_edge_ids))
     removable = set(removable_edge_ids)
     for connection in list(root.findall("connection")):
         if {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removable:

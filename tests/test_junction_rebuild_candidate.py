@@ -140,6 +140,32 @@ def test_prune_strict_unmapped_outgoing_boundary_edges_removes_only_unmapped_mod
     assert root.find("connection[@from='extra_modal']") is None
 
 
+def test_prune_strict_unmapped_outgoing_boundary_edges_removes_unmapped_two_way_residual() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="mapped" from="j" to="remote"><lane id="mapped_0" index="0" allow="passenger"/></edge>
+  <edge id="service" from="j" to="stub"><lane id="service_0" index="0" allow="passenger"/></edge>
+  <edge id="-service" from="stub" to="j"><lane id="-service_0" index="0" allow="passenger"/></edge>
+  <junction id="j" type="traffic_light" incLanes="-service_0"/>
+  <junction id="remote" type="priority"/>
+  <junction id="stub" type="priority" incLanes="service_0"/>
+  <connection from="-service" to="mapped" fromLane="0" toLane="0"/>
+</net>"""
+    )
+
+    report = _prune_strict_unmapped_outgoing_boundary_edges(
+        root,
+        junction_id="j",
+        mapped_candidate_edge_ids={"mapped"},
+        teacher_edge_ids={"service#1", "-service#1"},
+    )
+
+    assert report["removed_edge_ids"] == ["-service", "service"]
+    assert root.find("edge[@id='service']") is None
+    assert root.find("edge[@id='-service']") is None
+    assert root.find("connection[@from='-service']") is None
+
+
 def test_safe_junction_shape_discards_sumo_sentinel_points() -> None:
     shape = "-1073741822.43,-1073741818.19 -1073741818.19,-1073741822.43 0,0 4,0 4,4 0,4"
 
@@ -15721,6 +15747,50 @@ def test_write_teacher_target_internal_replay_net_maps_same_family_continuation_
 
     assert report["status"] == "pass"
     assert report["effective_edge_map"]["road#1"] == "road#3"
+
+
+def test_write_teacher_target_internal_replay_net_restores_teacher_split_boundary(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#1" from="far" to="split" type="highway.tertiary"><lane id="road#1_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="road#1.42" from="split" to="j" type="highway.tertiary"><lane id="road#1.42_0" index="0" shape="10,0 20,0"/></edge>
+  <junction id="far" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="split" type="priority" x="10" y="0" incLanes="road#1_0" intLanes=""/>
+  <junction id="j" type="priority" x="20" y="0" incLanes="road#1.42_0" intLanes=""/>
+  <connection from="road#1" to="road#1.42" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#1" from="far" to="j" type="highway.tertiary"><lane id="road#1_0" index="0" shape="0,0 20,0"/></edge>
+  <junction id="far" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" x="20" y="0" incLanes="road#1_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"road#1.42": "road#1"},
+        preserve_mapped_boundary_endpoints=True,
+        preserve_unmapped_boundary_edges=True,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='road#1']").attrib["to"] == "split"
+    assert root.find("edge[@id='road#1.42']").attrib["from"] == "split"
+    assert root.find("edge[@id='road#1.42']").attrib["to"] == "j"
+    assert root.find("junction[@id='split']") is not None
+    assert root.find("connection[@from='road#1'][@to='road#1.42']") is not None
+    assert report["copied_boundary_continuation_edges"] == ["road#1"]
 
 
 def test_write_teacher_target_internal_replay_net_removes_replaced_boundary_connection_with_stale_lane_index(
