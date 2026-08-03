@@ -13455,6 +13455,57 @@ def test_target_surface_overlap_gate_allows_non_regressed_junction_overlap(tmp_p
     assert gate["junction_overlap_regression_count"] == 0
 
 
+def test_target_surface_overlap_gate_allows_exact_teacher_bounded_junction_pair(tmp_path: Path) -> None:
+    finding = {
+        "first_junction_id": "target",
+        "second_junction_id": "neighbor",
+        "overlap_area_m2": 9.6,
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        junction_junction_overlaps=[finding],
+    )
+    teacher, teacher_file, teacher_net_file = _bound_surface_report(
+        tmp_path,
+        "teacher-surface",
+        junction_junction_overlaps=[{**finding, "overlap_area_m2": 17.2}],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        reference_report=teacher,
+        reference_report_file=teacher_file,
+        reference_expected_net_file=teacher_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["junction_overlap_reference_authorized_count"] == 1
+    assert gate["junction_overlap_regression_count"] == 0
+
+    over_report, over_report_file, over_net_file = _bound_surface_report(
+        tmp_path,
+        "surface-over-bound",
+        junction_junction_overlaps=[{**finding, "overlap_area_m2": 17.21}],
+    )
+    over_gate = _target_surface_overlap_gate(
+        over_report,
+        "target",
+        report_file=over_report_file,
+        expected_net_file=over_net_file,
+        reference_report=teacher,
+        reference_report_file=teacher_file,
+        reference_expected_net_file=teacher_net_file,
+    )
+
+    assert over_gate["status"] == "fail"
+    assert over_gate["junction_overlap_reference_authorized_count"] == 0
+    assert over_gate["junction_overlap_regression_count"] == 1
+
+
 def test_target_surface_overlap_gate_ignores_target_owned_lane_at_remote_junction(
     tmp_path: Path,
 ) -> None:

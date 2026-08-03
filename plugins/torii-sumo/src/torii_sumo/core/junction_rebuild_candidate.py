@@ -6818,6 +6818,25 @@ def build_teacher_guided_junction_variant(
         if target_owned_surface_overlaps
         else None
     )
+    target_junction_surface_overlaps = [
+        item
+        for item in surface_overlap_report.get("junction_junction_overlaps", []) or []
+        if isinstance(item, dict)
+        and set(compound_junction_ids)
+        & {
+            item.get("first_junction_id", ""),
+            item.get("second_junction_id", ""),
+        }
+    ]
+    reference_surface_overlap_report_file = output_dir / f"{prefix}_reference_surface_overlap.json"
+    reference_surface_overlap_report = (
+        audit_sumo_lane_junction_surface_overlaps(
+            teacher_net_file,
+            report_file=reference_surface_overlap_report_file,
+        )
+        if target_junction_surface_overlaps
+        else None
+    )
     target_surface_overlap_gates = {
         compound_junction_id: _target_surface_overlap_gate(
             surface_overlap_report,
@@ -6827,6 +6846,9 @@ def build_teacher_guided_junction_variant(
             baseline_report=baseline_surface_overlap_report,
             baseline_report_file=baseline_surface_overlap_report_file,
             baseline_expected_net_file=candidate_net_file,
+            reference_report=reference_surface_overlap_report,
+            reference_report_file=reference_surface_overlap_report_file,
+            reference_expected_net_file=teacher_net_file,
             lane_edge_aliases=contraction_edge_aliases,
             allow_non_motorized_lane_overlaps=strict_teacher_replay,
         )
@@ -11450,6 +11472,9 @@ def _target_surface_overlap_gate(
     baseline_report: dict[str, Any] | None = None,
     baseline_report_file: Path | None = None,
     baseline_expected_net_file: Path | None = None,
+    reference_report: dict[str, Any] | None = None,
+    reference_report_file: Path | None = None,
+    reference_expected_net_file: Path | None = None,
     lane_edge_aliases: dict[str, str] | None = None,
     allow_non_motorized_lane_overlaps: bool = False,
 ) -> dict[str, object]:
@@ -11566,6 +11591,16 @@ def _target_surface_overlap_gate(
         baseline_identity = {"status": "not_required", "failures": []}
         audited_baseline_report = {}
     baseline_valid = baseline_identity.get("status") == "pass"
+    if reference_report is not None and reference_report_file is not None and reference_expected_net_file is not None:
+        reference_identity, audited_reference_report = _surface_report_identity(
+            reference_report,
+            reference_report_file,
+            reference_expected_net_file,
+        )
+    else:
+        reference_identity = {"status": "not_required", "failures": []}
+        audited_reference_report = {}
+    reference_valid = reference_identity.get("status") == "pass"
     lane_edge_aliases = lane_edge_aliases or {}
 
     def normalized_lane_id(lane_id: object) -> str:
@@ -11581,6 +11616,7 @@ def _target_surface_overlap_gate(
 
     baseline_owner_overlap_areas: dict[tuple[str, str], float] = {}
     baseline_junction_overlap_areas: dict[tuple[str, str], float] = {}
+    reference_junction_overlap_areas: dict[tuple[str, str], float] = {}
     if baseline_valid:
         for item in audited_baseline_report.get("junction_junction_overlaps", []) or []:
             if not isinstance(item, dict):
@@ -11617,7 +11653,30 @@ def _target_surface_overlap_gate(
                 area,
                 baseline_owner_overlap_areas.get(key, 0.0),
             )
+    if reference_valid:
+        for item in audited_reference_report.get("junction_junction_overlaps", []) or []:
+            if not isinstance(item, dict):
+                continue
+            key = tuple(
+                sorted(
+                    (
+                        str(item.get("first_junction_id", "")),
+                        str(item.get("second_junction_id", "")),
+                    )
+                )
+            )
+            if not all(key):
+                continue
+            try:
+                area = float(item.get("overlap_area_m2", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            reference_junction_overlap_areas[key] = max(
+                area,
+                reference_junction_overlap_areas.get(key, 0.0),
+            )
     inherited_junction_overlaps = []
+    reference_authorized_junction_overlaps = []
     regressed_junction_overlaps = []
     for item in junction_overlaps:
         key = tuple(
@@ -11633,9 +11692,11 @@ def _target_surface_overlap_gate(
         except (TypeError, ValueError):
             final_area = math.inf
         baseline_area = baseline_junction_overlap_areas.get(key)
+        reference_area = reference_junction_overlap_areas.get(key)
         record = {
             **item,
             "baseline_overlap_area_m2": baseline_area,
+            "reference_overlap_area_m2": reference_area,
             "overlap_area_delta_m2": (
                 round(final_area - baseline_area, 6)
                 if baseline_area is not None and math.isfinite(final_area)
@@ -11644,6 +11705,8 @@ def _target_surface_overlap_gate(
         }
         if baseline_area is not None and final_area <= baseline_area + 1e-4:
             inherited_junction_overlaps.append(record)
+        elif reference_area is not None and final_area <= reference_area + 1e-4:
+            reference_authorized_junction_overlaps.append(record)
         else:
             regressed_junction_overlaps.append(record)
 
@@ -11709,6 +11772,8 @@ def _target_surface_overlap_gate(
         "junction_overlap_regressions": regressed_junction_overlaps,
         "junction_overlap_inherited_count": len(inherited_junction_overlaps),
         "junction_overlap_inherited": inherited_junction_overlaps,
+        "junction_overlap_reference_authorized_count": len(reference_authorized_junction_overlaps),
+        "junction_overlap_reference_authorized": reference_authorized_junction_overlaps,
         "authorized_non_motorized_overlap_count": len(authorized_non_motorized_overlap_keys),
         "authorized_non_motorized_overlaps": authorized_non_motorized_overlaps,
         "lane_non_owner_overlap_count": len(lane_non_owner_overlaps),
@@ -11727,6 +11792,11 @@ def _target_surface_overlap_gate(
         "baseline_audit_status": (str(audited_baseline_report.get("status", "not_required"))),
         "baseline_audit_valid": baseline_valid,
         "baseline_report_identity": baseline_identity,
+        "reference_report_file": (str(reference_report_file) if reference_report_file is not None else ""),
+        "reference_source_net_sha256": str(audited_reference_report.get("source_sha256", "")),
+        "reference_audit_status": str(audited_reference_report.get("status", "not_required")),
+        "reference_audit_valid": reference_valid,
+        "reference_report_identity": reference_identity,
         "audit_error": str(audited_report.get("error", "")),
     }
 
