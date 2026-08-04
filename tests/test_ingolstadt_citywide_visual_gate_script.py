@@ -554,6 +554,55 @@ def test_lane_evidence_keeps_masks_and_accepts_renumbered_signal_order(tmp_path:
     assert not (tmp_path / "failures").exists()
 
 
+def test_lane_evidence_binds_canvas_radius_and_native_selection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    teacher_net = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
+    candidate_net = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="tls", link_index="7")
+    teacher_image, candidate_image = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    for path in (teacher_image, candidate_image):
+        Image.new("RGB", (240, 180), "white").save(path)
+    arguments = {}
+
+    def fake_analyze(*_args, **kwargs):
+        arguments.update(kwargs)
+        return {"status": "pass", "reasons": [], "layers": {}}
+
+    monkeypatch.setattr(module, "analyze_connection_pair", fake_analyze)
+    report = module.evaluate_lane_pair(
+        teacher_net=teacher_net,
+        candidate_net=candidate_net,
+        record={
+            "teacher_lane": "in_0",
+            "candidate_lane": "in_0",
+            "outgoing_lane_pairs": {"out_0": "out_0"},
+        },
+        teacher_capture={
+            "screenshot_file": str(teacher_image),
+            "junction_pixel": [120, 90],
+            "canvas_rect": [20, 10, 220, 170],
+            "semantic_radius": 280,
+            "selection": {"status": "review_required", "reasons": ["registered_source_lane_not_selected"]},
+        },
+        candidate_capture={
+            "screenshot_file": str(candidate_image),
+            "junction_pixel": [120, 90],
+            "canvas_rect": [20, 10, 220, 170],
+            "semantic_radius": 300,
+            "selection": {"status": "pass", "reasons": []},
+        },
+        lane_dir=tmp_path / "lane",
+        failure_dir=tmp_path / "failures",
+    )
+
+    assert report["status"] == "review_required"
+    assert arguments["teacher_canvas_rect"] == (20, 10, 220, 170)
+    assert arguments["candidate_canvas_rect"] == (20, 10, 220, 170)
+    assert arguments["semantic_radius"] == 300
+
+
 def test_tiles_expand_from_the_verified_seed() -> None:
     manifest = {
         "junction_pairs": [
@@ -643,46 +692,107 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert not (tmp_path / "out" / "tiles" / "0004_0008" / ".session").exists()
 
 
-def test_real_tile_adapter_builds_two_persistent_sessions(tmp_path: Path) -> None:
+def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = _module()
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
     _write_net(teacher, offset="-1000,-2000", junction_x=20, junction_y=30)
     _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
-    sessions, captures = [], []
+    session_sources: list[Path] = []
+    lane_point_calls: list[tuple[tuple[float, float], ...]] = []
 
-    def fake_session(*args, **kwargs):
-        value = {"args": args, "kwargs": kwargs}
-        sessions.append(value)
-        return value
+    def fake_subnet(*, source_net, output_dir, **_kwargs):
+        subnet = Path(output_dir) / "render.net.xml"
+        subnet.parent.mkdir(parents=True, exist_ok=True)
+        subnet.write_bytes(Path(source_net).read_bytes())
+        return {
+            "status": "pass",
+            "subnet_file": str(subnet),
+            "subnet_sha256": "d" * 64,
+            "projected_boundary": [970.0, 1970.0, 1280.0, 2280.0],
+        }
 
-    def fake_capture(**kwargs):
-        captures.append(kwargs)
-        return [{"lane_id": kwargs["specs"][0]["lane_id"]}]
+    class FakeSession:
+        hwnd = 17
+
+        def __init__(self, source, _candidate, output_dir, **kwargs):
+            self.source = Path(source)
+            self.output_dir = Path(output_dir)
+            self.test_file = Path(kwargs["test_file"])
+            session_sources.append(self.source)
+
+        def open(self):
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            image_file = self.output_dir / "001-open.png"
+            Image.new("RGB", (1400, 1000), "white").save(image_file)
+            return {
+                "screenshot_file": str(image_file),
+                "screenshot_sha256": file_sha256(image_file),
+            }
+
+        def abort(self, _reason):
+            return {"status": "aborted"}
+
+    def fake_lane_points(points):
+        lane_point_calls.append(tuple(points))
+        return ((12.0, 30.0), (16.0, 30.0), (18.0, 30.0))
+
+    monkeypatch.setattr(module, "build_visual_tile_subnet", fake_subnet)
+    monkeypatch.setattr(module, "netedit_canvas_rect", lambda _hwnd: (230, 64, 1394, 885))
+    monkeypatch.setattr(module, "fit_connection_zoom", lambda **_kwargs: 900.0)
+    monkeypatch.setattr(module, "normalized_viewport_zoom", lambda **_kwargs: 900.0)
+    monkeypatch.setattr(module, "lane_click_points", fake_lane_points)
+    monkeypatch.setattr(
+        module,
+        "canvas_click_for_world_point",
+        lambda *, point, **_kwargs: (700, 470) if point == (20.0, 30.0) else (420, 330),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_expected_lane_semantics",
+        lambda *_args, **_kwargs: {"status": "pass", "reasons": []},
+    )
 
     result = module.capture_tile_pair(
         tile_id="0004_0008",
         records=[{
             "teacher_lane": "in_0",
             "teacher_junction": "j0",
-            "candidate_lane": "in_0",
-            "candidate_junction": "j0",
-        }],
+                "candidate_lane": "in_0",
+                "candidate_junction": "j0",
+                "outgoing_lane_pairs": {"out_0": "out_0"},
+            }],
         teacher_net=teacher,
         candidate_net=candidate,
         output_dir=tmp_path / "session",
         zoom=2500.0,
         window_size=(1400, 1000),
         tile_size_m=250.0,
-        session_factory=fake_session,
-        capture_func=fake_capture,
+        session_factory=FakeSession,
     )
 
-    assert len(sessions) == 2
-    assert len(captures) == 2
-    assert captures[0]["viewport_center"] == (125.0, 125.0)
-    assert captures[1]["viewport_center"] == (125.0, 125.0)
-    assert result[0][0]["lane_id"] == "in_0"
+    assert len(session_sources) == 4
+    assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
+    assert len(lane_point_calls) == 3
+    for captures in result:
+        assert len(captures) == 1
+        image_file = Path(captures[0]["screenshot_file"])
+        assert captures[0] == {
+            "lane_id": "in_0",
+            "sample_distance_rank": 1,
+            "click": [420, 330],
+            "junction_pixel": [700, 470],
+            "canvas_rect": [230, 64, 1394, 885],
+            "zoom": 900.0,
+            "semantic_radius": 300,
+            "selection": {"status": "pass", "reasons": []},
+            "subnet_sha256": "d" * 64,
+            "screenshot_file": str(image_file),
+            "screenshot_sha256": file_sha256(image_file),
+        }
 
 
 def test_main_runs_visual_phase_without_claiming_global_completion(tmp_path: Path) -> None:
