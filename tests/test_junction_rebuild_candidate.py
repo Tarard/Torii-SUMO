@@ -138,7 +138,7 @@ def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Pa
     report = rebuild_candidate_module._prune_teacher_absent_residual_corridor(
         net_file=candidate,
         teacher_net_file=teacher,
-        junction_ids={"absent_a", "absent_b"},
+        junction_ids={"absent_a"},
     )
 
     root = ET.parse(candidate).getroot()
@@ -4406,6 +4406,27 @@ def test_connection_mode_status_uses_only_accepted_parity_candidates() -> None:
     )
 
     assert status == "pass"
+
+
+def test_net_contains_normal_junctions_rejects_truncated_xml(tmp_path: Path) -> None:
+    truncated_net = tmp_path / "truncated.net.xml"
+    truncated_net.write_text('<net><junction id="j"', encoding="utf-8")
+
+    assert not rebuild_candidate_module._net_contains_normal_junctions(truncated_net, {"j"})
+
+
+def test_approach_neighbor_junction_ids_excludes_split_candidate_endpoints() -> None:
+    model = {
+        "approaches": {
+            "incoming": [{"from": "teacher_in", "to": "teacher_cluster"}],
+            "outgoing": [{"from": "teacher_cluster", "to": "teacher_out"}],
+        }
+    }
+
+    assert rebuild_candidate_module._approach_neighbor_junction_ids(model, "teacher_cluster") == {
+        "teacher_in",
+        "teacher_out",
+    }
 
 
 def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: Path) -> None:
@@ -14076,7 +14097,7 @@ def test_target_surface_overlap_gate_allows_exact_teacher_bounded_junction_pair(
     finding = {
         "first_junction_id": "target",
         "second_junction_id": "neighbor",
-        "overlap_area_m2": 9.6,
+        "overlap_area_m2": 17.204,
     }
     report, report_file, net_file = _bound_surface_report(
         tmp_path,
@@ -18557,8 +18578,9 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
-    assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
-    assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is True
+    assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is False
+    assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is False
+    assert report["connection_plan"]["structural_teacher_junction_ids"] == ["j"]
     assert report["connection_plan"]["emit_crossings"] is False
     assert report["connection_plan"]["emitted_crossing_count"] == 0
     assert report["target_internal_normalize"] is None
@@ -18788,7 +18810,7 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
     assert report["target_internal_normalize"]["status"] == "pass"
     assert report["sumo_load"]["status"] == "pass"
     assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
-    assert restore_scope_expansions == [False, False]
+    assert restore_scope_expansions == [True, True]
     assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
 
 

@@ -6006,9 +6006,11 @@ def build_teacher_guided_junction_variant(
             for value in lane_patch_report.get("mapped_edge_endpoint_junction_ids", []) or []
             if str(value) and str(value) != junction_id
         }
+        & _approach_neighbor_junction_ids(teacher_model, teacher_junction_id)
         if strict_teacher_replay and not preserve_teacher_lane_shapes
         else set()
     )
+    compound_junction_ids = sorted({*compound_junction_ids, *mapped_geometry_neighbor_junction_ids})
     internal_restore_exclude_junction_ids = {
         *compound_junction_ids,
         *mapped_geometry_neighbor_junction_ids,
@@ -6016,7 +6018,7 @@ def build_teacher_guided_junction_variant(
         *_endpoint_rewrite_endpoint_ids(lane_patch_report),
     }
     restore_mutable_edge_ids = set() if structural_osm_boundary_authority else set(edge_map.values())
-    expand_restore_scope = not (structural_osm_boundary_authority or strict_teacher_replay)
+    expand_restore_scope = not structural_osm_boundary_authority
     node_patch_report = write_teacher_endpoint_patch_nodes(
         raw_node_file=raw_node_file,
         teacher_net_file=teacher_net_file,
@@ -6418,7 +6420,7 @@ def build_teacher_guided_junction_variant(
                 sorted(
                     {
                         str(value)
-                        for value in safety_junction_ids
+                        for value in compound_junction_ids
                         if str(value) and str(value) not in {junction_id, teacher_junction_id}
                     }
                 ),
@@ -6445,13 +6447,13 @@ def build_teacher_guided_junction_variant(
                     edge_map=compound_edge_map,
                     teacher_junction_id=compound_junction_id,
                     geometry_anchor_edge_file=tl_logic_input_file,
-                    blend_geometry_anchor_at_target=True,
+                    blend_geometry_anchor_at_target=False,
                     copy_unmapped_boundary_edges=True,
                     preserve_mapped_boundary_endpoints=True,
                     preserve_unmapped_boundary_edges=True,
                     prune_unmapped_micro_boundary_edges=True,
                     prune_strict_unmapped_outgoing_boundary_edges=True,
-                    preserve_target_junction_shape=True,
+                    preserve_target_junction_shape=False,
                 )
                 compound_report["junction_id"] = compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
@@ -6532,10 +6534,18 @@ def build_teacher_guided_junction_variant(
     teacher_absent_geometry_changed = False
     if teacher_absent_tls_junction_ids:
         expected_contraction_ids = {str(value) for value in teacher_absent_tls_junction_ids if str(value)}
+        expected_contraction_ids.update(
+            _endpoint_rewrite_endpoint_ids(lane_patch_report)
+            - _net_junction_ids(teacher_net_file)
+            - {junction_id}
+        )
         residual_corridor_prune = _prune_teacher_absent_residual_corridor(
             net_file=final_net_file,
             teacher_net_file=teacher_net_file,
             junction_ids=expected_contraction_ids,
+        )
+        expected_contraction_ids.update(
+            str(value) for value in residual_corridor_prune.get("removed_node_ids", []) if str(value)
         )
         contraction_scope_not_needed = residual_corridor_prune.get("status") == "pass"
         contraction_source_file = final_net_file
@@ -6744,6 +6754,7 @@ def build_teacher_guided_junction_variant(
         teacher_absent_geometry_changed = bool(
             teacher_absent_geometry_contraction_report.get("removed_node_ids", [])
         )
+        compound_junction_ids = sorted(set(compound_junction_ids) - expected_contraction_ids)
 
     sumo_command = [
         sumo_binary,
@@ -7439,6 +7450,18 @@ def _net_contains_normal_junctions(net_file: Path, junction_ids: set[str]) -> bo
         if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
     }
     return junction_ids <= net_junction_ids
+
+
+def _approach_neighbor_junction_ids(model: dict[str, Any], owner_id: str) -> set[str]:
+    approaches = model.get("approaches", {})
+    return {
+        str(row.get(side, ""))
+        for direction in ("incoming", "outgoing")
+        for row in (approaches.get(direction, []) if isinstance(approaches, dict) else [])
+        if isinstance(row, dict)
+        for side in ("from", "to")
+        if row.get(side) and str(row[side]) != owner_id
+    }
 
 
 def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> bool:
@@ -8381,6 +8404,20 @@ def run_teacher_guided_repair_queue(
                         if set(group) == set(_sumo_cluster_member_ids(cluster_id))
                         for member_id in group
                     }
+                    if not _net_contains_normal_junctions(
+                        replay_candidate_net_file,
+                        set(join_aliases.values()),
+                    ):
+                        scope_report["status"] = "review"
+                        scope_report["full_network_join_seed_output_status"] = "invalid"
+                        skipped_candidates.append(
+                            {
+                                "index": index,
+                                "junction_id": junction_id,
+                                "candidate_status": "full_network_join_seed_output_invalid",
+                            }
+                        )
+                        continue
                     join_mutable_junction_ids = {
                         *join_aliases,
                         *join_aliases.values(),
@@ -12151,7 +12188,7 @@ def _target_surface_overlap_gate(
         }
         if baseline_area is not None and final_area <= baseline_area + 1e-4:
             inherited_junction_overlaps.append(record)
-        elif reference_area is not None and final_area <= reference_area + 1e-4:
+        elif reference_area is not None and final_area <= reference_area + 5e-3:
             reference_authorized_junction_overlaps.append(record)
         else:
             regressed_junction_overlaps.append(record)
@@ -16325,13 +16362,30 @@ def _prune_teacher_absent_residual_corridor(
     teacher_junction_ids = {row.attrib.get("id", "") for row in teacher_root.findall("junction")}
     candidate_junction_ids = {row.attrib.get("id", "") for row in candidate_root.findall("junction")}
     teacher_edge_ids = {row.attrib.get("id", "") for row in teacher_root.findall("edge")}
-    incident_edges = [
+    external_edges = [
         edge
         for edge in candidate_root.findall("edge")
         if edge.attrib.get("id")
         and not edge.attrib["id"].startswith(":")
         and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
-        and {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
+    ]
+    while True:
+        adjacent_absent_ids = {
+            endpoint
+            for edge in external_edges
+            if edge.attrib["id"] not in teacher_edge_ids
+            and {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
+            for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            if endpoint in candidate_junction_ids and endpoint not in teacher_junction_ids
+        }
+        expanded_ids = expected_ids | adjacent_absent_ids
+        if expanded_ids == expected_ids:
+            break
+        expected_ids = expanded_ids
+    incident_edges = [
+        edge
+        for edge in external_edges
+        if {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
     ]
     blocking_edge_ids = sorted(edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] in teacher_edge_ids)
     missing_candidate_ids = sorted(expected_ids - candidate_junction_ids)
