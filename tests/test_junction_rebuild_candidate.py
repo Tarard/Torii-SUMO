@@ -406,14 +406,15 @@ def test_sanitize_junction_shapes_repairs_sentinel_fallback_at_junction_center()
     assert root.find("junction").attrib["customShape"] == "1"
 
 
-def test_sanitize_junction_shapes_preserves_finite_but_non_simple_shape() -> None:
+def test_sanitize_junction_shapes_repairs_finite_non_simple_shape() -> None:
     original = "0,0 2,2 0,2 2,0"
     root = ET.fromstring(f'<net><junction id="finite" x="1" y="1" shape="{original}"/></net>')
 
     report = _sanitize_junction_shapes(root)
 
-    assert report["repaired_count"] == 0
-    assert root.find("junction").attrib["shape"] == original
+    assert report["repaired_count"] == 1
+    assert report["invalid_shape_count"] == 1
+    assert root.find("junction").attrib["shape"] == "0.00,0.00 2.00,0.00 2.00,2.00 0.00,2.00"
 
 
 def test_strict_teacher_structural_context_maps_existing_adjacent_teacher_edges(tmp_path: Path) -> None:
@@ -14365,6 +14366,41 @@ def test_target_surface_overlap_gate_ignores_sub_square_centimeter_roundtrip_noi
         tmp_path,
         "surface",
         external_lane_non_owner_junction_overlaps=[final_finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        external_lane_non_owner_junction_overlaps=[baseline_finding],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["lane_target_owner_regression_count"] == 0
+
+
+def test_target_surface_overlap_gate_uses_bounded_roundtrip_tolerance(tmp_path: Path) -> None:
+    baseline_finding = {
+        "lane_id": "target_out_0",
+        "from_junction_id": "target",
+        "to_junction_id": "remote",
+        "non_owner_junction_id": "far_junction",
+        "overlap_area_m2": 48.0,
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[
+            {**baseline_finding, "overlap_area_m2": 48.000254}
+        ],
     )
     baseline, baseline_file, baseline_net_file = _bound_surface_report(
         tmp_path,

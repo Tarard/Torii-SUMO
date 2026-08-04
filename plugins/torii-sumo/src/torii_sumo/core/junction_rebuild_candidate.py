@@ -91,6 +91,8 @@ GEOMETRY_RESTORE_LANE_ATTRS = (
     "outlineShape",
 )
 
+SURFACE_OVERLAP_ROUNDTRIP_TOLERANCE_M2 = 5e-4
+
 BOUNDARY_EDGE_OPERATIONAL_ATTRS = (
     "type",
     "priority",
@@ -10039,22 +10041,25 @@ def _sanitize_junction_shapes(root: ET.Element) -> dict[str, object]:
             original = junction.attrib.get(attribute)
             if not original or (attribute == "customShape" and "," not in original):
                 continue
-            tokens = [token for token in original.split() if "," in token]
             points = _shape_points(original)
-            has_unusable_coordinate = (
-                len(points) != len(tokens)
-                or not points
-                or any(
-                    not (math.isfinite(x) and math.isfinite(y))
-                    or abs(x) > 1_000_000
-                    or abs(y) > 1_000_000
+            if (
+                attribute == "customShape"
+                and len(points) < 3
+                and points
+                and all(
+                    math.isfinite(x)
+                    and math.isfinite(y)
+                    and abs(x) <= 1_000_000
+                    and abs(y) <= 1_000_000
                     for x, y in points
                 )
-            )
-            if not has_unusable_coordinate:
+            ):
                 continue
-            if has_unusable_coordinate:
-                invalid_shape_count += 1
+            safe = _safe_junction_shape(original)
+            if safe == original:
+                continue
+            invalid_shape_count += 1
+            if safe is None:
                 radius = 0.5
                 safe = (
                     f"{center_x - radius:.2f},{center_y - radius:.2f} "
@@ -10062,9 +10067,8 @@ def _sanitize_junction_shapes(root: ET.Element) -> dict[str, object]:
                     f"{center_x + radius:.2f},{center_y + radius:.2f} "
                     f"{center_x - radius:.2f},{center_y + radius:.2f}"
                 )
-            if safe != original:
-                junction.attrib[attribute] = safe
-                changed = True
+            junction.attrib[attribute] = safe
+            changed = True
         if changed:
             repaired_ids.append(junction_id)
     return {
@@ -12207,7 +12211,10 @@ def _target_surface_overlap_gate(
                 else None
             ),
         }
-        if baseline_area is not None and final_area <= baseline_area + 1e-4:
+        if (
+            baseline_area is not None
+            and final_area <= baseline_area + SURFACE_OVERLAP_ROUNDTRIP_TOLERANCE_M2
+        ):
             inherited_junction_overlaps.append(record)
         elif reference_area is not None and final_area <= reference_area + 5e-3:
             reference_authorized_junction_overlaps.append(record)
@@ -12238,7 +12245,11 @@ def _target_surface_overlap_gate(
                     else None
                 ),
             }
-            if baseline_valid and baseline_area is not None and final_area <= baseline_area + 1e-4:
+            if (
+                baseline_valid
+                and baseline_area is not None
+                and final_area <= baseline_area + SURFACE_OVERLAP_ROUNDTRIP_TOLERANCE_M2
+            ):
                 inherited.append(record)
             else:
                 regressed.append(record)
