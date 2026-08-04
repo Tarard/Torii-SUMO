@@ -9,7 +9,7 @@ import shutil
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 import xml.etree.ElementTree as ET
 
 from shapely import concave_hull
@@ -6539,12 +6539,16 @@ def build_teacher_guided_junction_variant(
     teacher_absent_geometry_contraction_report = None
     teacher_absent_geometry_changed = False
     if teacher_absent_tls_junction_ids:
-        expected_contraction_ids = {str(value) for value in teacher_absent_tls_junction_ids if str(value)}
         teacher_junction_ids = _net_junction_ids(teacher_net_file)
+        expected_contraction_ids = _teacher_absent_junction_ids(
+            teacher_absent_tls_junction_ids,
+            teacher_junction_ids,
+        )
         expected_contraction_ids.update(
-            _endpoint_rewrite_endpoint_ids(lane_patch_report)
-            - teacher_junction_ids
-            - {junction_id}
+            _teacher_absent_junction_ids(
+                _endpoint_rewrite_endpoint_ids(lane_patch_report) - {junction_id},
+                teacher_junction_ids,
+            )
         )
         expected_contraction_ids.update(
             _compound_endpoint_contraction_ids(
@@ -14377,6 +14381,14 @@ def _teacher_junction_alias(candidate_junction_id: str, teacher_junction_ids: se
         (value for value in teacher_junction_ids if _canonical_sumo_cluster_id(value) == canonical_id),
         "",
     )
+
+
+def _teacher_absent_junction_ids(values: Iterable[str], teacher_junction_ids: set[str]) -> set[str]:
+    return {
+        str(value)
+        for value in values
+        if str(value) and not _teacher_junction_alias(str(value), teacher_junction_ids)
+    }
 
 
 def _sumo_cluster_member_ids(node_id: str) -> list[str]:

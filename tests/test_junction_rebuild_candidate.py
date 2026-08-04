@@ -152,6 +152,14 @@ def test_teacher_junction_alias_resolves_sumo_short_cluster_id() -> None:
     ) == full_id
 
 
+def test_teacher_absent_junction_ids_keep_sumo_cluster_aliases() -> None:
+    full_id = "cluster_a_b_c_d_e_f"
+
+    assert rebuild_candidate_module._teacher_absent_junction_ids(
+        {"cluster_a_b_c_d_#2more", "old"}, {full_id}
+    ) == {"old"}
+
+
 def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
