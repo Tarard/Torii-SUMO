@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import inspect
 import json
+import math
 import os
 import shutil
 import xml.etree.ElementTree as ET
@@ -2781,6 +2782,7 @@ def export_plain_net_for_teacher_guided_repair(
     raw_connection_file = Path(f"{plain_prefix}.con.xml")
     raw_type_file = Path(f"{plain_prefix}.typ.xml")
     raw_tllogic_file = Path(f"{plain_prefix}.tll.xml")
+    plain_edge_shape_sanitization = _sanitize_invalid_plain_edge_shapes(raw_edge_file)
     synthesized_edge_type_ids = _synthesize_missing_plain_edge_types(raw_edge_file, raw_type_file)
     false_tls_plain_node_restore_report = _restore_false_traffic_light_plain_node_types(
         source_net_file=net_file,
@@ -2819,6 +2821,8 @@ def export_plain_net_for_teacher_guided_repair(
         "raw_tllogic_file": str(raw_tllogic_file) if raw_tllogic_file.exists() else "",
         "synthesized_edge_type_count": len(synthesized_edge_type_ids),
         "synthesized_edge_type_ids": synthesized_edge_type_ids,
+        "sanitized_plain_edge_shape_count": plain_edge_shape_sanitization["count"],
+        "sanitized_plain_edge_shape_ids": plain_edge_shape_sanitization["edge_ids"],
         "false_traffic_light_plain_node_restore": false_tls_plain_node_restore_report,
         "stale_plain_tllogic_prune": stale_plain_tllogic_prune_report,
         "restored_false_traffic_light_plain_node_count": false_tls_plain_node_restore_report.get(
@@ -2839,6 +2843,28 @@ def export_plain_net_for_teacher_guided_repair(
         "missing_required_plain_files": missing_required,
         "netconvert": netconvert_report,
     }
+
+
+def _sanitize_invalid_plain_edge_shapes(edge_file: Path) -> dict[str, Any]:
+    if not edge_file.is_file():
+        return {"count": 0, "edge_ids": []}
+    root = ET.parse(edge_file).getroot()
+    changed = []
+    for edge in root.findall("edge"):
+        shape = edge.get("shape", "")
+        if not shape:
+            continue
+        try:
+            coordinates = [float(value) for point in shape.split() for value in point.split(",")]
+        except ValueError:
+            coordinates = [math.inf]
+        if any(not math.isfinite(value) or abs(value) > 1_000_000 for value in coordinates):
+            edge.attrib.pop("shape", None)
+            changed.append(str(edge.get("id", "")))
+    if changed:
+        ET.indent(root, space="    ")
+        ET.ElementTree(root).write(edge_file, encoding="utf-8", xml_declaration=True)
+    return {"count": len(changed), "edge_ids": sorted(changed)}
 
 
 def _restore_false_traffic_light_plain_node_types(*, source_net_file: Path, node_file: Path) -> dict[str, Any]:

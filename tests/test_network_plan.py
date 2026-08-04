@@ -2117,6 +2117,39 @@ def test_export_plain_net_for_teacher_guided_repair_synthesizes_missing_used_edg
     assert synthesized.attrib["speed"] == "8.33"
 
 
+def test_export_plain_net_for_teacher_guided_repair_drops_sumo_sentinel_edge_shapes(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_command(command, **_kwargs):
+        plain_prefix = Path(command[-1])
+        Path(f"{plain_prefix}.nod.xml").write_text("<nodes/>", encoding="utf-8")
+        Path(f"{plain_prefix}.con.xml").write_text("<connections/>", encoding="utf-8")
+        Path(f"{plain_prefix}.edg.xml").write_text(
+            """<edges>
+    <edge id="bad" from="a" to="b" shape="10,20 -1073741824,-1073741824"/>
+    <edge id="good" from="b" to="c" shape="10,20 30,40"/>
+</edges>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    edges = ET.parse(report["raw_edge_file"]).getroot()
+    assert "shape" not in edges.find("./edge[@id='bad']").attrib
+    assert edges.find("./edge[@id='good']").attrib["shape"] == "10,20 30,40"
+    assert report["sanitized_plain_edge_shape_count"] == 1
+    assert report["sanitized_plain_edge_shape_ids"] == ["bad"]
+
+
 def test_export_plain_net_for_teacher_guided_repair_restores_false_tls_plain_nodes(
     tmp_path: Path,
 ) -> None:
