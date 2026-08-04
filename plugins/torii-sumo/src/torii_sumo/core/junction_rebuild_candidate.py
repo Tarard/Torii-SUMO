@@ -6817,6 +6817,7 @@ def build_teacher_guided_junction_variant(
                 target_file=target_internal_normalized_net_file,
                 junction_id=junction_id,
                 exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
+                restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
             )
             normalized_tl_logic_report = write_teacher_tllogic_net(
                 candidate_net_file=target_internal_normalized_net_file,
@@ -6849,6 +6850,7 @@ def build_teacher_guided_junction_variant(
                         target_file=target_internal_normalized_unrestored_net_file,
                         junction_id=junction_id,
                         exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
+                        restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
                     )
                     unrestored_tl_logic_report = write_teacher_tllogic_net(
                         candidate_net_file=target_internal_normalized_unrestored_net_file,
@@ -6907,6 +6909,7 @@ def build_teacher_guided_junction_variant(
                 target_file=teacher_guided_normalized_net_file,
                 junction_id=junction_id,
                 exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
+                restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
             )
             normalized_final_sumo_command = [
                 sumo_binary,
@@ -12696,6 +12699,13 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         if owner
     }
     junction_ids.update(affected_internal_junction_ids)
+    junction_ids.update(
+        str(boundary_id)
+        for replay_report in variant_report.get("compound_internal_replays", []) or []
+        if isinstance(replay_report, dict)
+        for boundary_id in replay_report.get("copied_boundary_junctions", []) or []
+        if str(boundary_id).startswith("cluster_")
+    )
     for cluster_id, member_ids in (teacher_join_groups_by_cluster or {}).items():
         if affected_internal_junction_ids & set(member_ids):
             junction_ids.add(cluster_id)
@@ -18942,6 +18952,7 @@ def _restore_replayed_geometry_attrs(
     target_file: Path,
     junction_id: str,
     exclude_adjacent_junction_ids: set[str] | None = None,
+    restore_edges_to_excluded_adjacent_junctions: bool = False,
 ) -> dict[str, object]:
     if not source_file.exists():
         return _failure(f"source net file does not exist: {source_file}")
@@ -19032,7 +19043,7 @@ def _restore_replayed_geometry_attrs(
         and endpoint_id in source_junctions
     }
     restored_adjacent_junctions = _restore_geometry_anchor_junctions(target_root, adjacent_junctions)
-    excluded_adjacent_edge_ids = {
+    excluded_adjacent_edge_ids = set() if restore_edges_to_excluded_adjacent_junctions else {
         edge_id
         for edge_id in restored_edge_ids
         for edge in [source_edges.get(edge_id)]
@@ -19100,6 +19111,7 @@ def _restore_replayed_geometry_attrs(
         "restored_adjacent_junction_count": len(restored_adjacent_junctions),
         "restored_adjacent_junction_ids": restored_adjacent_junctions,
         "excluded_adjacent_junction_ids": sorted(excluded_adjacent_ids),
+        "restore_edges_to_excluded_adjacent_junctions": restore_edges_to_excluded_adjacent_junctions,
         "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,

@@ -6375,6 +6375,29 @@ def test_expanded_scope_followup_adds_teacher_cluster_for_invalid_neighbor_inter
     assert followup["followup_reason"] == "non_target_internal_restore_invalid_lane"
 
 
+def test_expanded_scope_followup_joins_copied_teacher_boundary_cluster(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text('<edges><edge id="main" from="a" to="target"/></edges>', encoding="utf-8")
+
+    followup = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+        {"junction_id": "target", "matched_candidate_node_ids": ["a", "target"]},
+        {
+            "target_internal_replay": {
+                "removed_stale_replaced_edge_connections": [{"from": "main", "to": "other"}],
+            },
+            "compound_internal_replays": [
+                {"copied_boundary_junctions": ["cluster_neighbor_a_b", "ordinary_neighbor"]},
+            ],
+        },
+        raw_edges,
+        junction_id="target",
+    )
+
+    assert followup is not None
+    assert "cluster_neighbor_a_b" in followup["expanded_rebuild_scope"]["junction_ids"]
+    assert "ordinary_neighbor" not in followup["expanded_rebuild_scope"]["junction_ids"]
+
+
 def test_teacher_guided_promotion_gate_keeps_applied_followup_report(tmp_path: Path) -> None:
     gate = _write_teacher_guided_promotion_gate(
         output_file=tmp_path / "promotion.json",
@@ -16417,6 +16440,18 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert report["excluded_adjacent_junction_ids"] == ["b"]
     assert report["excluded_adjacent_edge_ids"] == ["out"]
     assert report["restored_request_count"] == 1
+
+    restored_edge_report = _restore_replayed_geometry_attrs(
+        source_file=replayed,
+        target_file=normalized,
+        junction_id="j",
+        exclude_adjacent_junction_ids={"b"},
+        restore_edges_to_excluded_adjacent_junctions=True,
+    )
+    root = ET.parse(normalized).getroot()
+    assert root.find("edge[@id='out']/lane").attrib["shape"] == "10,0 20,0"
+    assert root.find("junction[@id='b']").attrib["shape"] == "bad-b"
+    assert restored_edge_report["excluded_adjacent_edge_ids"] == []
 
 
 def test_restore_off_scope_netconvert_artifacts_preserves_only_declared_replay_scope(
