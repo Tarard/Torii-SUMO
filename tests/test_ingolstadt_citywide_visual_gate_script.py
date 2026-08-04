@@ -104,6 +104,97 @@ def test_inventory_applies_the_teacher_projected_scope(tmp_path: Path) -> None:
     assert inventory["applicable_junction_count"] == 0
 
 
+def test_render_subnet_uses_common_projected_boundary_and_binds_source(tmp_path: Path) -> None:
+    module = _module()
+    source = tmp_path / "source.net.xml"
+    _write_net(source, offset="-1000,-2000", junction_x=20, junction_y=30)
+    commands: list[list[str]] = []
+
+    def fake_run(command, *, cwd, timeout_seconds):
+        commands.append(list(command))
+        destination = Path(command[command.index("--output-file") + 1])
+        destination.write_bytes(source.read_bytes())
+        return CommandResult(
+            command=command,
+            cwd=str(cwd),
+            status="pass",
+            returncode=0,
+        )
+
+    report = module.build_visual_tile_subnet(
+        source_net=source,
+        projected_boundary=(1000.0, 2000.0, 1250.0, 2250.0),
+        output_dir=tmp_path / "subnet",
+        requested_junctions=("j0",),
+        requested_lanes=("in_0", "out_0"),
+        command_runner=fake_run,
+    )
+
+    assert report["status"] == "pass"
+    assert report["source_sha256"] == file_sha256(source)
+    assert report["projected_boundary"] == [1000.0, 2000.0, 1250.0, 2250.0]
+    assert commands[0][commands[0].index("--keep-edges.in-boundary") + 1] == (
+        "0.000,0.000,250.000,250.000"
+    )
+    assert report["verified_junctions"] == ["j0"]
+    assert set(report["verified_lanes"]) == {"in_0", "out_0"}
+
+
+def test_render_subnet_fails_when_requested_geometry_is_missing(tmp_path: Path) -> None:
+    module = _module()
+    source = tmp_path / "source.net.xml"
+    _write_net(source, offset="-1000,-2000", junction_x=20, junction_y=30)
+
+    def fake_run(command, *, cwd, timeout_seconds):
+        destination = Path(command[command.index("--output-file") + 1])
+        destination.write_text(
+            '<net><location netOffset="-1000,-2000" convBoundary="0,0,250,250"/>'
+            '<edge id="in"><lane id="in_0" index="0" shape="0,30 20,30"/></edge></net>',
+            encoding="utf-8",
+        )
+        return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+    report = module.build_visual_tile_subnet(
+        source_net=source,
+        projected_boundary=(1000.0, 2000.0, 1250.0, 2250.0),
+        output_dir=tmp_path / "subnet",
+        requested_junctions=("j0",),
+        requested_lanes=("in_0", "out_0"),
+        command_runner=fake_run,
+    )
+
+    assert report["status"] == "fail"
+    assert report["missing_requested_junctions"] == ["j0"]
+    assert report["missing_requested_lanes"] == ["out_0"]
+
+
+def test_visual_tile_boundary_includes_registered_lane_geometry(tmp_path: Path) -> None:
+    module = _module()
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    _write_net(teacher, offset="-1000,-2000", junction_x=20, junction_y=30)
+    _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
+    for path in (teacher, candidate):
+        path.write_text(
+            path.read_text(encoding="utf-8").replace('shape="20,30 40,30"', 'shape="20,30 100,30"'),
+            encoding="utf-8",
+        )
+    records = [{
+        "teacher_lane": "in_0",
+        "candidate_lane": "in_0",
+        "outgoing_lane_pairs": {"out_0": "out_0"},
+    }]
+
+    boundary = module.visual_tile_projected_boundary(
+        teacher_net=teacher,
+        candidate_net=candidate,
+        records=records,
+        tile_boundary=(1000.0, 2000.0, 1050.0, 2050.0),
+    )
+
+    assert boundary == (970.0, 1970.0, 1130.0, 2080.0)
+
+
 def test_source_ledger_binds_official_scope_and_all_inputs(tmp_path: Path, monkeypatch) -> None:
     module = _module()
     teacher = tmp_path / "teacher.net.xml"

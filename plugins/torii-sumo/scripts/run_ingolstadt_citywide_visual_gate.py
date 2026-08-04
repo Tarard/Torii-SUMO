@@ -1210,6 +1210,117 @@ def _location_numbers(path: Path) -> tuple[tuple[float, float], tuple[float, flo
     return offset, boundary  # type: ignore[return-value]
 
 
+def build_visual_tile_subnet(
+    *,
+    source_net: Path,
+    projected_boundary: tuple[float, float, float, float],
+    output_dir: Path,
+    requested_junctions: Sequence[str],
+    requested_lanes: Sequence[str],
+    command_runner: Any = run_command,
+) -> dict[str, Any]:
+    source = Path(source_net).resolve(strict=True)
+    destination = Path(output_dir).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    subnet = destination / "render.net.xml"
+    offset, _ = _location_numbers(source)
+    local_boundary = (
+        projected_boundary[0] + offset[0],
+        projected_boundary[1] + offset[1],
+        projected_boundary[2] + offset[0],
+        projected_boundary[3] + offset[1],
+    )
+    boundary_text = ",".join(f"{value:.3f}" for value in local_boundary)
+    base_command = [
+        "netconvert",
+        "--sumo-net-file",
+        str(source),
+        "--keep-edges.in-boundary",
+        boundary_text,
+    ]
+    commands = [
+        [*base_command, "--keep-edges.postload", "--output-file", str(subnet)],
+        [*base_command, "--output-file", str(subnet)],
+    ]
+    attempts = []
+    result = command_runner(commands[0], cwd=destination, timeout_seconds=300.0)
+    attempts.append(result.to_dict())
+    if result.status != "pass":
+        result = command_runner(commands[1], cwd=destination, timeout_seconds=300.0)
+        attempts.append(result.to_dict())
+    write_text_atomic(
+        destination / "netconvert.cmd.txt",
+        "\n".join(subprocess.list2cmdline(attempt["command"]) for attempt in attempts) + "\n",
+    )
+
+    junctions: set[str] = set()
+    lanes: set[str] = set()
+    if result.status == "pass" and subnet.is_file():
+        root = ET.parse(subnet).getroot()
+        junctions = {str(item.get("id")) for item in root.findall("junction") if item.get("id")}
+        lanes = {str(item.get("id")) for item in root.iter("lane") if item.get("id")}
+    requested_junction_set = set(map(str, requested_junctions))
+    requested_lane_set = set(map(str, requested_lanes))
+    verified_junctions = sorted(requested_junction_set & junctions)
+    verified_lanes = sorted(requested_lane_set & lanes)
+    missing_junctions = sorted(requested_junction_set - junctions)
+    missing_lanes = sorted(requested_lane_set - lanes)
+    status = "pass" if result.status == "pass" and not missing_junctions and not missing_lanes else "fail"
+    return {
+        "status": status,
+        "source_net_file": str(source),
+        "source_sha256": file_sha256(source),
+        "projected_boundary": list(projected_boundary),
+        "local_boundary": list(local_boundary),
+        "subnet_file": str(subnet),
+        "subnet_sha256": file_sha256(subnet) if subnet.is_file() else "",
+        "command_attempts": attempts,
+        "requested_junctions": sorted(requested_junction_set),
+        "requested_lanes": sorted(requested_lane_set),
+        "verified_junctions": verified_junctions,
+        "verified_lanes": verified_lanes,
+        "missing_requested_junctions": missing_junctions,
+        "missing_requested_lanes": missing_lanes,
+    }
+
+
+def visual_tile_projected_boundary(
+    *,
+    teacher_net: Path,
+    candidate_net: Path,
+    records: Sequence[Mapping[str, Any]],
+    tile_boundary: tuple[float, float, float, float],
+    buffer_m: float = 30.0,
+) -> tuple[float, float, float, float]:
+    if buffer_m < 0:
+        raise ValueError("buffer_m must be non-negative")
+    points = [(tile_boundary[0], tile_boundary[1]), (tile_boundary[2], tile_boundary[3])]
+    for role, net_file in (("teacher", teacher_net), ("candidate", candidate_net)):
+        lane_ids = {str(record[f"{role}_lane"]) for record in records}
+        for record in records:
+            pairs = record.get("outgoing_lane_pairs", {})
+            lane_ids.update(map(str, pairs.keys() if role == "teacher" else pairs.values()))
+        offset, _ = _location_numbers(Path(net_file))
+        lanes = {
+            str(lane.get("id")): lane
+            for lane in ET.parse(net_file).getroot().iter("lane")
+            if lane.get("id")
+        }
+        missing = sorted(lane_ids - lanes.keys())
+        if missing:
+            raise ValueError(f"registered {role} lanes are absent: {', '.join(missing)}")
+        for lane_id in lane_ids:
+            for value in lanes[lane_id].get("shape", "").split():
+                x, y = (float(number) for number in value.split(",")[:2])
+                points.append((x - offset[0], y - offset[1]))
+    return (
+        min(point[0] for point in points) - buffer_m,
+        min(point[1] for point in points) - buffer_m,
+        max(point[0] for point in points) + buffer_m,
+        max(point[1] for point in points) + buffer_m,
+    )
+
+
 def write_source_ledger(
     destination: Path,
     *,
