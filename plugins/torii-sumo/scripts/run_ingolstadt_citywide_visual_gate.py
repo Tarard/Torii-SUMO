@@ -37,6 +37,7 @@ from torii_sumo.core.sumo_commands import discover_binaries
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
 OFFICIAL_CONV_BOUNDARY = (1243.52, 0.0, 11284.52, 10137.01)
+CAPTURE_POLICY_VERSION = "native-test-v1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--junction-distance-m", type=float, default=10.0)
     parser.add_argument("--zoom", type=float, default=2500.0)
     parser.add_argument("--window-size", default="1400,1000")
+    parser.add_argument("--max-tile-distance", type=int)
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -228,30 +230,62 @@ def register_lanes(
 def write_tile_state(
     path: Path,
     *,
+    teacher_sha: str,
     candidate_sha: str,
-    completed: Sequence[str],
-    lane_reports: Mapping[str, Any] | None = None,
+    manifest_sha: str,
+    lane_reports: Mapping[str, Any],
 ) -> None:
     write_json_atomic(
         path,
         {
-            "schema": "torii.ingolstadt-citywide-tile/v1",
+            "schema": "torii.ingolstadt-citywide-tile/v2",
+            "teacher_sha256": teacher_sha,
             "candidate_sha256": candidate_sha,
-            "completed": sorted(set(completed)),
-            "lane_reports": dict(lane_reports or {}),
+            "manifest_sha256": manifest_sha,
+            "capture_policy_version": CAPTURE_POLICY_VERSION,
+            "completed": sorted(lane_reports),
+            "lane_reports": dict(lane_reports),
         },
         sort_keys=True,
     )
 
 
-def pending_items(path: Path, *, candidate_sha: str, items: Sequence[str]) -> list[str]:
+def evidence_artifacts_match(report: Mapping[str, Any]) -> bool:
+    artifacts = (
+        (report.get("teacher_screenshot_file"), report.get("teacher_screenshot_sha256")),
+        (report.get("candidate_screenshot_file"), report.get("candidate_screenshot_sha256")),
+        (report.get("teacher_mask", {}).get("file"), report.get("teacher_mask", {}).get("sha256")),
+        (report.get("candidate_mask", {}).get("file"), report.get("candidate_mask", {}).get("sha256")),
+    )
+    try:
+        return all(path and digest and file_sha256(Path(str(path))) == digest for path, digest in artifacts)
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def load_resumable_lane_reports(
+    path: Path,
+    *,
+    teacher_sha: str,
+    candidate_sha: str,
+    manifest_sha: str,
+) -> dict[str, dict[str, Any]]:
     if not path.is_file():
-        return list(items)
+        return {}
     state = json.loads(path.read_text(encoding="utf-8"))
-    if state.get("candidate_sha256") != candidate_sha:
-        return list(items)
-    completed = set(map(str, state.get("completed", ())))
-    return [item for item in items if item not in completed]
+    required = {
+        "teacher_sha256": teacher_sha,
+        "candidate_sha256": candidate_sha,
+        "manifest_sha256": manifest_sha,
+        "capture_policy_version": CAPTURE_POLICY_VERSION,
+    }
+    if any(state.get(key) != value for key, value in required.items()):
+        return {}
+    return {
+        str(item_id): report
+        for item_id, report in state.get("lane_reports", {}).items()
+        if evidence_artifacts_match(report)
+    }
 
 
 def city_completion(
@@ -582,8 +616,13 @@ def evaluate_lane_pair(
         outgoing_lane_pairs=record["outgoing_lane_pairs"],
     )
     lane_dir = Path(lane_dir).resolve()
-    teacher_mask = write_semantic_mask(teacher_image, lane_dir / "teacher.mask.png", center=teacher_center)  # type: ignore[arg-type]
-    candidate_mask = write_semantic_mask(candidate_image, lane_dir / "candidate.mask.png", center=candidate_center)  # type: ignore[arg-type]
+    lane_dir.mkdir(parents=True, exist_ok=True)
+    teacher_evidence = lane_dir / "teacher.png"
+    candidate_evidence = lane_dir / "candidate.png"
+    shutil.copy2(teacher_image, teacher_evidence)
+    shutil.copy2(candidate_image, candidate_evidence)
+    teacher_mask = write_semantic_mask(teacher_evidence, lane_dir / "teacher.mask.png", center=teacher_center)  # type: ignore[arg-type]
+    candidate_mask = write_semantic_mask(candidate_evidence, lane_dir / "candidate.mask.png", center=candidate_center)  # type: ignore[arg-type]
     selections = {
         "teacher": teacher_capture.get("selection", {"status": "pass", "reasons": []}),
         "candidate": candidate_capture.get("selection", {"status": "pass", "reasons": []}),
@@ -599,8 +638,10 @@ def evaluate_lane_pair(
         "status": status,
         "teacher_lane": record["teacher_lane"],
         "candidate_lane": record["candidate_lane"],
-        "teacher_screenshot_sha256": file_sha256(teacher_image),
-        "candidate_screenshot_sha256": file_sha256(candidate_image),
+        "teacher_screenshot_file": str(teacher_evidence),
+        "teacher_screenshot_sha256": file_sha256(teacher_evidence),
+        "candidate_screenshot_file": str(candidate_evidence),
+        "candidate_screenshot_sha256": file_sha256(candidate_evidence),
         "teacher_mask": teacher_mask,
         "candidate_mask": candidate_mask,
         "selection": selections,
@@ -613,8 +654,8 @@ def evaluate_lane_pair(
         teacher_failure = failure_dir / "teacher.png"
         candidate_failure = failure_dir / "candidate.png"
         comparison = failure_dir / "comparison.png"
-        shutil.copy2(teacher_image, teacher_failure)
-        shutil.copy2(candidate_image, candidate_failure)
+        shutil.copy2(teacher_evidence, teacher_failure)
+        shutil.copy2(candidate_evidence, candidate_failure)
         _comparison_image(teacher_failure, candidate_failure, comparison)
         report["failure_images"] = {
             "teacher": str(teacher_failure),
@@ -631,7 +672,14 @@ def _tile_coordinates(value: str) -> tuple[int, int]:
     return int(first), int(second)
 
 
-def ordered_tiles(manifest: Mapping[str, Any], *, seed_junction: str) -> list[str]:
+def ordered_tiles(
+    manifest: Mapping[str, Any],
+    *,
+    seed_junction: str,
+    max_tile_distance: int | None = None,
+) -> list[str]:
+    if max_tile_distance is not None and max_tile_distance < 0:
+        raise ValueError("max_tile_distance must be non-negative")
     seed = next(
         (row for row in manifest["junction_pairs"] if row["teacher_id"] == seed_junction),
         None,
@@ -639,7 +687,14 @@ def ordered_tiles(manifest: Mapping[str, Any], *, seed_junction: str) -> list[st
     if seed is None:
         raise ValueError(f"seed junction is absent from city manifest: {seed_junction}")
     seed_x, seed_y = _tile_coordinates(str(seed["tile_id"]))
-    tiles = {str(row["tile_id"]) for row in manifest["junction_pairs"]}
+    tiles = {
+        str(row["tile_id"])
+        for row in manifest["junction_pairs"]
+        if max_tile_distance is None
+        or abs(_tile_coordinates(str(row["tile_id"]))[0] - seed_x)
+        + abs(_tile_coordinates(str(row["tile_id"]))[1] - seed_y)
+        <= max_tile_distance
+    }
     return sorted(
         tiles,
         key=lambda value: (
@@ -657,6 +712,7 @@ def run_visual_phase(
     zoom: float,
     window_size: tuple[int, int],
     resume: bool,
+    max_tile_distance: int | None = None,
     capture_tile_func: Any = None,
 ) -> dict[str, Any]:
     capture_tile_func = capture_tile_func or capture_tile_pair
@@ -676,9 +732,17 @@ def run_visual_phase(
     if candidate_sha != manifest["candidate_sha256"]:
         raise RuntimeError("candidate network hash changed after inventory")
 
+    teacher_sha = str(manifest["teacher_sha256"])
+    manifest_sha = file_sha256(manifest_path)
+    all_tiles = ordered_tiles(manifest, seed_junction=seed_junction)
+    selected_tiles = ordered_tiles(
+        manifest,
+        seed_junction=seed_junction,
+        max_tile_distance=max_tile_distance,
+    )
     all_reports: dict[str, dict[str, Any]] = {}
     item_count = 0
-    for tile in ordered_tiles(manifest, seed_junction=seed_junction):
+    for tile in selected_tiles:
         tile_dir = output / "tiles" / tile
         state_file = tile_dir / "state.json"
         pairs = sorted(
@@ -698,12 +762,14 @@ def run_visual_phase(
                     "outgoing_lane_pairs": pair["outgoing_lane_pairs"],
                 })
         item_count += len(records)
-        state: dict[str, Any] = {}
-        if resume and state_file.is_file():
-            state = json.loads(state_file.read_text(encoding="utf-8"))
         lane_reports = (
-            dict(state.get("lane_reports", {}))
-            if state.get("candidate_sha256") == candidate_sha
+            load_resumable_lane_reports(
+                state_file,
+                teacher_sha=teacher_sha,
+                candidate_sha=candidate_sha,
+                manifest_sha=manifest_sha,
+            )
+            if resume
             else {}
         )
         completed = set(lane_reports)
@@ -737,25 +803,36 @@ def run_visual_phase(
                 lane_reports[item_id] = report
                 write_tile_state(
                     state_file,
+                    teacher_sha=teacher_sha,
                     candidate_sha=candidate_sha,
-                    completed=lane_reports,
+                    manifest_sha=manifest_sha,
                     lane_reports=lane_reports,
                 )
             session_dir = (tile_dir / ".session").resolve()
-            if session_dir.parent == tile_dir.resolve() and session_dir.name == ".session":
+            new_reports = [lane_reports[str(record["item_id"])] for record in pending]
+            if (
+                all(report["status"] == "pass" for report in new_reports)
+                and session_dir.parent == tile_dir.resolve()
+                and session_dir.name == ".session"
+            ):
                 shutil.rmtree(session_dir, ignore_errors=False)
         all_reports.update({f"{tile}/{item_id}": report for item_id, report in lane_reports.items()})
 
     statuses = [str(report["status"]) for report in all_reports.values()]
     status = "pass" if len(statuses) == item_count and all(value == "pass" for value in statuses) else "fail"
+    coverage_status = "complete" if len(selected_tiles) == len(all_tiles) else "partial"
     summary = {
-        "schema": "torii.ingolstadt-citywide-visual-summary/v1",
+        "schema": "torii.ingolstadt-citywide-visual-summary/v2",
         "status": status,
         "teacher_sha256": manifest["teacher_sha256"],
         "candidate_sha256": candidate_sha,
         "lane_count": item_count,
         "pass_lane_count": statuses.count("pass"),
         "fail_lane_count": sum(value != "pass" for value in statuses),
+        "covered_tile_count": len(selected_tiles),
+        "total_tile_count": len(all_tiles),
+        "coverage_status": coverage_status,
+        "automatic_promotion_gate": "pass" if status == "pass" and coverage_status == "complete" else "blocked",
         "lane_reports": all_reports,
     }
     write_json_atomic(summary_file, summary, sort_keys=True)
@@ -1298,6 +1375,8 @@ def main(
     provenance_func: Any = _provenance,
 ) -> int:
     args = build_parser().parse_args(argv)
+    if args.max_tile_distance is not None and args.max_tile_distance < 0:
+        raise ValueError("max-tile-distance must be non-negative")
     if args.phase == "all":
         git_commit, sumo_version, netedit_version = provenance_func()
         inventory = inventory_func(
@@ -1324,8 +1403,9 @@ def main(
             zoom=args.zoom,
             window_size=window_size,
             resume=args.resume,
+            max_tile_distance=args.max_tile_distance,
         )
-        if visual["status"] != "pass":
+        if visual["status"] != "pass" or visual.get("coverage_status") != "complete":
             print(json.dumps(visual, ensure_ascii=False, indent=2))
             return 3 if visual["status"] == "blocked" else 2
         global_report = global_func(
@@ -1352,6 +1432,7 @@ def main(
             zoom=args.zoom,
             window_size=window_size,
             resume=args.resume,
+            max_tile_distance=args.max_tile_distance,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 3 if report["status"] == "blocked" else 2
@@ -1365,6 +1446,10 @@ def main(
         global_report = global_func(manifest_file=manifest_file, output_dir=args.output_dir)
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
         visual = json.loads(visual_file.read_text(encoding="utf-8"))
+        if visual.get("coverage_status") != "complete":
+            report = {"status": "blocked", "reason": "full-city visual coverage must finish first"}
+            print(json.dumps(report, ensure_ascii=False))
+            return 3
         completion = build_completion_report(
             manifest=manifest,
             visual=visual,

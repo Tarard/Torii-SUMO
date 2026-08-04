@@ -311,21 +311,72 @@ def test_lane_registration_is_one_to_one_by_road_and_bearing() -> None:
     assert report["candidate_only"] == []
 
 
-def test_resume_skips_hash_matching_pass_and_invalidates_changed_candidate(tmp_path: Path) -> None:
+def test_resume_requires_policy_hashes_and_unchanged_evidence_artifacts(tmp_path: Path) -> None:
     module = _module()
     state = tmp_path / "state.json"
-    module.write_tile_state(state, candidate_sha="a" * 64, completed=["j0/in_0"])
-
-    assert module.pending_items(
+    files = {}
+    for name in ("teacher.png", "candidate.png", "teacher.mask.png", "candidate.mask.png"):
+        path = tmp_path / name
+        Image.new("RGB", (10, 10), "white").save(path)
+        files[name] = path
+    report = {
+        "status": "pass",
+        "teacher_screenshot_file": str(files["teacher.png"]),
+        "teacher_screenshot_sha256": file_sha256(files["teacher.png"]),
+        "candidate_screenshot_file": str(files["candidate.png"]),
+        "candidate_screenshot_sha256": file_sha256(files["candidate.png"]),
+        "teacher_mask": {
+            "file": str(files["teacher.mask.png"]),
+            "sha256": file_sha256(files["teacher.mask.png"]),
+        },
+        "candidate_mask": {
+            "file": str(files["candidate.mask.png"]),
+            "sha256": file_sha256(files["candidate.mask.png"]),
+        },
+    }
+    module.write_tile_state(
         state,
-        candidate_sha="a" * 64,
-        items=["j0/in_0", "j1/in_0"],
-    ) == ["j1/in_0"]
-    assert module.pending_items(
-        state,
+        teacher_sha="a" * 64,
         candidate_sha="b" * 64,
-        items=["j0/in_0", "j1/in_0"],
-    ) == ["j0/in_0", "j1/in_0"]
+        manifest_sha="c" * 64,
+        lane_reports={"j0/in_0": report},
+    )
+
+    assert set(module.load_resumable_lane_reports(
+        state,
+        teacher_sha="a" * 64,
+        candidate_sha="b" * 64,
+        manifest_sha="c" * 64,
+    )) == {"j0/in_0"}
+    assert module.load_resumable_lane_reports(
+        state,
+        teacher_sha="a" * 64,
+        candidate_sha="changed",
+        manifest_sha="c" * 64,
+    ) == {}
+    stale = json.loads(state.read_text(encoding="utf-8"))
+    stale["capture_policy_version"] = "old"
+    state.write_text(json.dumps(stale), encoding="utf-8")
+    assert module.load_resumable_lane_reports(
+        state,
+        teacher_sha="a" * 64,
+        candidate_sha="b" * 64,
+        manifest_sha="c" * 64,
+    ) == {}
+    module.write_tile_state(
+        state,
+        teacher_sha="a" * 64,
+        candidate_sha="b" * 64,
+        manifest_sha="c" * 64,
+        lane_reports={"j0/in_0": report},
+    )
+    files["teacher.png"].write_bytes(b"changed")
+    assert module.load_resumable_lane_reports(
+        state,
+        teacher_sha="a" * 64,
+        candidate_sha="b" * 64,
+        manifest_sha="c" * 64,
+    ) == {}
 
 
 def test_city_completion_fails_on_any_unmapped_or_nonpass_item() -> None:
@@ -617,6 +668,23 @@ def test_tiles_expand_from_the_verified_seed() -> None:
     ]
 
 
+def test_tiles_stop_at_requested_manhattan_distance() -> None:
+    manifest = {
+        "junction_pairs": [
+            {"teacher_id": "seed", "tile_id": "0004_0008"},
+            {"teacher_id": "north", "tile_id": "0004_0009"},
+            {"teacher_id": "east", "tile_id": "0005_0008"},
+            {"teacher_id": "far", "tile_id": "0006_0008"},
+        ]
+    }
+
+    assert _module().ordered_tiles(
+        manifest,
+        seed_junction="seed",
+        max_tile_distance=1,
+    ) == ["0004_0008", "0004_0009", "0005_0008"]
+
+
 def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     module = _module()
     teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
@@ -690,6 +758,58 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert Path(first["summary_file"]).is_file()
     assert (tmp_path / "out" / "tiles" / "0004_0008" / "state.json").is_file()
     assert not (tmp_path / "out" / "tiles" / "0004_0008" / ".session").exists()
+    state = json.loads((tmp_path / "out" / "tiles" / "0004_0008" / "state.json").read_text(encoding="utf-8"))
+    assert state["schema"] == "torii.ingolstadt-citywide-tile/v2"
+    evidence = next(iter(first["lane_reports"].values()))
+    assert Path(evidence["teacher_screenshot_file"]).is_file()
+    assert Path(evidence["candidate_screenshot_file"]).is_file()
+
+    def failed_capture(**kwargs):
+        session_dir = Path(kwargs["output_dir"])
+        session_dir.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for role in ("teacher", "candidate"):
+            image_file = session_dir / f"{role}.png"
+            Image.new("RGB", (240, 180), "white").save(image_file)
+            rows.append([{
+                "lane_id": "in_0",
+                "screenshot_file": str(image_file),
+                "junction_pixel": [120, 90],
+            }])
+        return tuple(rows)
+
+    failed = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "failed-out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=False,
+        capture_tile_func=failed_capture,
+    )
+    assert failed["status"] == "fail"
+    assert (tmp_path / "failed-out" / "tiles" / "0004_0008" / ".session").is_dir()
+
+    expanded_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    far_pair = dict(expanded_manifest["junction_pairs"][0])
+    far_pair.update({"teacher_id": "far", "candidate_ids": ["far"], "tile_id": "0006_0008"})
+    expanded_manifest["junction_pairs"].append(far_pair)
+    manifest_file.write_text(json.dumps(expanded_manifest), encoding="utf-8")
+    partial = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "partial-out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=False,
+        max_tile_distance=0,
+        capture_tile_func=fake_capture,
+    )
+    assert partial["status"] == "pass"
+    assert partial["coverage_status"] == "partial"
+    assert partial["covered_tile_count"] == 1
+    assert partial["total_tile_count"] == 2
+    assert partial["automatic_promotion_gate"] == "blocked"
 
 
 def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
@@ -962,6 +1082,7 @@ def test_main_global_phase_writes_strict_completion(tmp_path: Path) -> None:
     }), encoding="utf-8")
     (output / "visual-summary.json").write_text(json.dumps({
         "candidate_sha256": candidate_sha,
+        "coverage_status": "complete",
         "lane_reports": {"tile/lane": {"status": "pass", "structure": {"status": "pass"}}},
     }), encoding="utf-8")
 
@@ -1007,6 +1128,7 @@ def test_main_all_runs_inventory_visual_and_global_in_order(tmp_path: Path) -> N
         calls.append("visual")
         return {
             "status": "pass", "candidate_sha256": candidate_sha,
+            "coverage_status": "complete",
             "lane_reports": {"tile/lane": {"status": "pass", "structure": {"status": "pass"}}},
         }
 
