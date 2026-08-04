@@ -19451,7 +19451,7 @@ def _compound_endpoint_contraction_ids(
         if teacher_endpoint in compound_junction_ids
         and teacher_endpoint.startswith("cluster_")
         and candidate_endpoint
-        and candidate_endpoint not in teacher_junction_ids
+        and not _teacher_junction_alias(candidate_endpoint, teacher_junction_ids)
     }
 
 

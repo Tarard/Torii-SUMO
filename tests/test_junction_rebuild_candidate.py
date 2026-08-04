@@ -144,6 +144,25 @@ def test_compound_endpoint_contraction_stops_at_unjoined_teacher_cluster() -> No
     assert contraction_ids == {"joined_residual"}
 
 
+def test_compound_endpoint_contraction_keeps_shortened_teacher_cluster_alias() -> None:
+    full_id = "cluster_a_b_c_d_e_f"
+    short_id = "cluster_a_b_c_d_#2more"
+
+    contraction_ids = rebuild_candidate_module._compound_endpoint_contraction_ids(
+        [
+            {
+                "preserved_mapped_boundary_endpoints": [
+                    {"teacher_mapped_to": short_id, "candidate_to": short_id}
+                ]
+            }
+        ],
+        teacher_junction_ids={full_id},
+        compound_junction_ids={short_id},
+    )
+
+    assert contraction_ids == set()
+
+
 def test_teacher_junction_alias_resolves_sumo_short_cluster_id() -> None:
     full_id = "cluster_a_b_c_d_e_f"
 
