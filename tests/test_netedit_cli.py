@@ -116,6 +116,29 @@ def test_launch_netedit_can_detach_non_blocking_windows_gui(tmp_path: Path) -> N
     assert captured["shell"] is False
 
 
+def test_build_netedit_open_command_validates_and_emits_native_test_file(tmp_path: Path) -> None:
+    net_file = tmp_path / "corridor.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    gui_settings = tmp_path / "view.xml"
+    gui_settings.write_text("<viewsettings/>", encoding="utf-8")
+    test_file = tmp_path / "connection.test.py"
+
+    with pytest.raises(FileNotFoundError, match="test file"):
+        netedit._build_netedit_open_command(net_file, test_file=test_file)
+
+    test_file.write_text('netedit.changeMode("connection")\n', encoding="utf-8")
+    command = netedit._build_netedit_open_command(
+        net_file,
+        gui_settings_file=gui_settings,
+        test_file=test_file,
+    )
+
+    assert command[command.index("-g") + 2 : command.index("-g") + 4] == [
+        "--test-file",
+        str(test_file),
+    ]
+
+
 class _SessionProcess:
     pid = 9001
 
@@ -230,6 +253,47 @@ def test_wait_for_netedit_network_loaded_rejects_the_loading_window(monkeypatch)
     title = netedit._wait_for_netedit_network_loaded(42, 9001, "candidate.net.xml", 1.0)
 
     assert title == "candidate.net.xml - netedit 1.27.1"
+
+
+def test_target_session_snapshots_native_test_file_and_skips_render_activation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text("<net/>", encoding="utf-8")
+    test_file = tmp_path / "connection.test.py"
+    test_file.write_text('netedit.changeMode("connection")\n', encoding="utf-8")
+    candidate = tmp_path / "working.net.xml"
+    deliveries, _ = _patch_target_session_runtime(monkeypatch, candidate)
+    activations: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        netedit,
+        "_activate_target_window",
+        lambda hwnd, pid: activations.append((hwnd, pid)),
+    )
+
+    session = NeteditTargetSession(
+        source,
+        candidate,
+        tmp_path / "session",
+        expected_source_sha256=netedit._file_sha256(source),
+        test_file=test_file,
+        activate_for_render=False,
+        platform_name="win32",
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=lambda _command, **_kwargs: _SessionProcess(),
+        settle_seconds=0,
+    )
+    opened = session.open()
+
+    assert activations == []
+    assert "--test-file" in session.command
+    snapshot = tmp_path / "session" / "preloaded" / "test.py"
+    assert session.command[session.command.index("--test-file") + 1] == str(snapshot)
+    assert snapshot.read_bytes() == test_file.read_bytes()
+    assert opened["capture"]["width"] == 800
+    session.abort("test_complete")
+    assert [item for item in deliveries if item[0] != "close"] == []
 
 
 def test_target_session_copies_source_records_every_step_and_never_promotes(

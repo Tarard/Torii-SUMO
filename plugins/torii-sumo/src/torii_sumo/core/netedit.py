@@ -95,6 +95,7 @@ def _build_netedit_open_command(
     netedit_binary: str = "netedit",
     gui_settings_file: Path | str | None = None,
     selection_file: Path | str | None = None,
+    test_file: Path | str | None = None,
     window_size: str | None = None,
     window_pos: str | None = None,
 ) -> list[str]:
@@ -112,6 +113,7 @@ def _build_netedit_open_command(
     optional_paths = (
         ("GUI settings", None if gui_settings_file is None else Path(gui_settings_file)),
         ("selection", None if selection_file is None else Path(selection_file)),
+        ("test file", None if test_file is None else Path(test_file)),
     )
     for label, optional_path in optional_paths:
         if optional_path is not None and not optional_path.is_file():
@@ -126,6 +128,8 @@ def _build_netedit_open_command(
         command += ["-g", str(gui_settings_file)]
     if selection_file is not None:
         command += ["--selection-file", str(selection_file)]
+    if test_file is not None:
+        command += ["--test-file", str(test_file)]
     command += ["--registry-viewport", "false"]
     if window_size:
         command += ["--window-size", window_size]
@@ -838,6 +842,8 @@ class NeteditTargetSession:
         netedit_binary: str = "netedit",
         gui_settings_file: Path | str | None = None,
         selection_file: Path | str | None = None,
+        test_file: Path | str | None = None,
+        activate_for_render: bool = True,
         target_source_junction_ids: Sequence[str] = (),
         target_candidate_junction_ids: Sequence[str] = (),
         window_size: str = "1400,1000",
@@ -855,8 +861,11 @@ class NeteditTargetSession:
         self.netedit_binary = netedit_binary
         self.gui_settings_file = None if gui_settings_file is None else Path(gui_settings_file).resolve()
         self.selection_file = None if selection_file is None else Path(selection_file).resolve()
+        self.test_file = None if test_file is None else Path(test_file).resolve()
+        self.activate_for_render = activate_for_render
         self.gui_settings_snapshot_file: Path | None = None
         self.selection_snapshot_file: Path | None = None
+        self.test_file_snapshot_file: Path | None = None
         self.target_source_junction_ids = tuple(
             dict.fromkeys(str(value).strip() for value in target_source_junction_ids if str(value).strip())
         )
@@ -920,7 +929,11 @@ class NeteditTargetSession:
             raise FileNotFoundError("netedit binary not found")
         if Path(executable).stem.lower() != "netedit":
             raise ValueError(f"target executable is not NetEdit: {executable}")
-        for label, path in (("GUI settings", self.gui_settings_file), ("selection", self.selection_file)):
+        for label, path in (
+            ("GUI settings", self.gui_settings_file),
+            ("selection", self.selection_file),
+            ("test file", self.test_file),
+        ):
             if path is not None and not path.is_file():
                 raise FileNotFoundError(f"NetEdit {label} file not found: {path}")
         if self.output_dir.exists():
@@ -936,6 +949,7 @@ class NeteditTargetSession:
         for role, source_path, snapshot_name in (
             ("gui_settings", self.gui_settings_file, "gui-settings.xml"),
             ("selection", self.selection_file, "selection.txt"),
+            ("test_file", self.test_file, "test.py"),
         ):
             if source_path is None:
                 continue
@@ -949,9 +963,11 @@ class NeteditTargetSession:
                 raise RuntimeError(f"NetEdit {role} snapshot does not match its source bytes")
             if role == "gui_settings":
                 self.gui_settings_snapshot_file = snapshot_path
-            else:
+            elif role == "selection":
                 self.selection_snapshot_file = snapshot_path
                 self.initial_selection_sha256 = snapshot_hash
+            else:
+                self.test_file_snapshot_file = snapshot_path
             self.preloaded_artifacts.append(
                 {
                     "role": role,
@@ -971,6 +987,7 @@ class NeteditTargetSession:
             netedit_binary=executable,
             gui_settings_file=self.gui_settings_snapshot_file,
             selection_file=self.selection_snapshot_file,
+            test_file=self.test_file_snapshot_file,
             window_size=self.window_size,
             window_pos=self.window_pos,
         )
@@ -996,16 +1013,22 @@ class NeteditTargetSession:
                 self.candidate.name,
                 self.window_timeout_seconds,
             )
-            render_context = _activate_target_window(self.hwnd, self.process.pid)
-            self.foreground_activation_used = True
-            try:
-                keyboard_layout = _ensure_english_window_layout(self.hwnd)
-                self.keyboard_layout_evidence.append({"phase": "open", **keyboard_layout})
+            keyboard_layout = {"status": "not_required", "reason": "native_test_file"}
+            render_context: dict[str, Any] = {}
+            render_restore = {"restored": True, "reason": "capture_only"}
+            if self.activate_for_render:
+                render_context = _activate_target_window(self.hwnd, self.process.pid)
+                self.foreground_activation_used = True
+                try:
+                    keyboard_layout = _ensure_english_window_layout(self.hwnd)
+                    self.keyboard_layout_evidence.append({"phase": "open", **keyboard_layout})
+                    time.sleep(self.settle_seconds)
+                finally:
+                    render_restore = _restore_input_context(render_context)
+                if not render_restore["restored"]:
+                    raise RuntimeError("foreground context was not restored after NetEdit initial render")
+            else:
                 time.sleep(self.settle_seconds)
-            finally:
-                render_restore = _restore_input_context(render_context)
-            if not render_restore["restored"]:
-                raise RuntimeError("foreground context was not restored after NetEdit initial render")
             self.state = "open"
             return self._record_step(
                 "open",
