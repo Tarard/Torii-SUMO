@@ -6447,7 +6447,7 @@ def build_teacher_guided_junction_variant(
                     edge_map=compound_edge_map,
                     teacher_junction_id=compound_junction_id,
                     geometry_anchor_edge_file=tl_logic_input_file,
-                    blend_geometry_anchor_at_target=False,
+                    blend_geometry_anchor_at_target=True,
                     copy_unmapped_boundary_edges=True,
                     preserve_mapped_boundary_endpoints=True,
                     preserve_unmapped_boundary_edges=True,

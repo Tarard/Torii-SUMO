@@ -18653,7 +18653,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
-    assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is False
+    assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
     assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is False
     assert report["connection_plan"]["structural_teacher_junction_ids"] == ["j"]
     assert report["connection_plan"]["emit_crossings"] is False
