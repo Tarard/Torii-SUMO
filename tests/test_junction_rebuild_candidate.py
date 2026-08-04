@@ -119,6 +119,31 @@ def test_geometry_anchor_rejects_sumo_invalid_coordinate_sentinel(tmp_path: Path
     assert set(anchors) == {"good"}
 
 
+def test_compound_endpoint_contraction_stops_at_unjoined_teacher_cluster() -> None:
+    reports = [
+        {
+            "preserved_mapped_boundary_endpoints": [
+                {
+                    "teacher_mapped_to": "cluster_joined_a_b",
+                    "candidate_to": "joined_residual",
+                },
+                {
+                    "teacher_mapped_to": "cluster_future_c_d",
+                    "candidate_to": "future_frontier",
+                },
+            ],
+        },
+    ]
+
+    contraction_ids = rebuild_candidate_module._compound_endpoint_contraction_ids(
+        reports,
+        teacher_junction_ids={"cluster_joined_a_b", "cluster_future_c_d"},
+        compound_junction_ids={"cluster_joined_a_b"},
+    )
+
+    assert contraction_ids == {"joined_residual"}
+
+
 def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"

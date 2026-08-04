@@ -6541,15 +6541,11 @@ def build_teacher_guided_junction_variant(
             - {junction_id}
         )
         expected_contraction_ids.update(
-            candidate_endpoint
-            for replay_report in compound_internal_replay_reports
-            for rewrite in replay_report.get("preserved_mapped_boundary_endpoints", []) or []
-            if isinstance(rewrite, dict)
-            for endpoint_attr in ("from", "to")
-            for candidate_endpoint in [str(rewrite.get(f"candidate_{endpoint_attr}", ""))]
-            if str(rewrite.get(f"teacher_mapped_{endpoint_attr}", "")).startswith("cluster_")
-            and candidate_endpoint
-            and candidate_endpoint not in teacher_junction_ids
+            _compound_endpoint_contraction_ids(
+                compound_internal_replay_reports,
+                teacher_junction_ids=teacher_junction_ids,
+                compound_junction_ids=set(compound_junction_ids),
+            )
         )
         residual_corridor_prune = _prune_teacher_absent_residual_corridor(
             net_file=final_net_file,
@@ -19408,6 +19404,27 @@ def _endpoint_rewrite_endpoint_ids(lane_patch_report: dict[str, object]) -> set[
                     continue
                 endpoint_ids.update(value for value in (old, new) if value and not value.startswith(":"))
     return endpoint_ids
+
+
+def _compound_endpoint_contraction_ids(
+    replay_reports: Sequence[dict[str, object]],
+    *,
+    teacher_junction_ids: set[str],
+    compound_junction_ids: set[str],
+) -> set[str]:
+    return {
+        candidate_endpoint
+        for replay_report in replay_reports
+        for rewrite in replay_report.get("preserved_mapped_boundary_endpoints", []) or []
+        if isinstance(rewrite, dict)
+        for endpoint_attr in ("from", "to")
+        for teacher_endpoint in [str(rewrite.get(f"teacher_mapped_{endpoint_attr}", ""))]
+        for candidate_endpoint in [str(rewrite.get(f"candidate_{endpoint_attr}", ""))]
+        if teacher_endpoint in compound_junction_ids
+        and teacher_endpoint.startswith("cluster_")
+        and candidate_endpoint
+        and candidate_endpoint not in teacher_junction_ids
+    }
 
 
 def _compare_teacher_models(
