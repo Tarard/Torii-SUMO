@@ -791,9 +791,10 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert (tmp_path / "failed-out" / "tiles" / "0004_0008" / ".session").is_dir()
 
     expanded_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    far_pair = dict(expanded_manifest["junction_pairs"][0])
-    far_pair.update({"teacher_id": "far", "candidate_ids": ["far"], "tile_id": "0006_0008"})
-    expanded_manifest["junction_pairs"].append(far_pair)
+    expanded_manifest["status"] = "blocked"
+    expanded_manifest["registration_gaps"] = [
+        {"kind": "teacher_only", "id": "far", "tile_id": "0006_0008"}
+    ]
     manifest_file.write_text(json.dumps(expanded_manifest), encoding="utf-8")
     partial = module.run_visual_phase(
         manifest_file=manifest_file,

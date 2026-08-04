@@ -502,6 +502,24 @@ def build_city_manifest(
         and not registration["ambiguous"]
         and all(row["status"] == "ready" for row in pairs)
     ) else "blocked"
+    registration_gaps = [
+        {
+            "kind": kind,
+            "id": junction_id,
+            "tile_id": inventory[junction_id]["tile_id"],
+            "projected_center": inventory[junction_id]["projected_center"],
+        }
+        for kind, ids, inventory in (
+            ("teacher_only", registration["teacher_only"], teacher_by_id),
+            ("candidate_only", registration["candidate_only"], candidate_by_id),
+            (
+                "ambiguous",
+                [str(row["teacher_id"]) for row in registration["ambiguous"]],
+                teacher_by_id,
+            ),
+        )
+        for junction_id in ids
+    ]
     return {
         "schema": "torii.ingolstadt-citywide-manifest/v1",
         "status": status,
@@ -512,6 +530,7 @@ def build_city_manifest(
         "teacher_only": registration["teacher_only"],
         "candidate_only": registration["candidate_only"],
         "ambiguous": registration["ambiguous"],
+        "registration_gaps": sorted(registration_gaps, key=lambda row: (row["tile_id"], row["kind"], row["id"])),
         "junction_pairs": sorted(pairs, key=lambda row: (row["tile_id"], row["teacher_id"])),
         "automatic_promotion_gate": "blocked",
     }
@@ -689,7 +708,7 @@ def ordered_tiles(
     seed_x, seed_y = _tile_coordinates(str(seed["tile_id"]))
     tiles = {
         str(row["tile_id"])
-        for row in manifest["junction_pairs"]
+        for row in (*manifest["junction_pairs"], *manifest.get("registration_gaps", ()))
         if max_tile_distance is None
         or abs(_tile_coordinates(str(row["tile_id"]))[0] - seed_x)
         + abs(_tile_coordinates(str(row["tile_id"]))[1] - seed_y)
@@ -720,8 +739,8 @@ def run_visual_phase(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     output = Path(output_dir).resolve()
     summary_file = output / "visual-summary.json"
-    if manifest.get("schema") != "torii.ingolstadt-citywide-manifest/v1" or manifest.get("status") != "ready":
-        report = {"status": "blocked", "reason": "city manifest is not ready", "pass_lane_count": 0}
+    if manifest.get("schema") != "torii.ingolstadt-citywide-manifest/v1":
+        report = {"status": "blocked", "reason": "city manifest schema is invalid", "pass_lane_count": 0}
         write_json_atomic(summary_file, report, sort_keys=True)
         return {**report, "summary_file": str(summary_file)}
     teacher_net = Path(str(manifest["teacher_net_file"])).resolve(strict=True)
@@ -742,6 +761,10 @@ def run_visual_phase(
     )
     all_reports: dict[str, dict[str, Any]] = {}
     item_count = 0
+    selected_registration_gap_count = sum(
+        str(row["tile_id"]) in selected_tiles for row in manifest.get("registration_gaps", ())
+    )
+    selected_blocked_pair_count = 0
     for tile in selected_tiles:
         tile_dir = output / "tiles" / tile
         state_file = tile_dir / "state.json"
@@ -749,6 +772,8 @@ def run_visual_phase(
             (row for row in manifest["junction_pairs"] if row["tile_id"] == tile),
             key=lambda row: row["teacher_id"],
         )
+        selected_blocked_pair_count += sum(pair.get("status", "ready") != "ready" for pair in pairs)
+        pairs = [pair for pair in pairs if pair.get("status", "ready") == "ready"]
         records = []
         for pair_index, pair in enumerate(pairs, 1):
             for lane_index, lane in enumerate(
@@ -819,7 +844,12 @@ def run_visual_phase(
         all_reports.update({f"{tile}/{item_id}": report for item_id, report in lane_reports.items()})
 
     statuses = [str(report["status"]) for report in all_reports.values()]
-    status = "pass" if len(statuses) == item_count and all(value == "pass" for value in statuses) else "fail"
+    status = "pass" if (
+        len(statuses) == item_count
+        and all(value == "pass" for value in statuses)
+        and selected_registration_gap_count == 0
+        and selected_blocked_pair_count == 0
+    ) else "fail"
     coverage_status = "complete" if len(selected_tiles) == len(all_tiles) else "partial"
     summary = {
         "schema": "torii.ingolstadt-citywide-visual-summary/v2",
@@ -832,6 +862,8 @@ def run_visual_phase(
         "covered_tile_count": len(selected_tiles),
         "total_tile_count": len(all_tiles),
         "coverage_status": coverage_status,
+        "registration_gap_count": selected_registration_gap_count,
+        "blocked_pair_count": selected_blocked_pair_count,
         "automatic_promotion_gate": "pass" if status == "pass" and coverage_status == "complete" else "blocked",
         "lane_reports": all_reports,
     }
