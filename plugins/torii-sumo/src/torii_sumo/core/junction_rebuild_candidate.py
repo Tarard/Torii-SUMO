@@ -3386,7 +3386,22 @@ def write_teacher_target_internal_replay_net(
         )
         not in final_connection_keys
     ]
-    junction_shape_sanitization = _sanitize_junction_shapes(candidate_root)
+    mutated_junction_ids = {
+        junction_id,
+        *copied_boundary_junctions,
+        *added_missing_teacher_endpoint_junctions,
+        *restored_geometry_anchor_junctions,
+        *retuned_stale_split_junction_ids,
+        *(
+            str(junction.attrib.get("id", ""))
+            for junction in candidate_root.findall("junction")
+            if junction.attrib.get("id", "").startswith(internal_prefix)
+        ),
+    }
+    junction_shape_sanitization = _sanitize_junction_shapes(
+        candidate_root,
+        junction_ids=mutated_junction_ids,
+    )
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -10022,13 +10037,19 @@ def _safe_junction_shape(shape: str) -> str | None:
     return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
 
 
-def _sanitize_junction_shapes(root: ET.Element) -> dict[str, object]:
+def _sanitize_junction_shapes(
+    root: ET.Element,
+    *,
+    junction_ids: set[str] | None = None,
+) -> dict[str, object]:
     """Prevent one invalid SUMO shape from making the whole GUI viewport unusable."""
 
     repaired_ids: list[str] = []
     invalid_shape_count = 0
     for junction in root.findall("junction"):
         junction_id = str(junction.attrib.get("id", ""))
+        if junction_ids is not None and junction_id not in junction_ids:
+            continue
         try:
             center_x = float(junction.attrib.get("x", ""))
             center_y = float(junction.attrib.get("y", ""))

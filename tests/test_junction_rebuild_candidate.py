@@ -417,6 +417,20 @@ def test_sanitize_junction_shapes_repairs_finite_non_simple_shape() -> None:
     assert root.find("junction").attrib["shape"] == "0.00,0.00 2.00,0.00 2.00,2.00 0.00,2.00"
 
 
+def test_sanitize_junction_shapes_limits_repairs_to_selected_junctions() -> None:
+    original = "0,0 2,2 0,2 2,0"
+    root = ET.fromstring(
+        f'<net><junction id="selected" x="1" y="1" shape="{original}"/>'
+        f'<junction id="untouched" x="1" y="1" shape="{original}"/></net>'
+    )
+
+    report = _sanitize_junction_shapes(root, junction_ids={"selected"})
+
+    assert report["repaired_junction_ids"] == ["selected"]
+    assert root.find("junction[@id='selected']").attrib["shape"] != original
+    assert root.find("junction[@id='untouched']").attrib["shape"] == original
+
+
 def test_strict_teacher_structural_context_maps_existing_adjacent_teacher_edges(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     teacher.write_text(
