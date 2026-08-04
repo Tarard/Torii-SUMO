@@ -1170,6 +1170,7 @@ def write_teacher_lane_patch_edges(
             "retained_unmapped_boundary_edges": [],
             "lane_cardinality_changed_edge_ids": [],
             "lane_cardinality_changed_endpoint_junction_ids": [],
+            "mapped_edge_endpoint_junction_ids": [],
             "lane_shape_translation_applied": False,
             "preserve_lane_shapes": True,
             "preserve_osm_lane_profiles": True,
@@ -1409,6 +1410,13 @@ def write_teacher_lane_patch_edges(
 
     ET.indent(root, space="    ")
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    mapped_edge_endpoint_junction_ids = {
+        endpoint
+        for edge in root.findall("edge")
+        if edge.attrib.get("id", "") in set(edge_map.values())
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if endpoint
+    }
     return {
         "status": "pass",
         "claim_status": "diagnostic-demo",
@@ -1434,6 +1442,7 @@ def write_teacher_lane_patch_edges(
         "retained_unmapped_boundary_edges": retained_unmapped_boundary_edges,
         "lane_cardinality_changed_edge_ids": sorted(lane_cardinality_changed_edge_ids),
         "lane_cardinality_changed_endpoint_junction_ids": sorted(lane_cardinality_changed_endpoint_junction_ids),
+        "mapped_edge_endpoint_junction_ids": sorted(mapped_edge_endpoint_junction_ids),
         "lane_shape_translation_applied": lane_shape_delta is not None,
         "preserve_lane_shapes": preserve_lane_shapes,
         "preserve_osm_lane_profiles": False,
@@ -5991,8 +6000,18 @@ def build_teacher_guided_junction_variant(
     }
     lane_cardinality_geometry_anchor_junction_ids = lane_cardinality_neighbor_junction_ids - {junction_id}
     compound_junction_ids = sorted({*compound_junction_ids, *lane_cardinality_neighbor_junction_ids})
+    mapped_geometry_neighbor_junction_ids = (
+        {
+            str(value)
+            for value in lane_patch_report.get("mapped_edge_endpoint_junction_ids", []) or []
+            if str(value) and str(value) != junction_id
+        }
+        if strict_teacher_replay and not preserve_teacher_lane_shapes
+        else set()
+    )
     internal_restore_exclude_junction_ids = {
         *compound_junction_ids,
+        *mapped_geometry_neighbor_junction_ids,
         *(str(value) for value in teacher_absent_tls_junction_ids if str(value)),
         *_endpoint_rewrite_endpoint_ids(lane_patch_report),
     }
@@ -6543,6 +6562,20 @@ def build_teacher_guided_junction_variant(
             if endpoint
         }
         contraction_neighbor_junction_ids = contraction_mutable_junction_ids - expected_contraction_ids
+        contracted_neighbor_ids = {
+            str(value)
+            for value in residual_corridor_prune.get("affected_neighbor_junction_ids", []) or []
+            if str(value)
+        }
+        if contracted_neighbor_ids:
+            internal_restore_exclude_junction_ids.update(contracted_neighbor_ids)
+            restore_mutable_edge_ids.update(
+                edge.attrib["id"]
+                for edge in contraction_source_root.findall("edge")
+                if edge.attrib.get("id")
+                and not edge.attrib["id"].startswith(":")
+                and contracted_neighbor_ids & {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+            )
         teacher_absent_geometry_contraction_report = residual_corridor_prune
         if not contraction_scope_not_needed:
             teacher_absent_geometry_contraction_report = build_corridor_geometry_simplification_variant(
@@ -9014,12 +9047,8 @@ def run_teacher_guided_repair_queue(
             connection_mode_regression_reports.append(regression_report)
     if connection_mode_regression_builder is None:
         connection_mode_regression_status = "skipped"
-    elif not connection_mode_regression_reports:
-        connection_mode_regression_status = "not_run"
-    elif all(report.get("status") == "pass" for report in connection_mode_regression_reports):
-        connection_mode_regression_status = "pass"
     else:
-        connection_mode_regression_status = "fail"
+        connection_mode_regression_status = _accepted_connection_mode_regression_status(variant_reports)
     connection_mode_regression_failed = connection_mode_regression_status == "fail"
 
     attempted_count = len(variant_reports)
@@ -12514,6 +12543,20 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _accepted_connection_mode_regression_status(variant_reports: list[dict[str, object]]) -> str:
+    accepted = [
+        report.get("connection_mode_regression", {})
+        for report in variant_reports
+        if report.get("status") == "pass"
+        and report.get("parity_gate_status") == "pass"
+        and not report.get("expanded_scope_followup_emitted")
+        and isinstance(report.get("connection_mode_regression"), dict)
+    ]
+    if not accepted:
+        return "not_run"
+    return "pass" if all(report.get("status") == "pass" for report in accepted) else "fail"
 
 
 def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
@@ -16293,6 +16336,177 @@ def _prune_teacher_absent_residual_corridor(
     blocking_edge_ids = sorted(edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] in teacher_edge_ids)
     missing_candidate_ids = sorted(expected_ids - candidate_junction_ids)
     teacher_present_ids = sorted(expected_ids & teacher_junction_ids)
+    if blocking_edge_ids and not missing_candidate_ids and not teacher_present_ids:
+        candidate_edges = {
+            edge.attrib["id"]: edge
+            for edge in candidate_root.findall("edge")
+            if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+        }
+        teacher_edges = {
+            edge.attrib["id"]: edge
+            for edge in teacher_root.findall("edge")
+            if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+        }
+        contraction_plan: dict[str, dict[str, object]] = {}
+        for node_id in sorted(expected_ids):
+            node_edges = [
+                edge
+                for edge in candidate_edges.values()
+                if node_id in {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+            ]
+            obsolete = [edge for edge in node_edges if edge.attrib["id"] not in teacher_edges]
+            aliases: dict[str, str] = {}
+            desired_endpoints: dict[str, tuple[str, str]] = {}
+            valid = 2 <= len(node_edges) <= 4 and bool(obsolete)
+            for tail in obsolete if valid else []:
+                tail_orig_ids = {
+                    token
+                    for lane in tail.findall("lane")
+                    for param in lane.findall("param")
+                    if param.attrib.get("key") == "origId"
+                    for token in param.attrib.get("value", "").split()
+                    if token
+                }
+                matches = []
+                for edge_id, teacher_edge in teacher_edges.items():
+                    edge = candidate_edges.get(edge_id)
+                    if edge is None or len(teacher_edge.findall("lane")) != len(edge.findall("lane")):
+                        continue
+                    teacher_orig_ids = {
+                        token
+                        for lane in teacher_edge.findall("lane")
+                        for param in lane.findall("param")
+                        if param.attrib.get("key") == "origId"
+                        for token in param.attrib.get("value", "").split()
+                        if token
+                    }
+                    continues_out = (
+                        tail.attrib.get("from") == node_id
+                        and teacher_edge.attrib.get("to") == tail.attrib.get("to")
+                    )
+                    continues_in = (
+                        tail.attrib.get("to") == node_id
+                        and teacher_edge.attrib.get("from") == tail.attrib.get("from")
+                    )
+                    if tail_orig_ids and tail_orig_ids <= teacher_orig_ids and (continues_out or continues_in):
+                        matches.append((edge_id, teacher_edge))
+                if len(matches) != 1:
+                    valid = False
+                    break
+                edge_id, teacher_edge = matches[0]
+                aliases[tail.attrib["id"]] = edge_id
+                desired_endpoints[edge_id] = (
+                    teacher_edge.attrib.get("from", ""),
+                    teacher_edge.attrib.get("to", ""),
+                )
+            if not valid or set(aliases) != {edge.attrib["id"] for edge in obsolete}:
+                contraction_plan = {}
+                break
+            contraction_plan[node_id] = {
+                "aliases": aliases,
+                "desired_endpoints": desired_endpoints,
+            }
+        if contraction_plan:
+            edge_aliases = {
+                source: target
+                for plan in contraction_plan.values()
+                for source, target in plan["aliases"].items()
+            }
+            removed_external_edge_ids = set(edge_aliases)
+            removed_internal_edge_ids = {
+                edge.attrib["id"]
+                for edge in candidate_root.findall("edge")
+                if edge.attrib.get("id", "").startswith(tuple(f":{node_id}_" for node_id in expected_ids))
+            }
+            lane_aliases: dict[str, str] = {}
+            for source, target in edge_aliases.items():
+                target_lanes = {lane.attrib.get("index", ""): lane.attrib.get("id", "") for lane in candidate_edges[target].findall("lane")}
+                lane_aliases.update(
+                    {
+                        lane.attrib.get("id", ""): target_lanes.get(lane.attrib.get("index", ""), "")
+                        for lane in candidate_edges[source].findall("lane")
+                    }
+                )
+            for plan in contraction_plan.values():
+                for edge_id, (source, target) in plan["desired_endpoints"].items():
+                    candidate_edges[edge_id].set("from", source)
+                    candidate_edges[edge_id].set("to", target)
+            removed_connection_count = 0
+            rewritten_connection_endpoint_count = 0
+            internal_prefixes = tuple(f":{node_id}_" for node_id in expected_ids)
+            for connection in list(candidate_root.findall("connection")):
+                if any(connection.attrib.get(field, "").startswith(internal_prefixes) for field in ("from", "to", "via")):
+                    candidate_root.remove(connection)
+                    removed_connection_count += 1
+                    continue
+                if {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removed_external_edge_ids:
+                    invalid_lane = any(
+                        connection.attrib.get(edge_field, "") in edge_aliases
+                        and connection.attrib.get(lane_field, "")
+                        not in {
+                            lane.attrib.get("index", "")
+                            for lane in candidate_edges[
+                                edge_aliases[connection.attrib.get(edge_field, "")]
+                            ].findall("lane")
+                        }
+                        for edge_field, lane_field in (("from", "fromLane"), ("to", "toLane"))
+                    )
+                    if invalid_lane:
+                        candidate_root.remove(connection)
+                        removed_connection_count += 1
+                        continue
+                    for field in ("from", "to"):
+                        value = connection.attrib.get(field, "")
+                        if value in edge_aliases:
+                            connection.set(field, edge_aliases[value])
+                            rewritten_connection_endpoint_count += 1
+            for edge in list(candidate_root.findall("edge")):
+                if edge.attrib.get("id", "") in removed_external_edge_ids | removed_internal_edge_ids:
+                    candidate_root.remove(edge)
+            for junction in list(candidate_root.findall("junction")):
+                junction_id = junction.attrib.get("id", "")
+                if junction_id in expected_ids or junction_id.startswith(internal_prefixes):
+                    candidate_root.remove(junction)
+                    continue
+                for attribute in ("incLanes", "intLanes"):
+                    lanes = []
+                    for lane_id in junction.attrib.get(attribute, "").split():
+                        mapped = lane_aliases.get(lane_id, lane_id)
+                        if mapped and not mapped.startswith(internal_prefixes) and mapped not in lanes:
+                            lanes.append(mapped)
+                    if junction.attrib.get(attribute) is not None:
+                        junction.set(attribute, " ".join(lanes))
+            for logic in list(candidate_root.findall("tlLogic")):
+                if logic.attrib.get("id", "") in expected_ids:
+                    candidate_root.remove(logic)
+            ET.indent(candidate_root, space="    ")
+            candidate_tree.write(net_file, encoding="utf-8", xml_declaration=True)
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "contraction_mode": "teacher_merged_segments",
+                "policy": "contract only exact teacher edges whose origId evidence covers both candidate segments",
+                "variant_file": str(net_file),
+                "candidate_node_count": len(expected_ids),
+                "removed_node_ids": sorted(expected_ids),
+                "unexpected_removed_node_ids": [],
+                "removed_external_edge_ids": sorted(removed_external_edge_ids),
+                "removed_internal_edge_ids": sorted(removed_internal_edge_ids),
+                "edge_aliases": dict(sorted(edge_aliases.items())),
+                "affected_neighbor_junction_ids": sorted(
+                    {
+                        endpoint
+                        for plan in contraction_plan.values()
+                        for endpoints in plan["desired_endpoints"].values()
+                        for endpoint in endpoints
+                        if endpoint and endpoint not in expected_ids
+                    }
+                ),
+                "removed_connection_count": removed_connection_count,
+                "rewritten_connection_endpoint_count": rewritten_connection_endpoint_count,
+                "scope_not_needed": True,
+                "scope_not_needed_reason": "teacher merged the candidate corridor segments across the absent junction",
+            }
     if blocking_edge_ids or missing_candidate_ids or teacher_present_ids:
         return {
             "status": "not_applicable",
@@ -20364,7 +20578,9 @@ def _mapped_lane_refs(
     source_junction_id: str,
     target_junction_id: str,
 ) -> str:
-    return " ".join(_mapped_lane_ref(lane, edge_map, source_junction_id, target_junction_id) for lane in value.split())
+    return " ".join(
+        dict.fromkeys(_mapped_lane_ref(lane, edge_map, source_junction_id, target_junction_id) for lane in value.split())
+    )
 
 
 def _mapped_lane_ref(

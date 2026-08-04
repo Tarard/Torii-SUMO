@@ -153,6 +153,60 @@ def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Pa
     assert root.find("junction[@id='target']").attrib["incLanes"] == "keep_pos_0"
 
 
+def test_prune_teacher_absent_residual_corridor_contracts_teacher_merged_segments(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="westbound" from="target" to="remote"><lane id="westbound_0" index="0"><param key="origId" value="west east"/></lane></edge>
+  <edge id="eastbound" from="remote" to="target"><lane id="eastbound_0" index="0"><param key="origId" value="east west"/></lane></edge>
+  <junction id="target" incLanes="eastbound_0"/>
+  <junction id="remote" incLanes="westbound_0"/>
+  <connection from="westbound" to="remote_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="westbound" from="target" to="split"><lane id="westbound_0" index="0"><param key="origId" value="west"/></lane></edge>
+  <edge id="west_tail" from="split" to="remote"><lane id="west_tail_0" index="0"><param key="origId" value="east"/></lane></edge>
+  <edge id="eastbound" from="remote" to="split"><lane id="eastbound_0" index="0"><param key="origId" value="east"/></lane></edge>
+  <edge id="east_tail" from="split" to="target"><lane id="east_tail_0" index="0"><param key="origId" value="west"/></lane></edge>
+  <edge id="remote_out" from="remote" to="far"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":split_0" function="internal"><lane id=":split_0_0" index="0"/></edge>
+  <junction id="target" incLanes="east_tail_0"/>
+  <junction id="split" incLanes="westbound_0 eastbound_0" intLanes=":split_0_0"/>
+  <junction id="remote" incLanes="west_tail_0"/>
+  <junction id="far" incLanes="remote_out_0"/>
+  <junction id=":split_0_0" type="internal" incLanes=":split_0_0"/>
+  <connection from="westbound" to="west_tail" fromLane="0" toLane="0" via=":split_0_0"/>
+  <connection from="eastbound" to="east_tail" fromLane="0" toLane="0" via=":split_0_0"/>
+  <connection from="west_tail" to="remote_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._prune_teacher_absent_residual_corridor(
+        net_file=candidate,
+        teacher_net_file=teacher,
+        junction_ids={"split"},
+    )
+
+    root = ET.parse(candidate).getroot()
+    assert report["status"] == "pass"
+    assert report["contraction_mode"] == "teacher_merged_segments"
+    assert report["removed_node_ids"] == ["split"]
+    assert report["removed_external_edge_ids"] == ["east_tail", "west_tail"]
+    assert report["affected_neighbor_junction_ids"] == ["remote", "target"]
+    assert root.find("junction[@id='split']") is None
+    assert root.find("edge[@id='west_tail']") is None
+    assert root.find("edge[@id='east_tail']") is None
+    assert root.find("edge[@id='westbound']").attrib["to"] == "remote"
+    assert root.find("edge[@id='eastbound']").attrib["from"] == "remote"
+    assert root.find("junction[@id='remote']").attrib["incLanes"] == "westbound_0"
+    assert root.find("connection[@from='westbound'][@to='remote_out']") is not None
+
+
 def test_teacher_cluster_ids_restore_full_ids_for_sumo_shortened_join_groups() -> None:
     full_id = "cluster_a_b_c_d_e_f"
 
@@ -4332,6 +4386,26 @@ def test_run_teacher_guided_repair_queue_blocks_connection_mode_regression(
     assert regression_calls[0]["source_net_file"] == candidate_net.resolve()
     assert regression_calls[0]["target_source_junction_ids"] == ["j"]
     assert regression_calls[0]["target_candidate_junction_ids"] == ["j"]
+
+
+def test_connection_mode_status_uses_only_accepted_parity_candidates() -> None:
+    status = rebuild_candidate_module._accepted_connection_mode_regression_status(
+        [
+            {
+                "status": "pass",
+                "parity_gate_status": "fail",
+                "expanded_scope_followup_emitted": True,
+                "connection_mode_regression": {"status": "fail"},
+            },
+            {
+                "status": "pass",
+                "parity_gate_status": "pass",
+                "connection_mode_regression": {"status": "pass"},
+            },
+        ]
+    )
+
+    assert status == "pass"
 
 
 def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: Path) -> None:
@@ -10968,6 +11042,7 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     assert report["patched_edge_count"] == 1
     assert report["lane_cardinality_changed_edge_ids"] == ["cand"]
     assert report["lane_cardinality_changed_endpoint_junction_ids"] == ["a", "j"]
+    assert report["mapped_edge_endpoint_junction_ids"] == ["a", "j"]
     assert report["lane_shape_translation_applied"] is True
 
 
@@ -13424,6 +13499,32 @@ def test_teacher_parity_fails_on_mapped_internal_junction_signature_mismatch() -
     assert parity["delta"]["internal_junction_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
     assert gate["failures"] == [{"report": "parity", "field": "internal_junction_signature_mismatch_count", "count": 1}]
+
+
+def test_teacher_parity_ignores_duplicate_internal_junction_lane_refs() -> None:
+    base = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {}, "phases": []},
+    }
+    teacher = {
+        **base,
+        "internal_junctions": [
+            {"junction_id": ":j_0", "type": "internal", "incLanes": "in_0 in_0", "intLanes": ":j_1 :j_1"}
+        ],
+    }
+    candidate = {
+        **base,
+        "internal_junctions": [
+            {"junction_id": ":j_0", "type": "internal", "incLanes": "in_0", "intLanes": ":j_1"}
+        ],
+    }
+
+    parity = _compare_teacher_models(teacher, candidate)
+
+    assert parity["delta"].get("internal_junction_signature_mismatch_count", 0) == 0
 
 
 def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> None:
