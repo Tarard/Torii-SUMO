@@ -104,6 +104,21 @@ def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() 
     assert root.find("connection[@from='short_a']") is None
 
 
+def test_geometry_anchor_rejects_sumo_invalid_coordinate_sentinel(tmp_path: Path) -> None:
+    net_file = tmp_path / "anchor.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="good"><lane id="good_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="bad"><lane id="bad_0" index="0" shape="-1073741824,-1073741824 10,0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    anchors = rebuild_candidate_module._load_geometry_anchor_edges(net_file)
+
+    assert set(anchors) == {"good"}
+
+
 def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"

@@ -6534,10 +6534,22 @@ def build_teacher_guided_junction_variant(
     teacher_absent_geometry_changed = False
     if teacher_absent_tls_junction_ids:
         expected_contraction_ids = {str(value) for value in teacher_absent_tls_junction_ids if str(value)}
+        teacher_junction_ids = _net_junction_ids(teacher_net_file)
         expected_contraction_ids.update(
             _endpoint_rewrite_endpoint_ids(lane_patch_report)
-            - _net_junction_ids(teacher_net_file)
+            - teacher_junction_ids
             - {junction_id}
+        )
+        expected_contraction_ids.update(
+            candidate_endpoint
+            for replay_report in compound_internal_replay_reports
+            for rewrite in replay_report.get("preserved_mapped_boundary_endpoints", []) or []
+            if isinstance(rewrite, dict)
+            for endpoint_attr in ("from", "to")
+            for candidate_endpoint in [str(rewrite.get(f"candidate_{endpoint_attr}", ""))]
+            if str(rewrite.get(f"teacher_mapped_{endpoint_attr}", "")).startswith("cluster_")
+            and candidate_endpoint
+            and candidate_endpoint not in teacher_junction_ids
         )
         residual_corridor_prune = _prune_teacher_absent_residual_corridor(
             net_file=final_net_file,
@@ -15625,7 +15637,23 @@ def _load_geometry_anchor_edges(edge_file: Path | None) -> dict[str, ET.Element]
         if edge.attrib.get("id")
         and edge.attrib.get("function") != "internal"
         and (edge.attrib.get("shape") or any(lane.attrib.get("shape") for lane in edge.findall("lane")))
+        and _edge_geometry_anchor_usable(edge)
     }
+
+
+def _edge_geometry_anchor_usable(edge: ET.Element) -> bool:
+    shapes = [
+        shape
+        for shape in [edge.attrib.get("shape", ""), *(lane.attrib.get("shape", "") for lane in edge.findall("lane"))]
+        if shape
+    ]
+    return bool(shapes) and all(
+        points
+        and len(points) == len([token for token in shape.split() if "," in token])
+        and all(math.isfinite(x) and math.isfinite(y) and abs(x) <= 1_000_000 and abs(y) <= 1_000_000 for x, y in points)
+        for shape in shapes
+        for points in [_shape_points(shape)]
+    )
 
 
 def _load_geometry_anchor_edge_ids(edge_file: Path | None) -> set[str]:
