@@ -6294,6 +6294,11 @@ def build_teacher_guided_junction_variant(
                 "non_target_internal_restore": non_target_internal_restore_report,
             },
         )
+    internal_restore_exclude_junction_ids.update(
+        str(value)
+        for value in non_target_internal_restore_report.get("mutable_junction_ids", []) or []
+        if str(value)
+    )
 
     pedestrian_ring_report = write_teacher_pedestrian_ring_net(
         candidate_net_file=sidewalks_net_file,
@@ -8433,10 +8438,16 @@ def run_teacher_guided_repair_queue(
                     teacher_cluster_ids = _teacher_cluster_ids_for_join_groups(
                         join_groups,
                         teacher_join_groups_by_cluster,
-                        scope_report.get("joined_scope_junction_ids", []) or [],
+                        [
+                            *(scope_report.get("joined_scope_junction_ids", []) or []),
+                            *(
+                                scope_report.get("expanded_rebuild_scope", {}).get("junction_ids", [])
+                                or []
+                            ),
+                        ],
                     )
                     join_aliases = {
-                        member_id: cluster_id
+                        member_id: _canonical_sumo_cluster_id(cluster_id)
                         for cluster_id in teacher_cluster_ids
                         for group in join_groups
                         if set(group) == set(_sumo_cluster_member_ids(cluster_id))
@@ -16820,6 +16831,43 @@ def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
     return isinstance(internal_report, dict) and _non_target_internal_restore_changed(internal_report)
 
 
+def _invalid_internal_spatial_owner_ids(
+    root: ET.Element,
+    junction_ids: set[str],
+) -> set[str]:
+    invalid_owner_ids: set[str] = set()
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        shapes = [
+            value
+            for value in [
+                edge.attrib.get("shape", ""),
+                *(lane.attrib.get("shape", "") for lane in edge.findall("lane")),
+            ]
+            if value
+        ]
+        if edge_id.startswith(":") and shapes and not _edge_geometry_anchor_usable(edge):
+            invalid_owner_ids.add(_internal_artifact_owner(edge_id, junction_ids))
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if not junction_id.startswith(":"):
+            continue
+        for attribute in ("x", "y", "z"):
+            value = junction.attrib.get(attribute)
+            if value is None:
+                continue
+            try:
+                number = float(value)
+            except ValueError:
+                invalid_owner_ids.add(_internal_artifact_owner(junction_id, junction_ids))
+                break
+            if not math.isfinite(number) or abs(number) > 1_000_000:
+                invalid_owner_ids.add(_internal_artifact_owner(junction_id, junction_ids))
+                break
+    invalid_owner_ids.discard("")
+    return invalid_owner_ids
+
+
 def restore_off_scope_netconvert_artifacts(
     *,
     source_file: Path,
@@ -16928,10 +16976,29 @@ def restore_off_scope_netconvert_artifacts(
                     value for value in (edge.attrib.get("from", ""), edge.attrib.get("to", "")) if value
                 )
 
+    all_junction_ids = source_junction_ids | target_junction_ids
+    source_internal_owner_ids = {
+        owner_id
+        for element in [*source_root.findall("edge"), *source_root.findall("junction")]
+        if element.attrib.get("id", "").startswith(":")
+        for owner_id in [_internal_artifact_owner(element.attrib["id"], all_junction_ids)]
+        if owner_id
+    }
+    forced_invalid_internal_restore_junction_ids = sorted(
+        (
+            _invalid_internal_spatial_owner_ids(target_root, all_junction_ids)
+            - _invalid_internal_spatial_owner_ids(source_root, all_junction_ids)
+        )
+        & source_internal_owner_ids
+        & effective_mutable_junction_ids
+    )
+
     internal_report = _restore_non_target_internal_artifacts(
         source_file=source_file,
         target_file=target_file,
-        exclude_junction_ids=effective_mutable_junction_ids,
+        exclude_junction_ids=(
+            effective_mutable_junction_ids - set(forced_invalid_internal_restore_junction_ids)
+        ),
     )
     if internal_report.get("status") != "pass":
         return {
@@ -17118,6 +17185,7 @@ def restore_off_scope_netconvert_artifacts(
             sorted(expected_absorbed_edge_ids) if expected_absorbed_edge_ids is not None else None
         ),
         "expanded_mutable_edge_endpoints": expand_mutable_edge_endpoints,
+        "forced_invalid_internal_restore_junction_ids": forced_invalid_internal_restore_junction_ids,
         "authorized_absorbed_external_edge_ids": authorized_absorbed_edge_ids,
         "unauthorized_added_external_edge_ids": unauthorized_added_edge_ids,
         "undeleted_declared_absorbed_edge_ids": undeleted_declared_absorbed_edge_ids,
@@ -18756,12 +18824,26 @@ def _restore_non_target_internal_artifacts(
     source_root = ET.parse(source_file).getroot()
     target_tree = ET.parse(target_file)
     target_root = target_tree.getroot()
-    junction_ids = {
-        junction.attrib["id"]
-        for root in (source_root, target_root)
-        for junction in root.findall("junction")
+    source_junctions = {
+        junction.attrib["id"]: junction
+        for junction in source_root.findall("junction")
         if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
     }
+    target_junctions = {
+        junction.attrib["id"]: junction
+        for junction in target_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    preserved_normalized_dead_end_ids = {
+        junction_id
+        for junction_id, target_junction in target_junctions.items()
+        if target_junction.attrib.get("type") == "dead_end"
+        and not target_junction.attrib.get("intLanes", "").split()
+        and source_junctions.get(junction_id) is not None
+        and source_junctions[junction_id].attrib.get("intLanes", "").split()
+    }
+    effective_exclude_junction_ids = exclude_junction_ids | preserved_normalized_dead_end_ids
+    junction_ids = set(source_junctions) | set(target_junctions)
     owner_cache: dict[str, str] = {}
 
     def owner(value: str) -> str:
@@ -18773,7 +18855,7 @@ def _restore_non_target_internal_artifacts(
 
     def is_restored_owner(value: str) -> bool:
         internal_owner = owner(value)
-        return bool(internal_owner and internal_owner not in exclude_junction_ids)
+        return bool(internal_owner and internal_owner not in effective_exclude_junction_ids)
 
     def connection_restored(connection: ET.Element) -> bool:
         return any(is_restored_owner(connection.attrib.get(attr, "")) for attr in ("from", "to", "via"))
@@ -18896,22 +18978,16 @@ def _restore_non_target_internal_artifacts(
     restored_tls_ids = {
         connection.attrib.get("tl", "")
         for connection in source_connections
-        if connection.attrib.get("tl") and connection.attrib.get("tl") not in exclude_junction_ids
+        if connection.attrib.get("tl") and connection.attrib.get("tl") not in effective_exclude_junction_ids
     }
     tl_logic_report = _copy_referenced_tllogics(source_root, target_root, restored_tls_ids)
 
     restored_normal_junction_attr_count = 0
     restored_request_count = 0
-    target_junctions = {
-        junction.attrib["id"]: junction
-        for junction in target_root.findall("junction")
-        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
-    }
     restored_source_normal_junction_ids = set()
-    for source_junction in source_root.findall("junction"):
-        junction_id = source_junction.attrib.get("id", "")
+    for junction_id, source_junction in source_junctions.items():
         target_junction = target_junctions.get(junction_id)
-        if not junction_id or junction_id in exclude_junction_ids or target_junction is None:
+        if junction_id in effective_exclude_junction_ids or target_junction is None:
             continue
         restored_source_normal_junction_ids.add(junction_id)
 
@@ -18958,7 +19034,7 @@ def _restore_non_target_internal_artifacts(
             restored_request_count += 1
 
     for junction_id, target_junction in target_junctions.items():
-        if junction_id in exclude_junction_ids or junction_id in restored_source_normal_junction_ids:
+        if junction_id in effective_exclude_junction_ids or junction_id in restored_source_normal_junction_ids:
             continue
         current_inc_lanes = target_junction.attrib.get("incLanes", "").split()
         current_int_lanes = target_junction.attrib.get("intLanes", "").split()
@@ -19006,6 +19082,7 @@ def _restore_non_target_internal_artifacts(
         "source_file": str(source_file),
         "target_file": str(target_file),
         "exclude_junction_ids": sorted(exclude_junction_ids),
+        "preserved_normalized_dead_end_count": len(preserved_normalized_dead_end_ids),
         "removed_non_target_internal_edge_count": removed_internal_edges,
         "restored_non_target_internal_edge_count": len(source_internal_edges),
         "skipped_non_target_internal_edge_missing_junction_count": len(skipped_internal_edges_missing_junctions),

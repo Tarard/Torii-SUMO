@@ -16664,6 +16664,82 @@ def test_restore_off_scope_restores_declared_mutable_geometry_anchor(tmp_path: P
     assert root.find("junction[@id='target']").attrib["shape"] == "8,0 12,0 12,4 8,4"
 
 
+def test_restore_off_scope_rejects_new_sentinel_internal_geometry_even_in_mutable_scope(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" intLanes=":j_0_0"/>
+  <junction id=":j_0_0" type="internal" x="1" y="0" incLanes=":j_0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        source.read_text(encoding="utf-8").replace(
+            'shape="0,0 1,0"',
+            'shape="-1073741824,-1073741824 -1073741823,-1073741823"',
+        ),
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids={"j"},
+        mutable_edge_ids={"in", "out"},
+        expand_mutable_edge_endpoints=False,
+    )
+
+    assert report["status"] == "pass"
+    assert report["forced_invalid_internal_restore_junction_ids"] == ["j"]
+    assert ET.parse(target).getroot().find("edge[@id=':j_0']/lane").attrib["shape"] == "0,0 1,0"
+
+
+def test_restore_off_scope_keeps_netconvert_collapsed_dead_end(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="a"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="a" type="priority" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0"/>
+  <junction id=":j_0_0" type="internal" incLanes=":j_0_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="a"><lane id="out_0" index="0"/></edge>
+  <junction id="a" type="priority" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="dead_end" incLanes="in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids=set(),
+        mutable_edge_ids=set(),
+        expand_mutable_edge_endpoints=False,
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["internal_artifact_restore"]["preserved_normalized_dead_end_count"] == 1
+    assert root.find("junction[@id='j']").attrib["type"] == "dead_end"
+    assert root.find("edge[@id=':j_0']") is None
+
+
 def test_restore_off_scope_preserves_boundary_edge_of_mutable_junction(
     tmp_path: Path,
 ) -> None:
@@ -18850,11 +18926,16 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(tmp_p
 def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     restore_scope_expansions = []
+    restore_scope_inputs = []
     restore_off_scope = restore_off_scope_netconvert_artifacts
 
     def capture_restore_scope(**kwargs):
         restore_scope_expansions.append(kwargs["expand_mutable_edge_endpoints"])
-        return restore_off_scope(**kwargs)
+        restore_scope_inputs.append(set(kwargs["mutable_junction_ids"]))
+        report = restore_off_scope(**kwargs)
+        if len(restore_scope_inputs) == 1:
+            report["mutable_junction_ids"] = [*report["mutable_junction_ids"], "expanded_endpoint"]
+        return report
 
     monkeypatch.setattr(
         rebuild_candidate_module,
@@ -18971,6 +19052,7 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
     assert report["sumo_load"]["status"] == "pass"
     assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
     assert restore_scope_expansions == [True, True]
+    assert "expanded_endpoint" in restore_scope_inputs[1]
     assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
 
 
