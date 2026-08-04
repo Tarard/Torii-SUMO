@@ -6416,7 +6416,8 @@ def build_teacher_guided_junction_variant(
             )
         tl_logic_input_file = target_internal_replay_file
         if strict_teacher_replay:
-            for replay_index, compound_junction_id in enumerate(
+            teacher_junction_ids = _net_junction_ids(teacher_net_file)
+            for replay_index, candidate_compound_junction_id in enumerate(
                 sorted(
                     {
                         str(value)
@@ -6426,12 +6427,16 @@ def build_teacher_guided_junction_variant(
                 ),
                 start=1,
             ):
-                if compound_junction_id not in _net_junction_ids(teacher_net_file):
+                teacher_compound_junction_id = _teacher_junction_alias(
+                    candidate_compound_junction_id,
+                    teacher_junction_ids,
+                )
+                if not teacher_compound_junction_id:
                     continue
                 compound_edge_map = dict(edge_map)
                 for boundary_edge_id in (
-                    _external_boundary_edge_ids(teacher_net_file, compound_junction_id)
-                    & _external_boundary_edge_ids(tl_logic_input_file, compound_junction_id)
+                    _external_boundary_edge_ids(teacher_net_file, teacher_compound_junction_id)
+                    & _external_boundary_edge_ids(tl_logic_input_file, candidate_compound_junction_id)
                 ):
                     compound_edge_map.setdefault(boundary_edge_id, boundary_edge_id)
                 compound_output_file = _stage_file(
@@ -6443,9 +6448,9 @@ def build_teacher_guided_junction_variant(
                     candidate_net_file=tl_logic_input_file,
                     teacher_net_file=teacher_net_file,
                     output_file=compound_output_file,
-                    junction_id=compound_junction_id,
+                    junction_id=candidate_compound_junction_id,
                     edge_map=compound_edge_map,
-                    teacher_junction_id=compound_junction_id,
+                    teacher_junction_id=teacher_compound_junction_id,
                     geometry_anchor_edge_file=tl_logic_input_file,
                     blend_geometry_anchor_at_target=True,
                     copy_unmapped_boundary_edges=True,
@@ -6455,7 +6460,8 @@ def build_teacher_guided_junction_variant(
                     prune_strict_unmapped_outgoing_boundary_edges=True,
                     preserve_target_junction_shape=False,
                 )
-                compound_report["junction_id"] = compound_junction_id
+                compound_report["junction_id"] = candidate_compound_junction_id
+                compound_report["teacher_junction_id"] = teacher_compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
                 restore_mutable_edge_ids.update(
                     _valid_edge_map(compound_report.get("effective_edge_map", {})).values()
@@ -6466,7 +6472,7 @@ def build_teacher_guided_junction_variant(
                     for edge in compound_output_root.findall("edge")
                     if edge.attrib.get("id")
                     and not edge.attrib["id"].startswith(":")
-                    and compound_junction_id
+                    and candidate_compound_junction_id
                     in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
                 ]
                 restore_mutable_edge_ids.update(edge.attrib["id"] for edge in compound_boundary_edges)
@@ -14361,6 +14367,16 @@ def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
 def _canonical_sumo_cluster_id(value: str) -> str:
     members = _sumo_cluster_member_ids(value)
     return _sumo_joined_cluster_id(members) if len(members) > 4 else value
+
+
+def _teacher_junction_alias(candidate_junction_id: str, teacher_junction_ids: set[str]) -> str:
+    if candidate_junction_id in teacher_junction_ids:
+        return candidate_junction_id
+    canonical_id = _canonical_sumo_cluster_id(candidate_junction_id)
+    return next(
+        (value for value in teacher_junction_ids if _canonical_sumo_cluster_id(value) == canonical_id),
+        "",
+    )
 
 
 def _sumo_cluster_member_ids(node_id: str) -> list[str]:

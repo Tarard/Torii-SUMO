@@ -144,6 +144,14 @@ def test_compound_endpoint_contraction_stops_at_unjoined_teacher_cluster() -> No
     assert contraction_ids == {"joined_residual"}
 
 
+def test_teacher_junction_alias_resolves_sumo_short_cluster_id() -> None:
+    full_id = "cluster_a_b_c_d_e_f"
+
+    assert rebuild_candidate_module._teacher_junction_alias(
+        "cluster_a_b_c_d_#2more", {full_id}
+    ) == full_id
+
+
 def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
