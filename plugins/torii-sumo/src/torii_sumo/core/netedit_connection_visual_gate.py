@@ -139,9 +139,16 @@ def write_native_connection_test(path: Path, *, offset: tuple[int, int]) -> None
     )
 
 
-def lane_capture_spec(net_file: Path | str, *, junction_id: str, lane_id: str) -> dict[str, Any]:
+def lane_capture_spec(
+    net_file: Path | str,
+    *,
+    junction_id: str,
+    lane_id: str,
+    root: ET.Element | None = None,
+) -> dict[str, Any]:
     path = Path(net_file).resolve()
-    root = ET.parse(path).getroot()
+    if root is None:
+        root = ET.parse(path).getroot()
     location = root.find("location")
     if location is None:
         raise ValueError(f"network has no location element: {path}")

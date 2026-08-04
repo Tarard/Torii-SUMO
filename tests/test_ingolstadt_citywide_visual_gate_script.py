@@ -827,6 +827,16 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
     _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
     session_sources: list[Path] = []
     lane_point_calls: list[tuple[tuple[float, float], ...]] = []
+    parsed_roots = []
+    original_lane_capture_spec = module.lane_capture_spec
+
+    def tracked_lane_capture_spec(net_file, *, junction_id, lane_id, root=None):
+        parsed_roots.append(root)
+        return original_lane_capture_spec(
+            net_file,
+            junction_id=junction_id,
+            lane_id=lane_id,
+        )
 
     def fake_subnet(*, source_net, output_dir, **_kwargs):
         subnet = Path(output_dir) / "render.net.xml"
@@ -865,6 +875,7 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
         return ((12.0, 30.0), (16.0, 30.0), (18.0, 30.0))
 
     monkeypatch.setattr(module, "build_visual_tile_subnet", fake_subnet)
+    monkeypatch.setattr(module, "lane_capture_spec", tracked_lane_capture_spec)
     monkeypatch.setattr(module, "netedit_canvas_rect", lambda _hwnd: (230, 64, 1394, 885))
     monkeypatch.setattr(module, "fit_connection_zoom", lambda **_kwargs: 900.0)
     monkeypatch.setattr(module, "normalized_viewport_zoom", lambda **_kwargs: 900.0)
@@ -900,6 +911,7 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
 
     assert len(session_sources) == 4
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
+    assert all(root is not None for root in parsed_roots)
     assert len(lane_point_calls) == 3
     for captures in result:
         assert len(captures) == 1

@@ -330,8 +330,14 @@ def city_completion(
     }
 
 
-def _connection_signature(path: Path, lane_id: str) -> list[dict[str, Any]]:
-    root = ET.parse(path).getroot()
+def _connection_signature(
+    path: Path,
+    lane_id: str,
+    *,
+    root: ET.Element | None = None,
+) -> list[dict[str, Any]]:
+    if root is None:
+        root = ET.parse(path).getroot()
     lanes: dict[str, tuple[str, str, ET.Element]] = {}
     by_edge_index: dict[tuple[str, str], tuple[str, ET.Element]] = {}
     for edge in root.findall("edge"):
@@ -908,11 +914,13 @@ def capture_tile_pair(
         role_dir = Path(output_dir).resolve() / role
         support = role_dir / "support"
         support.mkdir(parents=True, exist_ok=True)
+        full_root = ET.parse(net_file).getroot()
         specs = [
             lane_capture_spec(
                 net_file,
                 junction_id=str(record[junction_field]),
                 lane_id=str(record[lane_field]),
+                root=full_root,
             )
             for record in records
         ]
@@ -973,6 +981,10 @@ def capture_tile_pair(
             "specs": specs,
             "lane_field": lane_field,
             "junction_field": junction_field,
+            "root": full_root,
+            "lane_elements": {
+                str(lane.get("id")): lane for lane in full_root.iter("lane") if lane.get("id")
+            },
         }
 
     teacher_context = contexts["teacher"]
@@ -1000,18 +1012,23 @@ def capture_tile_pair(
         role_captures = []
         role_zoom = role_zooms[role]
         for index, (record, spec) in enumerate(zip(records, context["specs"], strict=True), 1):
-            target_lane_ids = [str(row["target_lane"]) for row in _connection_signature(context["net_file"], spec["lane_id"])]
+            target_lane_ids = [
+                str(row["target_lane"])
+                for row in _connection_signature(
+                    context["net_file"], spec["lane_id"], root=context["root"]
+                )
+            ]
             if role == "candidate":
                 target_lane_ids = [
                     str(record["outgoing_lane_pairs"][lane["target_lane"]])
-                    for lane in _connection_signature(teacher_net, str(record["teacher_lane"]))
+                    for lane in _connection_signature(
+                        teacher_net,
+                        str(record["teacher_lane"]),
+                        root=teacher_context["root"],
+                    )
                     if lane["target_lane"] in record["outgoing_lane_pairs"]
                 ]
-            lane_elements = {
-                str(lane.get("id")): lane
-                for lane in ET.parse(context["net_file"]).getroot().iter("lane")
-                if lane.get("id")
-            }
+            lane_elements = context["lane_elements"]
             target_world_points = [
                 point_before_lane_end(
                     tuple(reversed(tuple(
