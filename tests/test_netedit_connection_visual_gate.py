@@ -67,6 +67,78 @@ def test_candidate_zoom_preserves_world_scale_across_different_network_bounds() 
     assert round(zoom, 1) == 5000.0
 
 
+def test_native_zoom_offset_and_test_file_are_deterministic(tmp_path: Path) -> None:
+    canvas = (230, 64, 1394, 885)
+    zoom = visual_gate.fit_connection_zoom(
+        points=((0.0, 0.0), (40.0, 0.0), (-40.0, 10.0)),
+        center=(0.0, 0.0),
+        conv_boundary=(0.0, 0.0, 500.0, 500.0),
+        canvas_rect=canvas,
+        requested_zoom=2500.0,
+        margin_px=64,
+    )
+
+    assert 0 < zoom < 2500.0
+    assert visual_gate.native_test_click_offset((1151, 579), canvas) == (617, 347)
+    destination = tmp_path / "lane.test.py"
+    visual_gate.write_native_connection_test(destination, offset=(617, 347))
+    assert destination.read_text(encoding="utf-8") == (
+        'netedit.changeMode("connection")\n'
+        "netedit.leftClickOffset(referencePosition, netedit.positions.reference, 617, 347)\n"
+    )
+
+
+def test_expected_lane_semantics_rejects_sidebar_and_wrong_lane(tmp_path: Path) -> None:
+    image = Image.new("RGB", (300, 180), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 40, 150), fill=(0, 255, 255))
+    draw.line((120, 90, 210, 90), fill=(0, 255, 255), width=8)
+    draw.line((215, 70, 280, 70), fill=(0, 255, 0), width=8)
+    source = tmp_path / "capture.png"
+    image.save(source)
+
+    passed = visual_gate.verify_expected_lane_semantics(
+        source,
+        canvas_rect=(50, 0, 300, 180),
+        source_point=(150, 90),
+        target_points=((240, 70),),
+    )
+    wrong = visual_gate.verify_expected_lane_semantics(
+        source,
+        canvas_rect=(50, 0, 300, 180),
+        source_point=(150, 120),
+        target_points=((240, 70),),
+    )
+
+    assert passed["status"] == "pass"
+    assert wrong == {
+        "status": "review_required",
+        "reasons": ["registered_source_lane_not_selected"],
+    }
+
+
+def test_visual_comparison_accepts_explicit_visible_lane_radius(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (600, 600), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((540, 300, 570, 300), fill=(0, 255, 255), width=4)
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    default = analyze_connection_pair(teacher_file, candidate_file, teacher_center=(300, 300), candidate_center=(300, 300))
+    widened = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_center=(300, 300),
+        candidate_center=(300, 300),
+        semantic_radius=280,
+    )
+
+    assert default["status"] == "review_required"
+    assert widened["status"] == "pass"
+
+
 def test_visual_comparison_ignores_sidebar_palette_and_detects_unselected_canvas(tmp_path: Path) -> None:
     teacher = Image.new("RGB", (200, 100), "white")
     candidate = teacher.copy()

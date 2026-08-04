@@ -21,6 +21,7 @@ _PALETTE = {
     "conflict": (255, 255, 0),
     "pass": (255, 0, 255),
 }
+_NATIVE_TEST_REFERENCE = (304, 168)
 
 
 def point_before_lane_end(
@@ -82,6 +83,60 @@ def normalized_viewport_zoom(
     if reference_zoom <= 0:
         raise ValueError("reference zoom must be positive")
     return reference_zoom * boundary_scale(reference_boundary) / boundary_scale(target_boundary)
+
+
+def fit_connection_zoom(
+    *,
+    points: Sequence[tuple[float, float]],
+    center: tuple[float, float],
+    conv_boundary: tuple[float, float, float, float],
+    canvas_rect: tuple[int, int, int, int],
+    requested_zoom: float,
+    margin_px: int = 64,
+) -> float:
+    left, top, right, bottom = canvas_rect
+    width, height = right - left, bottom - top
+    x0, y0, x1, y1 = conv_boundary
+    if (
+        not points
+        or width <= 2 * margin_px
+        or height <= 2 * margin_px
+        or x1 <= x0
+        or y1 <= y0
+        or requested_zoom <= 0
+    ):
+        raise ValueError("points, canvas, boundary, margin, and requested zoom must be usable")
+    base = min(width / (x1 - x0), height / (y1 - y0)) / 100.0
+    limits = [requested_zoom]
+    for x, y in points:
+        dx, dy = abs(x - center[0]), abs(y - center[1])
+        if dx:
+            limits.append((width / 2 - margin_px) / (dx * base))
+        if dy:
+            limits.append((height / 2 - margin_px) / (dy * base))
+    zoom = min(limits)
+    if not math.isfinite(zoom) or zoom <= 0:
+        raise ValueError("no positive zoom fits the requested points")
+    return zoom
+
+
+def native_test_click_offset(
+    click: tuple[int, int],
+    canvas_rect: tuple[int, int, int, int],
+) -> tuple[int, int]:
+    return (
+        click[0] - canvas_rect[0] - _NATIVE_TEST_REFERENCE[0],
+        click[1] - canvas_rect[1] - _NATIVE_TEST_REFERENCE[1],
+    )
+
+
+def write_native_connection_test(path: Path, *, offset: tuple[int, int]) -> None:
+    path.write_text(
+        'netedit.changeMode("connection")\n'
+        "netedit.leftClickOffset("
+        f"referencePosition, netedit.positions.reference, {offset[0]}, {offset[1]})\n",
+        encoding="utf-8",
+    )
 
 
 def lane_capture_spec(net_file: Path | str, *, junction_id: str, lane_id: str) -> dict[str, Any]:
@@ -205,11 +260,15 @@ def _palette_points(image: Image.Image, tolerance: int) -> dict[str, set[tuple[i
     }
 
 
-def _point_stats(points: set[tuple[int, int]], center: tuple[int, int]) -> dict[str, Any]:
+def _point_stats(
+    points: set[tuple[int, int]],
+    center: tuple[int, int],
+    radius: int = 160,
+) -> dict[str, Any]:
     points = {
         point
         for point in points
-        if (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 <= 160**2
+        if (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 <= radius**2
     }
     components = _meaningful_components(points)
     points = set().union(*components) if components else set()
@@ -258,6 +317,32 @@ def write_semantic_mask(
     return {"file": str(destination), "sha256": file_sha256(destination), "layers": stats}
 
 
+def verify_expected_lane_semantics(
+    source: Path,
+    *,
+    canvas_rect: tuple[int, int, int, int],
+    source_point: tuple[int, int],
+    target_points: Sequence[tuple[int, int]],
+    radius: int = 12,
+) -> dict[str, Any]:
+    with Image.open(source) as opened:
+        image = opened.convert("RGB").crop(canvas_rect)
+    palette = _palette_points(image, 12)
+    left, top, _, _ = canvas_rect
+
+    def nearby(points: set[tuple[int, int]], point: tuple[int, int]) -> bool:
+        x, y = point[0] - left, point[1] - top
+        return any((px - x) ** 2 + (py - y) ** 2 <= radius**2 for px, py in points)
+
+    reasons = []
+    if not nearby(palette["source"], source_point):
+        reasons.append("registered_source_lane_not_selected")
+    visible_targets = palette["target"] | palette["pass"] | palette["conflict"]
+    if any(not nearby(visible_targets, point) for point in target_points):
+        reasons.append("registered_target_lane_not_visible")
+    return {"status": "review_required", "reasons": reasons} if reasons else {"status": "pass", "reasons": []}
+
+
 def analyze_connection_pair(
     teacher_file: Path,
     candidate_file: Path,
@@ -266,6 +351,7 @@ def analyze_connection_pair(
     candidate_center: tuple[int, int] | None = None,
     teacher_canvas_rect: tuple[int, int, int, int] | None = None,
     candidate_canvas_rect: tuple[int, int, int, int] | None = None,
+    semantic_radius: int = 160,
 ) -> dict[str, Any]:
     with Image.open(teacher_file) as source:
         teacher = source.convert("RGB")
@@ -290,11 +376,11 @@ def analyze_connection_pair(
     teacher_center = teacher_center or (teacher.width // 2, teacher.height // 2)
     candidate_center = candidate_center or (candidate.width // 2, candidate.height // 2)
     teacher_stats = {
-        name: _point_stats(points, teacher_center)
+        name: _point_stats(points, teacher_center, semantic_radius)
         for name, points in _palette_points(teacher, 12).items()
     }
     candidate_stats = {
-        name: _point_stats(points, candidate_center)
+        name: _point_stats(points, candidate_center, semantic_radius)
         for name, points in _palette_points(candidate, 12).items()
     }
     layers: dict[str, dict[str, Any]] = {}
