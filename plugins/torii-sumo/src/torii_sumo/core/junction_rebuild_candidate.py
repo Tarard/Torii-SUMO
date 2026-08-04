@@ -6583,6 +6583,7 @@ def build_teacher_guided_junction_variant(
             net_file=final_net_file,
             teacher_net_file=teacher_net_file,
             junction_ids=expected_contraction_ids,
+            edge_map=edge_map,
         )
         expected_contraction_ids.update(
             str(value) for value in residual_corridor_prune.get("removed_node_ids", []) if str(value)
@@ -6908,7 +6909,7 @@ def build_teacher_guided_junction_variant(
                             tl_logic_report = unrestored_tl_logic_report
                             sumo_report = unrestored_sumo_report
     if (
-        sumo_report.get("status") != "pass"
+        (sumo_report.get("status") != "pass" or teacher_absent_geometry_changed)
         and replay_target_internal_subgraph
         and isinstance(target_internal_replay_report, dict)
         and target_internal_replay_report.get("status") == "pass"
@@ -16457,8 +16458,9 @@ def _prune_teacher_absent_residual_corridor(
     net_file: Path,
     teacher_net_file: Path,
     junction_ids: set[str],
+    edge_map: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
-    """Remove a residual corridor only when every incident edge is absent from the teacher."""
+    """Remove a residual corridor only when every incident edge is absent from the mapped teacher."""
 
     candidate_tree = ET.parse(net_file)
     candidate_root = candidate_tree.getroot()
@@ -16467,6 +16469,8 @@ def _prune_teacher_absent_residual_corridor(
     teacher_junction_ids = {row.attrib.get("id", "") for row in teacher_root.findall("junction")}
     candidate_junction_ids = {row.attrib.get("id", "") for row in candidate_root.findall("junction")}
     teacher_edge_ids = {row.attrib.get("id", "") for row in teacher_root.findall("edge")}
+    edge_map = edge_map or {}
+    teacher_candidate_edge_ids = {edge_map.get(edge_id, edge_id) for edge_id in teacher_edge_ids}
     external_edges = [
         edge
         for edge in candidate_root.findall("edge")
@@ -16478,7 +16482,7 @@ def _prune_teacher_absent_residual_corridor(
         adjacent_absent_ids = {
             endpoint
             for edge in external_edges
-            if edge.attrib["id"] not in teacher_edge_ids
+            if edge.attrib["id"] not in teacher_candidate_edge_ids
             and {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
             for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
             if endpoint in candidate_junction_ids and endpoint not in teacher_junction_ids
@@ -16492,7 +16496,9 @@ def _prune_teacher_absent_residual_corridor(
         for edge in external_edges
         if {edge.attrib.get("from", ""), edge.attrib.get("to", "")} & expected_ids
     ]
-    blocking_edge_ids = sorted(edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] in teacher_edge_ids)
+    blocking_edge_ids = sorted(
+        edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] in teacher_candidate_edge_ids
+    )
     missing_candidate_ids = sorted(expected_ids - candidate_junction_ids)
     teacher_present_ids = sorted(expected_ids & teacher_junction_ids)
     if blocking_edge_ids and not missing_candidate_ids and not teacher_present_ids:
@@ -16513,7 +16519,7 @@ def _prune_teacher_absent_residual_corridor(
                 for edge in candidate_edges.values()
                 if node_id in {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
             ]
-            obsolete = [edge for edge in node_edges if edge.attrib["id"] not in teacher_edges]
+            obsolete = [edge for edge in node_edges if edge.attrib["id"] not in teacher_candidate_edge_ids]
             aliases: dict[str, str] = {}
             desired_endpoints: dict[str, tuple[str, str]] = {}
             valid = 2 <= len(node_edges) <= 4 and bool(obsolete)
@@ -16527,7 +16533,8 @@ def _prune_teacher_absent_residual_corridor(
                     if token
                 }
                 matches = []
-                for edge_id, teacher_edge in teacher_edges.items():
+                for teacher_edge_id, teacher_edge in teacher_edges.items():
+                    edge_id = edge_map.get(teacher_edge_id, teacher_edge_id)
                     edge = candidate_edges.get(edge_id)
                     if edge is None or len(teacher_edge.findall("lane")) != len(edge.findall("lane")):
                         continue

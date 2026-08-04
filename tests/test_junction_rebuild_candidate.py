@@ -228,6 +228,48 @@ def test_prune_teacher_absent_residual_corridor_keeps_teacher_edges(tmp_path: Pa
     assert root.find("junction[@id='target']").attrib["incLanes"] == "keep_pos_0"
 
 
+def test_prune_teacher_absent_residual_corridor_respects_mapped_teacher_edges(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="road#1" from="target" to="remote"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="remote" to="target"><lane id="-road#1_0" index="0"/></edge>
+  <junction id="target" incLanes="-road#1_0"/>
+  <junction id="remote" incLanes="road#1_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="road#2" from="target" to="remote"><lane id="road#2_0" index="0"/></edge>
+  <edge id="-road#2" from="remote" to="target"><lane id="-road#2_0" index="0"/></edge>
+  <edge id="road#1" from="target" to="absent"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="absent" to="target"><lane id="-road#1_0" index="0"/></edge>
+  <junction id="target" incLanes="-road#1_0 -road#2_0"/>
+  <junction id="remote" incLanes="road#2_0"/>
+  <junction id="absent" incLanes="road#1_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._prune_teacher_absent_residual_corridor(
+        net_file=candidate,
+        teacher_net_file=teacher,
+        junction_ids={"absent"},
+        edge_map={"road#1": "road#2", "-road#1": "-road#2"},
+    )
+
+    root = ET.parse(candidate).getroot()
+    assert report["status"] == "pass"
+    assert report["removed_external_edge_ids"] == ["-road#1", "road#1"]
+    assert root.find("junction[@id='absent']") is None
+    assert root.find("edge[@id='road#1']") is None
+    assert root.find("edge[@id='road#2']") is not None
+
+
 def test_prune_teacher_absent_residual_corridor_contracts_teacher_merged_segments(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
@@ -19285,13 +19327,12 @@ def test_build_teacher_guided_junction_variant_normalizes_pruned_final_net(tmp_p
                 if command[0] == "sumo":
                     net_file = Path(command[command.index("-n") + 1]).name
                     sumo_inputs.append(net_file)
-                    status = "pass" if net_file == "tg_norm.net.xml" else "fail"
                 return {
                     "command": command,
                     "cwd": str(cwd) if cwd else None,
                     "status": status,
                     "returncode": 0 if status == "pass" else 1,
-                    "stderr": "" if status == "pass" else "final teacher-guided load failed before normalization",
+                    "stderr": "",
                 }
 
         return Result()
