@@ -549,6 +549,7 @@ def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, ca
             "status": "ready",
             "manifest_file": "city-manifest.json",
             "junction_pairs": [{"teacher_id": "large-payload"}],
+            "registration_gaps": [{"id": "large-gap-payload"}],
         }
 
     code = module.main(
@@ -570,6 +571,8 @@ def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, ca
     assert '"manifest_file": "city-manifest.json"' in output
     assert '"junction_pairs":' not in output
     assert '"junction_pairs_count": 1' in output
+    assert '"registration_gaps":' not in output
+    assert '"registration_gaps_count": 1' in output
 
 
 def test_lane_evidence_keeps_masks_and_accepts_renumbered_signal_order(tmp_path: Path) -> None:

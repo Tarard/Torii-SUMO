@@ -1513,7 +1513,7 @@ def main(
 
 
 def _inventory_cli_summary(report: Mapping[str, Any]) -> dict[str, Any]:
-    omitted = ("junction_pairs", "teacher_only", "candidate_only", "ambiguous")
+    omitted = ("junction_pairs", "teacher_only", "candidate_only", "ambiguous", "registration_gaps")
     summary = {key: value for key, value in report.items() if key not in omitted}
     summary.update({f"{key}_count": len(report[key]) for key in omitted if key in report})
     return summary
