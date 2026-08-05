@@ -816,7 +816,7 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert partial["automatic_promotion_gate"] == "blocked"
 
 
-def test_target_window_capture_uses_one_process_per_role_and_tile(
+def test_target_window_capture_uses_one_process_per_role_and_junction(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -827,6 +827,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
     _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
     session_sources: list[Path] = []
     session_actions: list[str] = []
+    session_centers: list[tuple[float, float]] = []
     lane_point_calls: list[tuple[tuple[float, float], ...]] = []
     parsed_roots = []
     original_lane_capture_spec = module.lane_capture_spec
@@ -859,6 +860,8 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
             self.output_dir = Path(output_dir)
             assert "test_file" not in kwargs
             session_sources.append(self.source)
+            viewport = ET.parse(kwargs["gui_settings_file"]).getroot().find("viewport")
+            session_centers.append((float(viewport.attrib["x"]), float(viewport.attrib["y"])))
 
         def open(self):
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -927,6 +930,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
     )
 
     assert len(session_sources) == 4
+    assert session_centers[-2:] == [(20.0, 30.0), (20.0, 30.0)]
     assert session_actions == ["key", "click", "key", "click"] * 2
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)

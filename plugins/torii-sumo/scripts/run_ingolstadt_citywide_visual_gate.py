@@ -35,7 +35,7 @@ from torii_sumo.core.sumo_commands import discover_binaries
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
 OFFICIAL_CONV_BOUNDARY = (1243.52, 0.0, 11284.52, 10137.01)
-CAPTURE_POLICY_VERSION = "target-window-fast-v1"
+CAPTURE_POLICY_VERSION = "target-window-junction-v1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -984,154 +984,172 @@ def capture_tile_pair(
         }
 
     teacher_context = contexts["teacher"]
-    teacher_points = [point for spec in teacher_context["specs"] for point in lane_click_points(spec["shape"])]
-    teacher_zoom = fit_connection_zoom(
-        points=teacher_points,
-        center=teacher_context["local_center"],
-        conv_boundary=teacher_context["boundary"],
-        canvas_rect=teacher_context["canvas"],
-        requested_zoom=zoom,
-    )
+    grouped: dict[str, list[int]] = {}
+    for index, record in enumerate(records):
+        grouped.setdefault(str(record["teacher_junction"]), []).append(index)
+    junction_groups = list(grouped.values())
+    teacher_zooms = [
+        fit_connection_zoom(
+            points=[
+                point
+                for index in indices
+                for point in lane_click_points(teacher_context["specs"][index]["shape"])
+            ],
+            center=teacher_context["specs"][indices[0]]["center"],
+            conv_boundary=teacher_context["boundary"],
+            canvas_rect=teacher_context["canvas"],
+            requested_zoom=zoom,
+        )
+        for indices in junction_groups
+    ]
     candidate_canvas = contexts["candidate"]["canvas"]
-    role_zooms = {
-        "teacher": teacher_zoom,
-        "candidate": normalized_viewport_zoom(
-            reference_boundary=teacher_context["boundary"],
-            target_boundary=contexts["candidate"]["boundary"],
-            reference_zoom=teacher_zoom,
-            viewport_size=(candidate_canvas[2] - candidate_canvas[0], candidate_canvas[3] - candidate_canvas[1]),
-        ),
-    }
 
     captures_by_role: dict[str, list[dict[str, Any]]] = {}
     for role, context in contexts.items():
-        role_captures = []
-        role_zoom = role_zooms[role]
-        capture_dir = context["role_dir"] / "capture-session"
-        view = capture_dir / "view.xml"
-        capture_dir.mkdir(parents=True, exist_ok=True)
-        _viewsettings(view, context["local_center"], role_zoom)
-        junction_ids = tuple(str(record[context["junction_field"]]) for record in records)
-        session = session_factory(
-            context["subnet_file"],
-            capture_dir / "working.net.xml",
-            capture_dir / "netedit-session",
-            expected_source_sha256=file_sha256(context["subnet_file"]),
-            gui_settings_file=view,
-            activate_for_render=False,
-            target_source_junction_ids=junction_ids,
-            target_candidate_junction_ids=junction_ids,
-            window_size=f"{window_size[0]},{window_size[1]}",
-        )
-        session.open()
-        try:
-            session.observe("pre_connection_stable")
-            input_func(session.hwnd, session.process.pid, {
-                "type": "key",
-                "virtual_key": ord("C"),
-                "modifier_keys": [],
-            }, post_input_seconds=0.1)
-            session.global_input_used = True
-            for index, (record, spec) in enumerate(zip(records, context["specs"], strict=True), 1):
-                target_lane_ids = [
-                    str(row["target_lane"])
-                    for row in _connection_signature(
-                        context["net_file"], spec["lane_id"], root=context["root"]
-                    )
-                ]
-                if role == "candidate":
+        role_captures: list[dict[str, Any] | None] = [None] * len(records)
+        for group_number, indices in enumerate(junction_groups, 1):
+            role_zoom = teacher_zooms[group_number - 1]
+            if role == "candidate":
+                role_zoom = normalized_viewport_zoom(
+                    reference_boundary=teacher_context["boundary"],
+                    target_boundary=context["boundary"],
+                    reference_zoom=role_zoom,
+                    viewport_size=(
+                        candidate_canvas[2] - candidate_canvas[0],
+                        candidate_canvas[3] - candidate_canvas[1],
+                    ),
+                )
+            viewport_center = context["specs"][indices[0]]["center"]
+            capture_dir = context["role_dir"] / "junction-sessions" / f"{group_number:05d}"
+            view = capture_dir / "view.xml"
+            capture_dir.mkdir(parents=True, exist_ok=True)
+            _viewsettings(view, viewport_center, role_zoom)
+            junction_ids = tuple(str(records[index][context["junction_field"]]) for index in indices)
+            session = session_factory(
+                context["subnet_file"],
+                capture_dir / "working.net.xml",
+                capture_dir / "netedit-session",
+                expected_source_sha256=file_sha256(context["subnet_file"]),
+                gui_settings_file=view,
+                activate_for_render=False,
+                target_source_junction_ids=junction_ids,
+                target_candidate_junction_ids=junction_ids,
+                window_size=f"{window_size[0]},{window_size[1]}",
+            )
+            session.open()
+            try:
+                session.observe("pre_connection_stable")
+                input_func(session.hwnd, session.process.pid, {
+                    "type": "key",
+                    "virtual_key": ord("C"),
+                    "modifier_keys": [],
+                }, post_input_seconds=0.1)
+                session.global_input_used = True
+                for position, record_index in enumerate(indices):
+                    record = records[record_index]
+                    spec = context["specs"][record_index]
+                    output_index = record_index + 1
                     target_lane_ids = [
-                        str(record["outgoing_lane_pairs"][lane["target_lane"]])
-                        for lane in _connection_signature(
-                            teacher_net,
-                            str(record["teacher_lane"]),
-                            root=teacher_context["root"],
+                        str(row["target_lane"])
+                        for row in _connection_signature(
+                            context["net_file"], spec["lane_id"], root=context["root"]
                         )
-                        if lane["target_lane"] in record["outgoing_lane_pairs"]
                     ]
-                lane_elements = context["lane_elements"]
-                target_world_points = [
-                    point_before_lane_end(
-                        tuple(reversed(tuple(
-                            tuple(float(value) for value in point.split(",")[:2])
-                            for point in lane_elements[lane_id].get("shape", "").split()
-                        )))
-                    )
-                    for lane_id in target_lane_ids
-                ]
-                junction_pixel = canvas_click_for_world_point(
-                    point=spec["center"],
-                    center=context["local_center"],
-                    conv_boundary=context["boundary"],
-                    canvas_rect=context["canvas"],
-                    zoom=role_zoom,
-                )
-                target_pixels = tuple(
-                    canvas_click_for_world_point(
-                        point=point,
-                        center=context["local_center"],
+                    if role == "candidate":
+                        target_lane_ids = [
+                            str(record["outgoing_lane_pairs"][lane["target_lane"]])
+                            for lane in _connection_signature(
+                                teacher_net,
+                                str(record["teacher_lane"]),
+                                root=teacher_context["root"],
+                            )
+                            if lane["target_lane"] in record["outgoing_lane_pairs"]
+                        ]
+                    lane_elements = context["lane_elements"]
+                    target_world_points = [
+                        point_before_lane_end(
+                            tuple(reversed(tuple(
+                                tuple(float(value) for value in point.split(",")[:2])
+                                for point in lane_elements[lane_id].get("shape", "").split()
+                            )))
+                        )
+                        for lane_id in target_lane_ids
+                    ]
+                    junction_pixel = canvas_click_for_world_point(
+                        point=spec["center"],
+                        center=viewport_center,
                         conv_boundary=context["boundary"],
                         canvas_rect=context["canvas"],
                         zoom=role_zoom,
                     )
-                    for point in target_world_points
-                )
-                capture: dict[str, Any] | None = None
-                for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
-                    click = canvas_click_for_world_point(
-                        point=point,
-                        center=context["local_center"],
-                        conv_boundary=context["boundary"],
-                        canvas_rect=context["canvas"],
-                        zoom=role_zoom,
+                    target_pixels = tuple(
+                        canvas_click_for_world_point(
+                            point=point,
+                            center=viewport_center,
+                            conv_boundary=context["boundary"],
+                            canvas_rect=context["canvas"],
+                            zoom=role_zoom,
+                        )
+                        for point in target_world_points
                     )
-                    input_func(session.hwnd, session.process.pid, {
-                        "type": "click",
-                        "x": click[0],
-                        "y": click[1],
-                    }, post_input_seconds=0.2)
-                    selected = session.observe(f"lane_{index:05d}_{rank}")
-                    screenshot = Path(selected["screenshot_file"])
-                    selection = verify_expected_lane_semantics(
-                        screenshot,
-                        canvas_rect=context["canvas"],
-                        source_point=click,
-                        target_points=target_pixels,
-                    )
-                    destination = context["role_dir"] / "captures" / f"{index:05d}.png"
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(screenshot, destination)
-                    capture = {
-                        "lane_id": spec["lane_id"],
-                        "sample_distance_rank": rank,
-                        "click": list(click),
-                        "junction_pixel": list(junction_pixel),
-                        "canvas_rect": list(context["canvas"]),
-                        "zoom": role_zoom,
-                        "semantic_radius": 300,
-                        "selection": selection,
-                        "input_method": "target_window_send_input",
-                        "subnet_sha256": context["subnet"]["subnet_sha256"],
-                        "screenshot_file": str(destination),
-                        "screenshot_sha256": file_sha256(destination),
-                    }
-                    if "registered_source_lane_not_selected" not in capture["selection"]["reasons"]:
-                        break
-                if capture is None:
-                    raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
-                role_captures.append(capture)
-                if (
-                    "registered_source_lane_not_selected" not in capture["selection"]["reasons"]
-                    and index < len(records)
-                ):
-                    input_func(session.hwnd, session.process.pid, {
-                        "type": "key",
-                        "virtual_key": 0x1B,
-                        "modifier_keys": [],
-                    }, post_input_seconds=0.1)
-        finally:
-            session.abort("visual_tile_capture_complete")
-        captures_by_role[role] = role_captures
+                    capture: dict[str, Any] | None = None
+                    for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
+                        click = canvas_click_for_world_point(
+                            point=point,
+                            center=viewport_center,
+                            conv_boundary=context["boundary"],
+                            canvas_rect=context["canvas"],
+                            zoom=role_zoom,
+                        )
+                        input_func(session.hwnd, session.process.pid, {
+                            "type": "click",
+                            "x": click[0],
+                            "y": click[1],
+                        }, post_input_seconds=0.2)
+                        selected = session.observe(f"lane_{output_index:05d}_{rank}")
+                        screenshot = Path(selected["screenshot_file"])
+                        selection = verify_expected_lane_semantics(
+                            screenshot,
+                            canvas_rect=context["canvas"],
+                            source_point=click,
+                            target_points=target_pixels,
+                        )
+                        destination = context["role_dir"] / "captures" / f"{output_index:05d}.png"
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(screenshot, destination)
+                        capture = {
+                            "lane_id": spec["lane_id"],
+                            "sample_distance_rank": rank,
+                            "click": list(click),
+                            "junction_pixel": list(junction_pixel),
+                            "canvas_rect": list(context["canvas"]),
+                            "zoom": role_zoom,
+                            "semantic_radius": 300,
+                            "selection": selection,
+                            "input_method": "target_window_send_input",
+                            "subnet_sha256": context["subnet"]["subnet_sha256"],
+                            "screenshot_file": str(destination),
+                            "screenshot_sha256": file_sha256(destination),
+                        }
+                        if "registered_source_lane_not_selected" not in capture["selection"]["reasons"]:
+                            break
+                    if capture is None:
+                        raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
+                    role_captures[record_index] = capture
+                    if (
+                        "registered_source_lane_not_selected" not in capture["selection"]["reasons"]
+                        and position < len(indices) - 1
+                    ):
+                        input_func(session.hwnd, session.process.pid, {
+                            "type": "key",
+                            "virtual_key": 0x1B,
+                            "modifier_keys": [],
+                        }, post_input_seconds=0.1)
+            finally:
+                session.abort("visual_junction_capture_complete")
+        if any(capture is None for capture in role_captures):
+            raise RuntimeError(f"{role} junction capture did not cover every lane")
+        captures_by_role[role] = [capture for capture in role_captures if capture is not None]
     return captures_by_role["teacher"], captures_by_role["candidate"]
 
 
