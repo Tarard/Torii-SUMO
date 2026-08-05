@@ -454,6 +454,34 @@ def test_structure_pair_ignores_identical_unregistered_nonmotor_target(tmp_path:
     assert report["status"] == "pass"
 
 
+def test_structure_pair_reuses_network_connection_indexes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="", link_index="")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="", link_index="")
+    parse = module.ET.parse
+    parse_count = 0
+
+    def tracked_parse(path):
+        nonlocal parse_count
+        parse_count += 1
+        return parse(path)
+
+    monkeypatch.setattr(module.ET, "parse", tracked_parse)
+    for _ in range(2):
+        module.compare_lane_structure(
+            teacher,
+            candidate,
+            teacher_lane="in_0",
+            candidate_lane="in_0",
+            outgoing_lane_pairs={"out_0": "out_0"},
+        )
+
+    assert parse_count == 2
+
+
 def test_city_manifest_binds_junction_and_lane_pairs() -> None:
     module = _module()
     teacher_junction = _junction("cluster_10_11", (1000, 2000), roads=("10",), bearings=(0,))

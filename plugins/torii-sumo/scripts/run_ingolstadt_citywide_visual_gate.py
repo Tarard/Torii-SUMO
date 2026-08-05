@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import functools
 import json
 import math
 from pathlib import Path
@@ -328,14 +329,7 @@ def city_completion(
     }
 
 
-def _connection_signature(
-    path: Path,
-    lane_id: str,
-    *,
-    root: ET.Element | None = None,
-) -> list[dict[str, Any]]:
-    if root is None:
-        root = ET.parse(path).getroot()
+def _connection_signature_index(root: ET.Element) -> dict[str, list[dict[str, Any]]]:
     lanes: dict[str, tuple[str, str, ET.Element]] = {}
     by_edge_index: dict[tuple[str, str], tuple[str, ET.Element]] = {}
     for edge in root.findall("edge"):
@@ -345,12 +339,11 @@ def _connection_signature(
             if current_id:
                 lanes[current_id] = edge_id, index, lane
                 by_edge_index[(edge_id, index)] = current_id, lane
-    if lane_id not in lanes:
-        raise ValueError(f"lane is missing from network: {lane_id}")
-    edge_id, lane_index, _lane = lanes[lane_id]
-    rows = []
+    source_lanes = {(edge, index): lane_id for lane_id, (edge, index, _lane) in lanes.items()}
+    result: dict[str, list[dict[str, Any]]] = {lane_id: [] for lane_id in lanes}
     for connection in root.findall("connection"):
-        if connection.get("from") != edge_id or connection.get("fromLane") != lane_index:
+        source_lane = source_lanes.get((connection.get("from", ""), connection.get("fromLane", "")))
+        if source_lane is None:
             continue
         target = by_edge_index.get((connection.get("to", ""), connection.get("toLane", "")))
         if target is None:
@@ -359,7 +352,7 @@ def _connection_signature(
             target_lane, target_element = target
             motor = lane_allows_motor(target_element)
         link_index = connection.get("linkIndex", "")
-        rows.append({
+        result[source_lane].append({
             "target_lane": target_lane,
             "dir": connection.get("dir", ""),
             "has_via": bool(connection.get("via")),
@@ -368,7 +361,36 @@ def _connection_signature(
             "has_link_index": link_index.isdigit(),
             "link_index": int(link_index) if link_index.isdigit() else None,
         })
-    return sorted(rows, key=lambda row: (row["target_lane"], row["dir"]))
+    for rows in result.values():
+        rows.sort(key=lambda row: (row["target_lane"], row["dir"]))
+    return result
+
+
+@functools.lru_cache(maxsize=4)
+def _cached_connection_signature_index(
+    path: str,
+    mtime_ns: int,
+    size: int,
+) -> dict[str, list[dict[str, Any]]]:
+    del mtime_ns, size
+    return _connection_signature_index(ET.parse(path).getroot())
+
+
+def _connection_signature(
+    path: Path,
+    lane_id: str,
+    *,
+    root: ET.Element | None = None,
+) -> list[dict[str, Any]]:
+    if root is None:
+        resolved = path.resolve(strict=True)
+        stat = resolved.stat()
+        index = _cached_connection_signature_index(str(resolved), stat.st_mtime_ns, stat.st_size)
+    else:
+        index = _connection_signature_index(root)
+    if lane_id not in index:
+        raise ValueError(f"lane is missing from network: {lane_id}")
+    return index[lane_id]
 
 
 def compare_lane_structure(
@@ -976,7 +998,7 @@ def capture_tile_pair(
             "specs": specs,
             "lane_field": lane_field,
             "junction_field": junction_field,
-            "root": full_root,
+            "connection_signatures": _connection_signature_index(full_root),
             "lane_elements": {
                 str(lane.get("id")): lane for lane in full_root.iter("lane") if lane.get("id")
             },
@@ -1056,18 +1078,14 @@ def capture_tile_pair(
                     output_index = record_index + 1
                     target_lane_ids = [
                         str(row["target_lane"])
-                        for row in _connection_signature(
-                            context["net_file"], spec["lane_id"], root=context["root"]
-                        )
+                        for row in context["connection_signatures"][spec["lane_id"]]
                     ]
                     if role == "candidate":
                         target_lane_ids = [
                             str(record["outgoing_lane_pairs"][lane["target_lane"]])
-                            for lane in _connection_signature(
-                                teacher_net,
-                                str(record["teacher_lane"]),
-                                root=teacher_context["root"],
-                            )
+                            for lane in teacher_context["connection_signatures"][
+                                str(record["teacher_lane"])
+                            ]
                             if lane["target_lane"] in record["outgoing_lane_pairs"]
                         ]
                     lane_elements = context["lane_elements"]
