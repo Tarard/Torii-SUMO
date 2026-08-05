@@ -816,7 +816,7 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert partial["automatic_promotion_gate"] == "blocked"
 
 
-def test_target_window_capture_uses_subnets_and_one_process_per_lane(
+def test_target_window_capture_uses_one_process_per_role_and_tile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -907,7 +907,7 @@ def test_target_window_capture_uses_subnets_and_one_process_per_lane(
                 "candidate_lane": "in_0",
                 "candidate_junction": "j0",
                 "outgoing_lane_pairs": {"out_0": "out_0"},
-            }],
+            }] * 2,
         teacher_net=teacher,
         candidate_net=candidate,
         output_dir=tmp_path / "session",
@@ -918,12 +918,12 @@ def test_target_window_capture_uses_subnets_and_one_process_per_lane(
     )
 
     assert len(session_sources) == 4
-    assert session_actions == ["key", "click", "key", "click"]
+    assert session_actions == ["key", "click", "key", "key", "click"] * 2
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
-    assert len(lane_point_calls) == 3
+    assert len(lane_point_calls) == 6
     for captures in result:
-        assert len(captures) == 1
+        assert len(captures) == 2
         image_file = Path(captures[0]["screenshot_file"])
         assert captures[0] == {
             "lane_id": "in_0",

@@ -35,7 +35,7 @@ from torii_sumo.core.sumo_commands import discover_binaries
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
 OFFICIAL_CONV_BOUNDARY = (1243.52, 0.0, 11284.52, 10137.01)
-CAPTURE_POLICY_VERSION = "native-test-v1"
+CAPTURE_POLICY_VERSION = "target-window-tile-v1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1006,83 +1006,83 @@ def capture_tile_pair(
     for role, context in contexts.items():
         role_captures = []
         role_zoom = role_zooms[role]
-        for index, (record, spec) in enumerate(zip(records, context["specs"], strict=True), 1):
-            target_lane_ids = [
-                str(row["target_lane"])
-                for row in _connection_signature(
-                    context["net_file"], spec["lane_id"], root=context["root"]
-                )
-            ]
-            if role == "candidate":
+        capture_dir = context["role_dir"] / "capture-session"
+        view = capture_dir / "view.xml"
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        _viewsettings(view, context["local_center"], role_zoom)
+        junction_ids = tuple(str(record[context["junction_field"]]) for record in records)
+        session = session_factory(
+            context["subnet_file"],
+            capture_dir / "working.net.xml",
+            capture_dir / "netedit-session",
+            expected_source_sha256=file_sha256(context["subnet_file"]),
+            gui_settings_file=view,
+            activate_for_render=False,
+            target_source_junction_ids=junction_ids,
+            target_candidate_junction_ids=junction_ids,
+            window_size=f"{window_size[0]},{window_size[1]}",
+        )
+        session.open()
+        try:
+            stable = session.observe("pre_connection_stable")
+            mode = session.act({
+                "type": "key",
+                "virtual_key": ord("C"),
+                "expected_screenshot_sha256": stable["screenshot_sha256"],
+            })
+            for index, (record, spec) in enumerate(zip(records, context["specs"], strict=True), 1):
                 target_lane_ids = [
-                    str(record["outgoing_lane_pairs"][lane["target_lane"]])
-                    for lane in _connection_signature(
-                        teacher_net,
-                        str(record["teacher_lane"]),
-                        root=teacher_context["root"],
+                    str(row["target_lane"])
+                    for row in _connection_signature(
+                        context["net_file"], spec["lane_id"], root=context["root"]
                     )
-                    if lane["target_lane"] in record["outgoing_lane_pairs"]
                 ]
-            lane_elements = context["lane_elements"]
-            target_world_points = [
-                point_before_lane_end(
-                    tuple(reversed(tuple(
-                        tuple(float(value) for value in point.split(",")[:2])
-                        for point in lane_elements[lane_id].get("shape", "").split()
-                    )))
-                )
-                for lane_id in target_lane_ids
-            ]
-            junction_pixel = canvas_click_for_world_point(
-                point=spec["center"],
-                center=context["local_center"],
-                conv_boundary=context["boundary"],
-                canvas_rect=context["canvas"],
-                zoom=role_zoom,
-            )
-            target_pixels = tuple(
-                canvas_click_for_world_point(
-                    point=point,
+                if role == "candidate":
+                    target_lane_ids = [
+                        str(record["outgoing_lane_pairs"][lane["target_lane"]])
+                        for lane in _connection_signature(
+                            teacher_net,
+                            str(record["teacher_lane"]),
+                            root=teacher_context["root"],
+                        )
+                        if lane["target_lane"] in record["outgoing_lane_pairs"]
+                    ]
+                lane_elements = context["lane_elements"]
+                target_world_points = [
+                    point_before_lane_end(
+                        tuple(reversed(tuple(
+                            tuple(float(value) for value in point.split(",")[:2])
+                            for point in lane_elements[lane_id].get("shape", "").split()
+                        )))
+                    )
+                    for lane_id in target_lane_ids
+                ]
+                junction_pixel = canvas_click_for_world_point(
+                    point=spec["center"],
                     center=context["local_center"],
                     conv_boundary=context["boundary"],
                     canvas_rect=context["canvas"],
                     zoom=role_zoom,
                 )
-                for point in target_world_points
-            )
-            capture: dict[str, Any] | None = None
-            attempts_dir = context["role_dir"] / "attempts" / f"{index:05d}"
-            for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
-                click = canvas_click_for_world_point(
-                    point=point,
-                    center=context["local_center"],
-                    conv_boundary=context["boundary"],
-                    canvas_rect=context["canvas"],
-                    zoom=role_zoom,
+                target_pixels = tuple(
+                    canvas_click_for_world_point(
+                        point=point,
+                        center=context["local_center"],
+                        conv_boundary=context["boundary"],
+                        canvas_rect=context["canvas"],
+                        zoom=role_zoom,
+                    )
+                    for point in target_world_points
                 )
-                attempt_dir = attempts_dir / f"{rank}"
-                attempt_dir.mkdir(parents=True, exist_ok=True)
-                view = attempt_dir / "view.xml"
-                _viewsettings(view, context["local_center"], role_zoom)
-                session = session_factory(
-                    context["subnet_file"],
-                    attempt_dir / "working.net.xml",
-                    attempt_dir / "netedit-session",
-                    expected_source_sha256=file_sha256(context["subnet_file"]),
-                    gui_settings_file=view,
-                    activate_for_render=False,
-                    target_source_junction_ids=(str(record[context["junction_field"]]),),
-                    target_candidate_junction_ids=(str(record[context["junction_field"]]),),
-                    window_size=f"{window_size[0]},{window_size[1]}",
-                )
-                session.open()
-                try:
-                    stable = session.observe("pre_connection_stable")
-                    mode = session.act({
-                        "type": "key",
-                        "virtual_key": ord("C"),
-                        "expected_screenshot_sha256": stable["screenshot_sha256"],
-                    })
+                capture: dict[str, Any] | None = None
+                for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
+                    click = canvas_click_for_world_point(
+                        point=point,
+                        center=context["local_center"],
+                        conv_boundary=context["boundary"],
+                        canvas_rect=context["canvas"],
+                        zoom=role_zoom,
+                    )
                     selected = session.act({
                         "type": "click",
                         "x": click[0],
@@ -1112,14 +1112,34 @@ def capture_tile_pair(
                         "screenshot_file": str(destination),
                         "screenshot_sha256": file_sha256(destination),
                     }
-                finally:
-                    session.abort("visual_lane_capture_complete")
-                if capture["selection"]["status"] == "pass":
-                    shutil.rmtree(attempts_dir)
-                    break
-            if capture is None:
-                raise RuntimeError(f"no native NetEdit capture was produced for {spec['lane_id']}")
-            role_captures.append(capture)
+                    if capture["selection"]["status"] == "pass":
+                        break
+                    cancelled = session.act({
+                        "type": "key",
+                        "virtual_key": 0x1B,
+                        "expected_screenshot_sha256": selected["screenshot_sha256"],
+                    })
+                    mode = session.act({
+                        "type": "key",
+                        "virtual_key": ord("C"),
+                        "expected_screenshot_sha256": cancelled["screenshot_sha256"],
+                    })
+                if capture is None:
+                    raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
+                role_captures.append(capture)
+                if capture["selection"]["status"] == "pass" and index < len(records):
+                    cancelled = session.act({
+                        "type": "key",
+                        "virtual_key": 0x1B,
+                        "expected_screenshot_sha256": selected["screenshot_sha256"],
+                    })
+                    mode = session.act({
+                        "type": "key",
+                        "virtual_key": ord("C"),
+                        "expected_screenshot_sha256": cancelled["screenshot_sha256"],
+                    })
+        finally:
+            session.abort("visual_tile_capture_complete")
         captures_by_role[role] = role_captures
     return captures_by_role["teacher"], captures_by_role["candidate"]
 
