@@ -1112,7 +1112,7 @@ def capture_tile_pair(
                         "screenshot_file": str(destination),
                         "screenshot_sha256": file_sha256(destination),
                     }
-                    if capture["selection"]["status"] == "pass":
+                    if "registered_source_lane_not_selected" not in capture["selection"]["reasons"]:
                         break
                     cancelled = session.act({
                         "type": "key",
@@ -1127,7 +1127,10 @@ def capture_tile_pair(
                 if capture is None:
                     raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
                 role_captures.append(capture)
-                if capture["selection"]["status"] == "pass" and index < len(records):
+                if (
+                    "registered_source_lane_not_selected" not in capture["selection"]["reasons"]
+                    and index < len(records)
+                ):
                     cancelled = session.act({
                         "type": "key",
                         "virtual_key": 0x1B,

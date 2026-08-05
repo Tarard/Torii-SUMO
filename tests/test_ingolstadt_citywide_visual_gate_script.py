@@ -896,7 +896,10 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
     monkeypatch.setattr(
         module,
         "verify_expected_lane_semantics",
-        lambda *_args, **_kwargs: {"status": "pass", "reasons": []},
+        lambda *_args, **_kwargs: {
+            "status": "review_required",
+            "reasons": ["registered_target_lane_not_visible"],
+        },
     )
 
     result = module.capture_tile_pair(
@@ -933,7 +936,10 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
             "canvas_rect": [230, 64, 1394, 885],
             "zoom": 900.0,
             "semantic_radius": 300,
-            "selection": {"status": "pass", "reasons": []},
+            "selection": {
+                "status": "review_required",
+                "reasons": ["registered_target_lane_not_visible"],
+            },
             "subnet_sha256": "d" * 64,
             "screenshot_file": str(image_file),
             "screenshot_sha256": file_sha256(image_file),
