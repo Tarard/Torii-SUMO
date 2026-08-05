@@ -852,6 +852,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
 
     class FakeSession:
         hwnd = 17
+        process = type("Process", (), {"pid": 23})()
 
         def __init__(self, source, _candidate, output_dir, **kwargs):
             self.source = Path(source)
@@ -881,6 +882,10 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
     def fake_lane_points(points):
         lane_point_calls.append(tuple(points))
         return ((12.0, 30.0), (16.0, 30.0), (18.0, 30.0))
+
+    def fake_input(_hwnd, _pid, action, **_kwargs):
+        session_actions.append(action["type"])
+        return {"send_input_event_count": 1}
 
     monkeypatch.setattr(module, "build_visual_tile_subnet", fake_subnet)
     monkeypatch.setattr(module, "lane_capture_spec", tracked_lane_capture_spec)
@@ -918,6 +923,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
         window_size=(1400, 1000),
         tile_size_m=250.0,
         session_factory=FakeSession,
+        input_func=fake_input,
     )
 
     assert len(session_sources) == 4
@@ -940,6 +946,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
                 "status": "review_required",
                 "reasons": ["registered_target_lane_not_visible"],
             },
+            "input_method": "target_window_send_input",
             "subnet_sha256": "d" * 64,
             "screenshot_file": str(image_file),
             "screenshot_sha256": file_sha256(image_file),

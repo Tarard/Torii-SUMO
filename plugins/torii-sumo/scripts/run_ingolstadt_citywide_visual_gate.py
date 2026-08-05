@@ -28,14 +28,14 @@ from torii_sumo.core.netedit_connection_visual_gate import (
     verify_expected_lane_semantics,
     write_semantic_mask,
 )
-from torii_sumo.core.netedit import NeteditTargetSession
+from torii_sumo.core.netedit import NeteditTargetSession, _perform_real_input
 from torii_sumo.core.routeability_audit import inspect_routeability_outputs
 from torii_sumo.core.sumo_commands import discover_binaries
 
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
 OFFICIAL_CONV_BOUNDARY = (1243.52, 0.0, 11284.52, 10137.01)
-CAPTURE_POLICY_VERSION = "target-window-tile-v1"
+CAPTURE_POLICY_VERSION = "target-window-fast-v1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -886,6 +886,7 @@ def capture_tile_pair(
     window_size: tuple[int, int],
     tile_size_m: float,
     session_factory: Any = NeteditTargetSession,
+    input_func: Any = _perform_real_input,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     tile_x, tile_y = _tile_coordinates(tile_id)
     tile_boundary = (
@@ -1024,12 +1025,13 @@ def capture_tile_pair(
         )
         session.open()
         try:
-            stable = session.observe("pre_connection_stable")
-            mode = session.act({
+            session.observe("pre_connection_stable")
+            input_func(session.hwnd, session.process.pid, {
                 "type": "key",
                 "virtual_key": ord("C"),
-                "expected_screenshot_sha256": stable["screenshot_sha256"],
-            })
+                "modifier_keys": [],
+            }, post_input_seconds=0.1)
+            session.global_input_used = True
             for index, (record, spec) in enumerate(zip(records, context["specs"], strict=True), 1):
                 target_lane_ids = [
                     str(row["target_lane"])
@@ -1083,12 +1085,12 @@ def capture_tile_pair(
                         canvas_rect=context["canvas"],
                         zoom=role_zoom,
                     )
-                    selected = session.act({
+                    input_func(session.hwnd, session.process.pid, {
                         "type": "click",
                         "x": click[0],
                         "y": click[1],
-                        "expected_screenshot_sha256": mode["screenshot_sha256"],
-                    })
+                    }, post_input_seconds=0.2)
+                    selected = session.observe(f"lane_{index:05d}_{rank}")
                     screenshot = Path(selected["screenshot_file"])
                     selection = verify_expected_lane_semantics(
                         screenshot,
@@ -1108,13 +1110,13 @@ def capture_tile_pair(
                         "zoom": role_zoom,
                         "semantic_radius": 300,
                         "selection": selection,
+                        "input_method": "target_window_send_input",
                         "subnet_sha256": context["subnet"]["subnet_sha256"],
                         "screenshot_file": str(destination),
                         "screenshot_sha256": file_sha256(destination),
                     }
                     if "registered_source_lane_not_selected" not in capture["selection"]["reasons"]:
                         break
-                    mode = selected
                 if capture is None:
                     raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
                 role_captures.append(capture)
@@ -1122,11 +1124,11 @@ def capture_tile_pair(
                     "registered_source_lane_not_selected" not in capture["selection"]["reasons"]
                     and index < len(records)
                 ):
-                    mode = session.act({
+                    input_func(session.hwnd, session.process.pid, {
                         "type": "key",
                         "virtual_key": 0x1B,
-                        "expected_screenshot_sha256": selected["screenshot_sha256"],
-                    })
+                        "modifier_keys": [],
+                    }, post_input_seconds=0.1)
         finally:
             session.abort("visual_tile_capture_complete")
         captures_by_role[role] = role_captures
