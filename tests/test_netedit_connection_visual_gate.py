@@ -117,6 +117,32 @@ def test_expected_lane_semantics_rejects_sidebar_and_wrong_lane(tmp_path: Path) 
     }
 
 
+def test_expected_lane_semantics_samples_registered_points_without_full_image_scan(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    image = Image.new("RGB", (300, 180), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((120, 90, 180, 90), fill=(0, 255, 255), width=8)
+    draw.line((210, 70, 280, 70), fill=(0, 255, 0), width=8)
+    source = tmp_path / "capture.png"
+    image.save(source)
+    monkeypatch.setattr(
+        visual_gate,
+        "_palette_points",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("full scan")),
+    )
+
+    report = visual_gate.verify_expected_lane_semantics(
+        source,
+        canvas_rect=(50, 0, 300, 180),
+        source_point=(150, 90),
+        target_points=((240, 70),),
+    )
+
+    assert report == {"status": "pass", "reasons": []}
+
+
 def test_visual_comparison_accepts_explicit_visible_lane_radius(tmp_path: Path) -> None:
     teacher = Image.new("RGB", (600, 600), "white")
     candidate = teacher.copy()

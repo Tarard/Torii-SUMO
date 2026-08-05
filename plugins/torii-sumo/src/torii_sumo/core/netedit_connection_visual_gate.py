@@ -8,6 +8,7 @@ import time
 from typing import Any, Sequence
 import xml.etree.ElementTree as ET
 
+import numpy as np
 from PIL import Image
 
 from .artifact_io import write_json_atomic
@@ -254,17 +255,12 @@ def _meaningful_components(points: set[tuple[int, int]], minimum_size: int = 20)
 
 
 def _palette_points(image: Image.Image, tolerance: int) -> dict[str, set[tuple[int, int]]]:
-    rgb = image.convert("RGB")
-    pixels = rgb.load()
-    return {
-        name: {
-            (x, y)
-            for y in range(rgb.height)
-            for x in range(rgb.width)
-            if max(abs(pixels[x, y][channel] - color[channel]) for channel in range(3)) <= tolerance
-        }
-        for name, color in _PALETTE.items()
-    }
+    pixels = np.asarray(image.convert("RGB"), dtype=np.int16)
+    result = {}
+    for name, color in _PALETTE.items():
+        ys, xs = np.nonzero(np.max(np.abs(pixels - np.asarray(color, dtype=np.int16)), axis=2) <= tolerance)
+        result[name] = set(zip(xs.tolist(), ys.tolist(), strict=True))
+    return result
 
 
 def _point_stats(
@@ -334,18 +330,28 @@ def verify_expected_lane_semantics(
 ) -> dict[str, Any]:
     with Image.open(source) as opened:
         image = opened.convert("RGB").crop(canvas_rect)
-    palette = _palette_points(image, 12)
+    pixels = np.asarray(image, dtype=np.int16)
     left, top, _, _ = canvas_rect
 
-    def nearby(points: set[tuple[int, int]], point: tuple[int, int]) -> bool:
+    def nearby(colors: Sequence[tuple[int, int, int]], point: tuple[int, int]) -> bool:
         x, y = point[0] - left, point[1] - top
-        return any((px - x) ** 2 + (py - y) ** 2 <= radius**2 for px, py in points)
+        x0, x1 = max(0, x - radius), min(image.width, x + radius + 1)
+        y0, y1 = max(0, y - radius), min(image.height, y + radius + 1)
+        if x0 >= x1 or y0 >= y1:
+            return False
+        region = pixels[y0:y1, x0:x1]
+        yy, xx = np.ogrid[y0 - y : y1 - y, x0 - x : x1 - x]
+        circle = xx * xx + yy * yy <= radius * radius
+        return any(
+            bool(np.any((np.max(np.abs(region - np.asarray(color, dtype=np.int16)), axis=2) <= 12) & circle))
+            for color in colors
+        )
 
     reasons = []
-    if not nearby(palette["source"], source_point):
+    if not nearby((_PALETTE["source"],), source_point):
         reasons.append("registered_source_lane_not_selected")
-    visible_targets = palette["target"] | palette["pass"] | palette["conflict"]
-    if any(not nearby(visible_targets, point) for point in target_points):
+    target_colors = tuple(_PALETTE[name] for name in ("target", "pass", "conflict"))
+    if any(not nearby(target_colors, point) for point in target_points):
         reasons.append("registered_target_lane_not_visible")
     return {"status": "review_required", "reasons": reasons} if reasons else {"status": "pass", "reasons": []}
 
