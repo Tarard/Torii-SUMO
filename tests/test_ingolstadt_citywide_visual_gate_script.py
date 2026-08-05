@@ -429,6 +429,31 @@ def test_structure_pair_detects_missing_target_and_signal_binding(tmp_path: Path
     assert "signal_binding_mismatch" in report["reasons"]
 
 
+def test_structure_pair_ignores_identical_unregistered_nonmotor_target(tmp_path: Path) -> None:
+    module = _module()
+    net = tmp_path / "net.xml"
+    net.write_text(
+        "<net>"
+        '<edge id="in"><lane id="in_0" index="0" allow="passenger"/></edge>'
+        '<edge id="out"><lane id="out_0" index="0" allow="passenger"/></edge>'
+        '<edge id="walk"><lane id="walk_0" index="0" allow="pedestrian"/></edge>'
+        '<connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>'
+        '<connection from="in" to="walk" fromLane="0" toLane="0" dir="r"/>'
+        "</net>",
+        encoding="utf-8",
+    )
+
+    report = module.compare_lane_structure(
+        net,
+        net,
+        teacher_lane="in_0",
+        candidate_lane="in_0",
+        outgoing_lane_pairs={"out_0": "out_0"},
+    )
+
+    assert report["status"] == "pass"
+
+
 def test_city_manifest_binds_junction_and_lane_pairs() -> None:
     module = _module()
     teacher_junction = _junction("cluster_10_11", (1000, 2000), roads=("10",), bearings=(0,))
@@ -652,6 +677,8 @@ def test_lane_evidence_binds_canvas_radius_and_native_selection(
     )
 
     assert report["status"] == "review_required"
+    assert report["failure_images"]["teacher"] == report["teacher_screenshot_file"]
+    assert report["failure_images"]["candidate"] == report["candidate_screenshot_file"]
     assert arguments["teacher_canvas_rect"] == (20, 10, 220, 170)
     assert arguments["candidate_canvas_rect"] == (20, 10, 220, 170)
     assert arguments["semantic_radius"] == 300
@@ -827,8 +854,10 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
     _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
     session_sources: list[Path] = []
     session_actions: list[str] = []
+    session_keys: list[int] = []
     session_centers: list[tuple[float, float]] = []
     lane_point_calls: list[tuple[tuple[float, float], ...]] = []
+    semantic_call_count = 0
     parsed_roots = []
     original_lane_capture_spec = module.lane_capture_spec
 
@@ -888,6 +917,8 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
 
     def fake_input(_hwnd, _pid, action, **_kwargs):
         session_actions.append(action["type"])
+        if action["type"] == "key":
+            session_keys.append(action["virtual_key"])
         return {"send_input_event_count": 1}
 
     monkeypatch.setattr(module, "build_visual_tile_subnet", fake_subnet)
@@ -901,14 +932,16 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
         "canvas_click_for_world_point",
         lambda *, point, **_kwargs: (700, 470) if point == (20.0, 30.0) else (420, 330),
     )
-    monkeypatch.setattr(
-        module,
-        "verify_expected_lane_semantics",
-        lambda *_args, **_kwargs: {
-            "status": "review_required",
-            "reasons": ["registered_target_lane_not_visible"],
-        },
-    )
+    def fake_semantics(*_args, **_kwargs):
+        nonlocal semantic_call_count
+        semantic_call_count += 1
+        return (
+            {"status": "review_required", "reasons": ["registered_source_lane_not_selected"]}
+            if semantic_call_count % 2
+            else {"status": "pass", "reasons": []}
+        )
+
+    monkeypatch.setattr(module, "verify_expected_lane_semantics", fake_semantics)
 
     result = module.capture_tile_pair(
         tile_id="0004_0008",
@@ -931,7 +964,11 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
 
     assert len(session_sources) == 4
     assert session_centers[-2:] == [(20.0, 30.0), (20.0, 30.0)]
-    assert session_actions == ["key", "click", "key", "click"] * 2
+    assert session_actions == [
+        "key", "click", "key", "key", "click",
+        "key", "key", "click", "key", "key", "click",
+    ] * 2
+    assert session_keys == [ord("C"), 0x1B, ord("C"), 0x1B, ord("C"), 0x1B, ord("C")] * 2
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
     assert len(lane_point_calls) == 6
@@ -940,15 +977,15 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
         image_file = Path(captures[0]["screenshot_file"])
         assert captures[0] == {
             "lane_id": "in_0",
-            "sample_distance_rank": 1,
+            "sample_distance_rank": 2,
             "click": [420, 330],
             "junction_pixel": [700, 470],
             "canvas_rect": [230, 64, 1394, 885],
             "zoom": 900.0,
             "semantic_radius": 300,
             "selection": {
-                "status": "review_required",
-                "reasons": ["registered_target_lane_not_visible"],
+                "status": "pass",
+                "reasons": [],
             },
             "input_method": "target_window_send_input",
             "subnet_sha256": "d" * 64,

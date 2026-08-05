@@ -383,16 +383,19 @@ def compare_lane_structure(
     candidate = _connection_signature(Path(candidate_net), candidate_lane)
     teacher_by_target = {str(row["target_lane"]): row for row in teacher}
     candidate_by_target = {str(row["target_lane"]): row for row in candidate}
+    candidate_targets = set(outgoing_lane_pairs.values())
+    registered_teacher = [row for row in teacher if row["target_lane"] in outgoing_lane_pairs]
+    registered_candidate = [row for row in candidate if row["target_lane"] in candidate_targets]
     expected_targets = {
         outgoing_lane_pairs[target]
         for target in teacher_by_target
         if target in outgoing_lane_pairs
     }
     reasons = []
-    if len(expected_targets) != len(teacher_by_target) or expected_targets != set(candidate_by_target):
+    if expected_targets != {row["target_lane"] for row in registered_candidate}:
         reasons.append("target_lane_mismatch")
-    if sorted((row["has_tls"], row["has_link_index"]) for row in teacher) != sorted(
-        (row["has_tls"], row["has_link_index"]) for row in candidate
+    if sorted((row["has_tls"], row["has_link_index"]) for row in registered_teacher) != sorted(
+        (row["has_tls"], row["has_link_index"]) for row in registered_candidate
     ):
         reasons.append("signal_binding_mismatch")
     for teacher_target, candidate_target in outgoing_lane_pairs.items():
@@ -420,7 +423,7 @@ def compare_lane_structure(
     candidate_order = [
         row["target_lane"]
         for row in sorted(candidate, key=lambda row: row["link_index"] if row["link_index"] is not None else math.inf)
-        if row["link_index"] is not None
+        if row["link_index"] is not None and row["target_lane"] in candidate_targets
     ]
     if teacher_order != candidate_order:
         reasons.append("signal_order_mismatch")
@@ -674,15 +677,11 @@ def evaluate_lane_pair(
     if status != "pass":
         failure_dir = Path(failure_dir).resolve()
         failure_dir.mkdir(parents=True, exist_ok=True)
-        teacher_failure = failure_dir / "teacher.png"
-        candidate_failure = failure_dir / "candidate.png"
         comparison = failure_dir / "comparison.png"
-        shutil.copy2(teacher_evidence, teacher_failure)
-        shutil.copy2(candidate_evidence, candidate_failure)
-        _comparison_image(teacher_failure, candidate_failure, comparison)
+        _comparison_image(teacher_evidence, candidate_evidence, comparison)
         report["failure_images"] = {
-            "teacher": str(teacher_failure),
-            "candidate": str(candidate_failure),
+            "teacher": str(teacher_evidence),
+            "candidate": str(candidate_evidence),
             "comparison": str(comparison),
         }
     report_file = lane_dir / "evidence.json"
@@ -1039,13 +1038,19 @@ def capture_tile_pair(
             session.open()
             try:
                 session.observe("pre_connection_stable")
-                input_func(session.hwnd, session.process.pid, {
-                    "type": "key",
-                    "virtual_key": ord("C"),
-                    "modifier_keys": [],
-                }, post_input_seconds=0.1)
                 session.global_input_used = True
                 for position, record_index in enumerate(indices):
+                    if position:
+                        input_func(session.hwnd, session.process.pid, {
+                            "type": "key",
+                            "virtual_key": 0x1B,
+                            "modifier_keys": [],
+                        }, post_input_seconds=0.2)
+                    input_func(session.hwnd, session.process.pid, {
+                        "type": "key",
+                        "virtual_key": ord("C"),
+                        "modifier_keys": [],
+                    }, post_input_seconds=0.1)
                     record = records[record_index]
                     spec = context["specs"][record_index]
                     output_index = record_index + 1
@@ -1094,6 +1099,17 @@ def capture_tile_pair(
                     )
                     capture: dict[str, Any] | None = None
                     for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
+                        if rank > 1:
+                            input_func(session.hwnd, session.process.pid, {
+                                "type": "key",
+                                "virtual_key": 0x1B,
+                                "modifier_keys": [],
+                            }, post_input_seconds=0.2)
+                            input_func(session.hwnd, session.process.pid, {
+                                "type": "key",
+                                "virtual_key": ord("C"),
+                                "modifier_keys": [],
+                            }, post_input_seconds=0.1)
                         click = canvas_click_for_world_point(
                             point=point,
                             center=viewport_center,
@@ -1136,15 +1152,6 @@ def capture_tile_pair(
                     if capture is None:
                         raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
                     role_captures[record_index] = capture
-                    if (
-                        "registered_source_lane_not_selected" not in capture["selection"]["reasons"]
-                        and position < len(indices) - 1
-                    ):
-                        input_func(session.hwnd, session.process.pid, {
-                            "type": "key",
-                            "virtual_key": 0x1B,
-                            "modifier_keys": [],
-                        }, post_input_seconds=0.1)
             finally:
                 session.abort("visual_junction_capture_complete")
         if any(capture is None for capture in role_captures):
