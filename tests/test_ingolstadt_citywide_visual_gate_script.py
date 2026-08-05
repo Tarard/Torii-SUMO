@@ -921,7 +921,7 @@ def test_target_window_capture_uses_one_process_per_role_and_tile(
     )
 
     assert len(session_sources) == 4
-    assert session_actions == ["key", "click", "key", "key", "click"] * 2
+    assert session_actions == ["key", "click", "key", "click"] * 2
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
     assert len(lane_point_calls) == 6
