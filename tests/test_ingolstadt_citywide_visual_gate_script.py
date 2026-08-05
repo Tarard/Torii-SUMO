@@ -816,7 +816,7 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert partial["automatic_promotion_gate"] == "blocked"
 
 
-def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
+def test_target_window_capture_uses_subnets_and_one_process_per_lane(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -826,6 +826,7 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
     _write_net(teacher, offset="-1000,-2000", junction_x=20, junction_y=30)
     _write_net(candidate, offset="-1000,-2000", junction_x=20, junction_y=30)
     session_sources: list[Path] = []
+    session_actions: list[str] = []
     lane_point_calls: list[tuple[tuple[float, float], ...]] = []
     parsed_roots = []
     original_lane_capture_spec = module.lane_capture_spec
@@ -855,7 +856,7 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
         def __init__(self, source, _candidate, output_dir, **kwargs):
             self.source = Path(source)
             self.output_dir = Path(output_dir)
-            self.test_file = Path(kwargs["test_file"])
+            assert "test_file" not in kwargs
             session_sources.append(self.source)
 
         def open(self):
@@ -866,6 +867,13 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
                 "screenshot_file": str(image_file),
                 "screenshot_sha256": file_sha256(image_file),
             }
+
+        def observe(self, _label):
+            return self.open()
+
+        def act(self, action):
+            session_actions.append(action["type"])
+            return self.open()
 
         def abort(self, _reason):
             return {"status": "aborted"}
@@ -910,6 +918,7 @@ def test_native_capture_contract_uses_subnets_and_one_process_per_lane(
     )
 
     assert len(session_sources) == 4
+    assert session_actions == ["key", "click", "key", "click"]
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
     assert len(lane_point_calls) == 3

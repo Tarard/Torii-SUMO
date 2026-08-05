@@ -22,12 +22,10 @@ from torii_sumo.core.netedit_connection_visual_gate import (
     fit_connection_zoom,
     lane_capture_spec,
     lane_click_points,
-    native_test_click_offset,
     netedit_canvas_rect,
     normalized_viewport_zoom,
     point_before_lane_end,
     verify_expected_lane_semantics,
-    write_native_connection_test,
     write_semantic_mask,
 )
 from torii_sumo.core.netedit import NeteditTargetSession
@@ -949,16 +947,13 @@ def capture_tile_pair(
         warmup_dir = role_dir / "warmup"
         warmup_dir.mkdir(parents=True, exist_ok=True)
         view = warmup_dir / "view.xml"
-        test_file = warmup_dir / "mode.test.py"
         _viewsettings(view, local_center, zoom)
-        write_text_atomic(test_file, 'netedit.changeMode("connection")\n')
         session = session_factory(
             subnet_file,
             warmup_dir / "working.net.xml",
             warmup_dir / "netedit-session",
             expected_source_sha256=file_sha256(subnet_file),
             gui_settings_file=view,
-            test_file=test_file,
             activate_for_render=False,
             target_source_junction_ids=junction_ids,
             target_candidate_junction_ids=junction_ids,
@@ -1068,27 +1063,33 @@ def capture_tile_pair(
                 attempt_dir = attempts_dir / f"{rank}"
                 attempt_dir.mkdir(parents=True, exist_ok=True)
                 view = attempt_dir / "view.xml"
-                test_file = attempt_dir / "connection.test.py"
                 _viewsettings(view, context["local_center"], role_zoom)
-                write_native_connection_test(
-                    test_file,
-                    offset=native_test_click_offset(click, context["canvas"]),
-                )
                 session = session_factory(
                     context["subnet_file"],
                     attempt_dir / "working.net.xml",
                     attempt_dir / "netedit-session",
                     expected_source_sha256=file_sha256(context["subnet_file"]),
                     gui_settings_file=view,
-                    test_file=test_file,
                     activate_for_render=False,
                     target_source_junction_ids=(str(record[context["junction_field"]]),),
                     target_candidate_junction_ids=(str(record[context["junction_field"]]),),
                     window_size=f"{window_size[0]},{window_size[1]}",
                 )
-                opened = session.open()
+                session.open()
                 try:
-                    screenshot = Path(opened["screenshot_file"])
+                    stable = session.observe("pre_connection_stable")
+                    mode = session.act({
+                        "type": "key",
+                        "virtual_key": ord("C"),
+                        "expected_screenshot_sha256": stable["screenshot_sha256"],
+                    })
+                    selected = session.act({
+                        "type": "click",
+                        "x": click[0],
+                        "y": click[1],
+                        "expected_screenshot_sha256": mode["screenshot_sha256"],
+                    })
+                    screenshot = Path(selected["screenshot_file"])
                     selection = verify_expected_lane_semantics(
                         screenshot,
                         canvas_rect=context["canvas"],
