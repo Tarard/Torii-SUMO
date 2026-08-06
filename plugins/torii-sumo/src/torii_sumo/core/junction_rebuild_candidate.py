@@ -1451,6 +1451,90 @@ def write_teacher_lane_patch_edges(
     }
 
 
+def write_teacher_lane_geometry_overlay_net(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    output_file: Path,
+    edge_map: dict[str, str],
+) -> dict[str, object]:
+    """Copy mapped lane geometry without changing the candidate topology."""
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    teacher_edges = {edge.attrib.get("id", ""): edge for edge in teacher_root.findall("edge")}
+    candidate_edges = {edge.attrib.get("id", ""): edge for edge in candidate_root.findall("edge")}
+
+    def net_offset(root: ET.Element) -> tuple[float, float]:
+        location = root.find("location")
+        values = (location.attrib.get("netOffset", "0,0") if location is not None else "0,0").split(",")
+        return float(values[0]), float(values[1])
+
+    teacher_offset = net_offset(teacher_root)
+    candidate_offset = net_offset(candidate_root)
+    dx, dy = candidate_offset[0] - teacher_offset[0], candidate_offset[1] - teacher_offset[1]
+    pairs: list[tuple[str, str, ET.Element, ET.Element]] = []
+    failures: list[dict[str, object]] = []
+    for teacher_id, candidate_id in sorted(edge_map.items()):
+        teacher_edge = teacher_edges.get(teacher_id)
+        candidate_edge = candidate_edges.get(candidate_id)
+        if teacher_edge is None or candidate_edge is None:
+            failures.append({"teacher_edge_id": teacher_id, "candidate_edge_id": candidate_id, "reason": "edge_missing"})
+            continue
+        teacher_lanes = {lane.attrib.get("index", ""): lane for lane in teacher_edge.findall("lane")}
+        candidate_lanes = {lane.attrib.get("index", ""): lane for lane in candidate_edge.findall("lane")}
+        if teacher_lanes.keys() != candidate_lanes.keys():
+            failures.append(
+                {
+                    "teacher_edge_id": teacher_id,
+                    "candidate_edge_id": candidate_id,
+                    "reason": "lane_indices_mismatch",
+                    "teacher_lane_indices": sorted(teacher_lanes),
+                    "candidate_lane_indices": sorted(candidate_lanes),
+                }
+            )
+            continue
+        pairs.append((teacher_id, candidate_id, teacher_edge, candidate_edge))
+    if failures:
+        return {**_failure("mapped lane geometry overlay is incomplete"), "failures": failures}
+
+    geometry_attrs = ("shape", "outlineShape", "customShape")
+    lane_attrs = ("allow", "disallow", "speed", "length", "width", *geometry_attrs)
+    for _, _, teacher_edge, candidate_edge in pairs:
+        for attr in geometry_attrs:
+            if attr in teacher_edge.attrib:
+                candidate_edge.set(attr, _translate_shape(teacher_edge.attrib[attr], dx, dy))
+            else:
+                candidate_edge.attrib.pop(attr, None)
+        candidate_lanes = {lane.attrib.get("index", ""): lane for lane in candidate_edge.findall("lane")}
+        for teacher_lane in teacher_edge.findall("lane"):
+            candidate_lane = candidate_lanes[teacher_lane.attrib.get("index", "")]
+            for attr in lane_attrs:
+                if attr in teacher_lane.attrib:
+                    value = (
+                        _translate_shape(teacher_lane.attrib[attr], dx, dy)
+                        if attr in geometry_attrs
+                        else teacher_lane.attrib[attr]
+                    )
+                    candidate_lane.set(attr, value)
+                else:
+                    candidate_lane.attrib.pop(attr, None)
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "net_file": str(output_file),
+        "overlaid_edge_count": len(pairs),
+        "overlaid_edge_ids": sorted(candidate_id for _, candidate_id, _, _ in pairs),
+        "dx": round(dx, 6),
+        "dy": round(dy, 6),
+        "policy": "mapped teacher lane geometry; preserve candidate endpoints, ids, connections, and internal graph",
+    }
+
+
 def write_missing_edge_type_patch(
     *,
     raw_type_file: Path | None,
@@ -3148,6 +3232,15 @@ def write_teacher_target_internal_replay_net(
                 removed_stale_boundary_edge_connections.append(dict(connection.attrib))
                 candidate_root.remove(connection)
 
+    preserved_existing_crossing_edge_ids = sorted(
+        {
+            edge_id
+            for edge in teacher_internal_edges
+            for edge_id in _split(edge.attrib.get("crossingEdges", ""))
+            if edge_id not in replay_edge_map and edge_id in candidate_edge_ids
+        }
+    )
+    replay_edge_map.update({edge_id: edge_id for edge_id in preserved_existing_crossing_edge_ids})
     for offset, edge in enumerate(teacher_internal_edges):
         candidate_root.insert(
             insert_index + boundary_insert_offset + offset,
@@ -3475,6 +3568,8 @@ def write_teacher_target_internal_replay_net(
         "preserved_existing_external_boundary_connections": (
             external_boundary_connection_report["preserved_existing_connections"]
         ),
+        "preserved_existing_crossing_edge_count": len(preserved_existing_crossing_edge_ids),
+        "preserved_existing_crossing_edge_ids": preserved_existing_crossing_edge_ids,
         "skipped_external_boundary_connection_count": external_boundary_connection_report["skipped_connection_count"],
         "skipped_external_boundary_connections": external_boundary_connection_report["skipped_connections"],
         "copied_boundary_continuation_edge_count": len(copied_boundary_continuation_edges),

@@ -68,6 +68,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
     write_teacher_endpoint_patch_nodes,
+    write_teacher_lane_geometry_overlay_net,
     write_teacher_lane_patch_edges,
     write_teacher_pedestrian_ring_net,
     write_teacher_tllogic_net,
@@ -11343,6 +11344,56 @@ def test_write_teacher_lane_patch_edges_can_preserve_complete_osm_profile(
     assert report["preserve_osm_lane_profiles"] is True
 
 
+def test_write_teacher_lane_geometry_overlay_net_preserves_topology(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <location netOffset="10,20"/>
+  <edge id="teacher" from="teacher_a" to="teacher_b" shape="11,21 12,22">
+    <lane id="teacher_0" index="0" speed="8" length="2" width="3" allow="bicycle" shape="11,21 12,22"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <location netOffset="100,200"/>
+  <edge id="candidate" from="candidate_a" to="candidate_b" shape="100,200 101,200">
+    <lane id="candidate_0" index="0" speed="9" length="1" disallow="pedestrian" shape="100,200 101,200"/>
+  </edge>
+  <connection from="candidate" to="other" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_geometry_overlay_net(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        output_file=tmp_path / "overlay.net.xml",
+        edge_map={"teacher": "candidate"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    edge = root.find("edge[@id='candidate']")
+    lane = edge.find("lane")
+    assert (edge.attrib["from"], edge.attrib["to"]) == ("candidate_a", "candidate_b")
+    assert edge.attrib["shape"] == "101.00,201.00 102.00,202.00"
+    assert lane.attrib == {
+        "id": "candidate_0",
+        "index": "0",
+        "speed": "8",
+        "length": "2",
+        "width": "3",
+        "allow": "bicycle",
+        "shape": "101.00,201.00 102.00,202.00",
+    }
+    assert root.find("connection").attrib["to"] == "other"
+    assert report["overlaid_edge_ids"] == ["candidate"]
+
+
 def test_teacher_target_replay_uses_geometry_from_anchor_file(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -16133,6 +16184,49 @@ def test_teacher_target_internal_replay_keeps_scoped_candidate_boundary(
     assert root.find("junction[@id='teacher_extra']") is None
     assert report["preserved_mapped_boundary_endpoint_count"] == 1
     assert report["skipped_unmapped_teacher_boundary_edges"] == ["teacher_unmapped"]
+
+
+def test_teacher_target_internal_replay_keeps_existing_crossing_edge_reference(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_out" from="teacher_j" to="teacher_exit"><lane id="teacher_out_0" index="0"/></edge>
+  <edge id="shared_crossed" from="teacher_j" to="teacher_extra"><lane id="shared_crossed_0" index="0"/></edge>
+  <edge id=":teacher_j_c0" function="crossing" crossingEdges="shared_crossed"><lane id=":teacher_j_c0_0" index="0" allow="pedestrian"/></edge>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="" intLanes=":teacher_j_c0_0"/>
+  <junction id="teacher_exit" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="teacher_extra" type="priority" x="20" y="10" incLanes="shared_crossed_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="candidate_out" from="j" to="osm_exit"><lane id="candidate_out_0" index="0"/></edge>
+  <edge id="shared_crossed" from="j" to="osm_extra"><lane id="shared_crossed_0" index="0"/></edge>
+  <junction id="j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="osm_exit" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+  <junction id="osm_extra" type="priority" x="20" y="10" incLanes="shared_crossed_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "scoped-crossing.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"teacher_out": "candidate_out"},
+        copy_unmapped_boundary_edges=False,
+        preserve_mapped_boundary_endpoints=True,
+    )
+
+    crossing = ET.parse(report["net_file"]).getroot().find("edge[@id=':j_c0']")
+    assert crossing is not None
+    assert crossing.attrib["crossingEdges"] == "shared_crossed"
 
 
 def test_teacher_target_internal_replay_preserves_mapped_boundary_with_unmapped_copy(
