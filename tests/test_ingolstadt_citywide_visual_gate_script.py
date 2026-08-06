@@ -1065,7 +1065,7 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
     assert session_keys == [ord("C"), 0x1B, ord("C"), 0x1B, ord("C"), 0x1B, ord("C")] * 2
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
-    assert len(lane_point_calls) == 6
+    assert len(lane_point_calls) == 10
     for captures in result:
         assert len(captures) == 2
         image_file = Path(captures[0]["screenshot_file"])

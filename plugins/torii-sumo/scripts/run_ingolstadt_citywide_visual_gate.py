@@ -25,7 +25,6 @@ from torii_sumo.core.netedit_connection_visual_gate import (
     lane_click_points,
     netedit_canvas_rect,
     normalized_viewport_zoom,
-    point_before_lane_end,
     verify_expected_lane_semantics,
     write_semantic_mask,
 )
@@ -1115,13 +1114,14 @@ def capture_tile_pair(
                         ]
                     lane_elements = context["lane_elements"]
                     target_world_points = [
-                        point_before_lane_end(
+                        point
+                        for lane_id in target_lane_ids
+                        for point in lane_click_points(
                             tuple(reversed(tuple(
                                 tuple(float(value) for value in point.split(",")[:2])
                                 for point in lane_elements[lane_id].get("shape", "").split()
                             )))
                         )
-                        for lane_id in target_lane_ids
                     ]
                     junction_pixel = canvas_click_for_world_point(
                         point=spec["center"],
