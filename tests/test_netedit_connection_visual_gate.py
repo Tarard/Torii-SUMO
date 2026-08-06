@@ -113,7 +113,7 @@ def test_expected_lane_semantics_rejects_sidebar_and_wrong_lane(tmp_path: Path) 
     image = Image.new("RGB", (300, 180), "white")
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, 40, 150), fill=(0, 255, 255))
-    draw.line((120, 90, 210, 90), fill=(0, 255, 255), width=8)
+    draw.line((120, 90, 210, 90), fill=(0, 255, 255), width=1)
     draw.line((215, 70, 280, 70), fill=(0, 255, 0), width=8)
     source = tmp_path / "capture.png"
     image.save(source)
@@ -122,16 +122,23 @@ def test_expected_lane_semantics_rejects_sidebar_and_wrong_lane(tmp_path: Path) 
         source,
         canvas_rect=(50, 0, 300, 180),
         source_point=(150, 90),
-        target_points=((240, 70),),
+        target_point_groups=(((240, 120), (240, 70)),),
+    )
+    short_lane = visual_gate.verify_expected_lane_semantics(
+        source,
+        canvas_rect=(50, 0, 300, 180),
+        source_point=(150, 105),
+        target_point_groups=(((240, 70),),),
     )
     wrong = visual_gate.verify_expected_lane_semantics(
         source,
         canvas_rect=(50, 0, 300, 180),
         source_point=(150, 120),
-        target_points=((240, 70),),
+        target_point_groups=(((240, 70),),),
     )
 
     assert passed["status"] == "pass"
+    assert short_lane["status"] == "pass"
     assert wrong == {
         "status": "review_required",
         "reasons": ["registered_source_lane_not_selected"],
@@ -158,7 +165,7 @@ def test_expected_lane_semantics_samples_registered_points_without_full_image_sc
         source,
         canvas_rect=(50, 0, 300, 180),
         source_point=(150, 90),
-        target_points=((240, 70),),
+        target_point_groups=(((240, 70),),),
     )
 
     assert report == {"status": "pass", "reasons": []}

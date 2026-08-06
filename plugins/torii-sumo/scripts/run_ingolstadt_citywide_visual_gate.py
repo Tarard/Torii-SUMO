@@ -959,15 +959,6 @@ def capture_tile_pair(
         support = role_dir / "support"
         support.mkdir(parents=True, exist_ok=True)
         full_root = ET.parse(net_file).getroot()
-        specs = [
-            lane_capture_spec(
-                net_file,
-                junction_id=str(record[junction_field]),
-                lane_id=str(record[lane_field]),
-                root=full_root,
-            )
-            for record in records
-        ]
         junction_ids = tuple(sorted({str(record[junction_field]) for record in records}))
         outgoing_lanes = {
             str(lane)
@@ -988,6 +979,16 @@ def capture_tile_pair(
         if subnet["status"] != "pass":
             raise RuntimeError(f"{role} visual subnet extraction failed for tile {tile_id}")
         subnet_file = Path(str(subnet["subnet_file"]))
+        subnet_root = ET.parse(subnet_file).getroot()
+        specs = [
+            lane_capture_spec(
+                subnet_file,
+                junction_id=str(record[junction_field]),
+                lane_id=str(record[lane_field]),
+                root=subnet_root,
+            )
+            for record in records
+        ]
         offset, boundary = _location_numbers(subnet_file)
         local_center = projected_center[0] + offset[0], projected_center[1] + offset[1]
         warmup_dir = role_dir / "warmup"
@@ -1024,7 +1025,7 @@ def capture_tile_pair(
             "junction_field": junction_field,
             "connection_signatures": _connection_signature_index(full_root),
             "lane_elements": {
-                str(lane.get("id")): lane for lane in full_root.iter("lane") if lane.get("id")
+                str(lane.get("id")): lane for lane in subnet_root.iter("lane") if lane.get("id")
             },
         }
 
@@ -1113,15 +1114,14 @@ def capture_tile_pair(
                             if lane["target_lane"] in record["outgoing_lane_pairs"]
                         ]
                     lane_elements = context["lane_elements"]
-                    target_world_points = [
-                        point
-                        for lane_id in target_lane_ids
-                        for point in lane_click_points(
+                    target_world_point_groups = [
+                        lane_click_points(
                             tuple(reversed(tuple(
                                 tuple(float(value) for value in point.split(",")[:2])
                                 for point in lane_elements[lane_id].get("shape", "").split()
                             )))
                         )
+                        for lane_id in target_lane_ids
                     ]
                     junction_pixel = canvas_click_for_world_point(
                         point=spec["center"],
@@ -1130,15 +1130,18 @@ def capture_tile_pair(
                         canvas_rect=context["canvas"],
                         zoom=role_zoom,
                     )
-                    target_pixels = tuple(
-                        canvas_click_for_world_point(
-                            point=point,
-                            center=viewport_center,
-                            conv_boundary=context["boundary"],
-                            canvas_rect=context["canvas"],
-                            zoom=role_zoom,
+                    target_pixel_groups = tuple(
+                        tuple(
+                            canvas_click_for_world_point(
+                                point=point,
+                                center=viewport_center,
+                                conv_boundary=context["boundary"],
+                                canvas_rect=context["canvas"],
+                                zoom=role_zoom,
+                            )
+                            for point in points
                         )
-                        for point in target_world_points
+                        for points in target_world_point_groups
                     )
                     capture: dict[str, Any] | None = None
                     for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
@@ -1171,7 +1174,7 @@ def capture_tile_pair(
                             screenshot,
                             canvas_rect=context["canvas"],
                             source_point=click,
-                            target_points=target_pixels,
+                            target_point_groups=target_pixel_groups,
                         )
                         destination = context["role_dir"] / "captures" / f"{output_index:05d}.png"
                         destination.parent.mkdir(parents=True, exist_ok=True)

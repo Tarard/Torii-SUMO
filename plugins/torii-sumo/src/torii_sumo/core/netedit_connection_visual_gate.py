@@ -326,8 +326,8 @@ def verify_expected_lane_semantics(
     *,
     canvas_rect: tuple[int, int, int, int],
     source_point: tuple[int, int],
-    target_points: Sequence[tuple[int, int]],
-    radius: int = 12,
+    target_point_groups: Sequence[Sequence[tuple[int, int]]],
+    radius: int = 16,
 ) -> dict[str, Any]:
     with Image.open(source) as opened:
         image = opened.convert("RGB").crop(canvas_rect)
@@ -352,7 +352,7 @@ def verify_expected_lane_semantics(
     if not nearby((_PALETTE["source"],), source_point):
         reasons.append("registered_source_lane_not_selected")
     target_colors = tuple(_PALETTE[name] for name in ("target", "pass", "conflict"))
-    if any(not nearby(target_colors, point) for point in target_points):
+    if any(not any(nearby(target_colors, point) for point in group) for group in target_point_groups):
         reasons.append("registered_target_lane_not_visible")
     return {"status": "review_required", "reasons": reasons} if reasons else {"status": "pass", "reasons": []}
 

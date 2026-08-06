@@ -961,12 +961,18 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
             net_file,
             junction_id=junction_id,
             lane_id=lane_id,
+            root=root,
         )
 
     def fake_subnet(*, source_net, output_dir, **_kwargs):
         subnet = Path(output_dir) / "render.net.xml"
         subnet.parent.mkdir(parents=True, exist_ok=True)
-        subnet.write_bytes(Path(source_net).read_bytes())
+        subnet.write_text(
+            Path(source_net).read_text(encoding="utf-8").replace(
+                'shape="0,30 20,30"', 'shape="100,30 120,30"'
+            ).replace('shape="20,30 40,30"', 'shape="120,30 140,30"'),
+            encoding="utf-8",
+        )
         return {
             "status": "pass",
             "subnet_file": str(subnet),
@@ -1066,6 +1072,8 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
     assert all(path not in {teacher.resolve(), candidate.resolve()} for path in session_sources)
     assert all(root is not None for root in parsed_roots)
     assert len(lane_point_calls) == 10
+    assert ((100.0, 30.0), (120.0, 30.0)) in lane_point_calls
+    assert ((140.0, 30.0), (120.0, 30.0)) in lane_point_calls
     for captures in result:
         assert len(captures) == 2
         image_file = Path(captures[0]["screenshot_file"])
