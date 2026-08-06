@@ -631,6 +631,11 @@ def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size
             "reasons": [] if status == "pass" else ["source_lane_not_selected"],
             "click": list(click),
             "canvas_rect": list(canvas),
+            "semantic_focus_points": [
+                list(click),
+                [round((canvas[0] + canvas[2]) / 2), round((canvas[1] + canvas[3]) / 2)],
+            ],
+            "semantic_focus_radius": 48,
             "zoom": zoom,
             "selected_source_pixel_count": source_pixels,
             "screenshot_file": str(destination),
@@ -751,6 +756,16 @@ def run_connection_visual_gate(
             candidate_center=tuple(candidate_capture["click"]),
             teacher_canvas_rect=tuple(teacher_capture["canvas_rect"]),
             candidate_canvas_rect=tuple(candidate_capture["canvas_rect"]),
+            teacher_focus_points=tuple(
+                tuple(point) for point in teacher_capture.get("semantic_focus_points", ())
+            ) or None,
+            candidate_focus_points=tuple(
+                tuple(point) for point in candidate_capture.get("semantic_focus_points", ())
+            ) or None,
+            focus_radius=max(
+                int(teacher_capture.get("semantic_focus_radius", 48)),
+                int(candidate_capture.get("semantic_focus_radius", 48)),
+            ),
         )
         report = {**row, **comparison, "teacher_capture": teacher_capture, "candidate_capture": candidate_capture}
         if comparison["status"] != "pass":

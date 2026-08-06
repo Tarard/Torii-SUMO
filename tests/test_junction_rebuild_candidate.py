@@ -16757,7 +16757,7 @@ def test_write_teacher_target_internal_replay_net_removes_replaced_boundary_conn
     assert report["removed_stale_replaced_edge_connection_count"] == 1
 
 
-def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boundary_connection_with_stale_lane_index(
+def test_write_teacher_target_internal_replay_net_cleans_stale_remote_internal_lane_references(
     tmp_path: Path,
 ) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
@@ -16774,7 +16774,7 @@ def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boun
         """<net>
   <edge id="main" from="j" to="b"><lane id="main_0" index="0" shape="10,0 20,0"/><lane id="main_1" index="1" shape="10,1 20,1"/></edge>
   <edge id=":old_1" function="internal" from="old" to="j"><lane id=":old_1_0" index="0"/><lane id=":old_1_1" index="1"/></edge>
-  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=":old_1_0 :old_1_1"/>
+  <junction id="old" type="priority" x="0" y="0" incLanes="main_1" intLanes=":old_1_0 :old_1_1"/>
   <junction id="j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
   <junction id="b" type="priority" x="20" y="0" incLanes="main_0 main_1" intLanes=""/>
   <connection from=":old_1" to="main" fromLane="1" toLane="1" dir="s"/>
@@ -16794,6 +16794,7 @@ def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boun
     root = ET.parse(report["net_file"]).getroot()
     assert len(root.find("edge[@id='main']").findall("lane")) == 1
     assert root.find("connection[@from=':old_1'][@to='main']") is None
+    assert root.find("junction[@id='old']").attrib["incLanes"] == ""
     assert report["removed_stale_replaced_edge_connection_count"] == 1
 
 
@@ -16829,6 +16830,44 @@ def test_target_internal_replay_preserves_valid_neighbor_internal_connection_to_
         teacher_junction_id="teacher_j",
         edge_map={"main": "main"},
         preserve_mapped_boundary_endpoints=True,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("connection[@from=':old_0'][@to='main']") is not None
+    assert report["removed_stale_replaced_edge_connection_count"] == 0
+
+
+def test_target_internal_replay_preserves_valid_remote_internal_connection_when_lane_is_added(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="main" from="old" to="teacher_j"><lane id="main_0" index="0"/><lane id="main_1" index="1"/></edge>
+  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="main_0 main_1" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="main" from="old" to="j"><lane id="main_0" index="0"/></edge>
+  <edge id=":old_0" function="internal"><lane id=":old_0_0" index="0"/></edge>
+  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=":old_0_0"/>
+  <junction id="j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
+  <connection from=":old_0" to="main" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"main": "main"},
     )
 
     root = ET.parse(report["net_file"]).getroot()
@@ -18174,7 +18213,9 @@ def test_write_teacher_target_internal_replay_net_replays_same_id_boundary_lane_
     assert report["skipped_connection_count"] == 0
 
 
-def test_write_teacher_target_internal_replay_net_replays_same_id_boundary_edge_endpoint(tmp_path: Path) -> None:
+def test_write_teacher_target_internal_replay_net_cleans_orphaned_old_endpoint_junction(
+    tmp_path: Path,
+) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
         """<net>
@@ -18194,8 +18235,9 @@ def test_write_teacher_target_internal_replay_net_replays_same_id_boundary_edge_
   <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
   <edge id="teacher_out" from="j" to="stale_neighbor"><lane id="teacher_out_0" index="0" shape="10,20 11,20"/></edge>
   <edge id=":j_old" function="internal"><lane id=":j_old_0" index="0" shape="10,20 11,20"/></edge>
+  <edge id=":stale_neighbor_0" function="internal"><lane id=":stale_neighbor_0_0" index="0" shape="11,20 12,20"/></edge>
   <junction id="j" type="priority" x="10" y="20" incLanes="cand_in_0" intLanes=":j_old_0"/>
-  <junction id="stale_neighbor" type="priority" x="11" y="20" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="stale_neighbor" type="priority" x="11" y="20" incLanes="teacher_out_0" intLanes=":stale_neighbor_0_0"/>
   <connection from="cand_in" to="teacher_out" fromLane="0" toLane="0" via=":j_old_0"/>
 </net>
 """,
@@ -18217,10 +18259,62 @@ def test_write_teacher_target_internal_replay_net_replays_same_id_boundary_edge_
     assert replayed_edge.attrib["to"] == "neighbor_cluster"
     assert replayed_edge.find("lane").attrib["shape"] == "10.00,20.00 30.00,20.00"
     assert "teacher_out_0" in root.find("junction[@id='neighbor_cluster']").attrib["incLanes"]
-    assert root.find("junction[@id='stale_neighbor']").attrib["incLanes"] == ""
+    stale_neighbor = root.find("junction[@id='stale_neighbor']")
+    assert stale_neighbor is not None
+    assert stale_neighbor.attrib["type"] == "dead_end"
+    assert stale_neighbor.attrib["incLanes"] == ""
+    assert stale_neighbor.attrib["intLanes"] == ""
+    assert root.find("edge[@id=':stale_neighbor_0']") is None
     assert root.find("connection[@from='cand_in'][@to='teacher_out']").attrib["via"] == ":j_0_0"
     assert report["copied_boundary_edges"] == ["teacher_out"]
     assert report["skipped_boundary_edges"] == []
+    assert report["cleaned_orphaned_replaced_endpoint_junctions"] == ["stale_neighbor"]
+
+
+def test_write_teacher_target_internal_replay_net_cleans_old_endpoint_that_becomes_dead_end(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="main" from="a" to="teacher_j"><lane id="main_0" index="0"/></edge>
+  <junction id="a" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="back" from="x" to="stale"><lane id="back_0" index="0"/></edge>
+  <edge id="main" from="stale" to="j"><lane id="main_0" index="0"/></edge>
+  <edge id=":stale_0" function="internal"><lane id=":stale_0_0" index="0"/></edge>
+  <junction id="x" type="dead_end" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="stale" type="priority" x="0" y="0" incLanes="back_0" intLanes=":stale_0_0"><request index="0" response="0" foes="0" cont="0"/></junction>
+  <junction id="j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
+  <connection from="back" to="main" fromLane="0" toLane="0" via=":stale_0_0"/>
+  <connection from=":stale_0" to="main" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"main": "main"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    stale = root.find("junction[@id='stale']")
+    assert stale is not None
+    assert stale.attrib["type"] == "dead_end"
+    assert stale.attrib["intLanes"] == ""
+    assert stale.find("request") is None
+    assert root.find("edge[@id=':stale_0']") is None
+    assert root.find("connection[@via=':stale_0_0']") is None
 
 
 def test_write_teacher_target_internal_replay_net_ignores_same_tls_neighbor_internal_connections(

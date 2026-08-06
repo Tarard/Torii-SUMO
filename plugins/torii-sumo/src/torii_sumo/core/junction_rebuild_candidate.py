@@ -2572,7 +2572,11 @@ def write_teacher_target_internal_replay_net(
                         max_endpoint_delta=None,
                     )
             insert_at = list(candidate_root).index(replaced_edge)
-            _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
+            _remove_edge_lanes_from_destination_junction(
+                candidate_root,
+                replaced_edge,
+                all_junctions=True,
+            )
             candidate_root.remove(replaced_edge)
             candidate_edge_ids.remove(copied_edge_id)
             replaced_boundary_edge_ids.add(copied_edge_id)
@@ -3248,6 +3252,90 @@ def write_teacher_target_internal_replay_net(
                 removed_stale_boundary_edge_connections.append(dict(connection.attrib))
                 candidate_root.remove(connection)
 
+    replaced_old_endpoints = {
+        endpoint
+        for edge_id, source_edge in replaced_boundary_source_edges.items()
+        for endpoint in (source_edge.attrib.get("from", ""), source_edge.attrib.get("to", ""))
+        if endpoint
+        and endpoint
+        not in {
+            candidate_edges_by_id[edge_id].attrib.get("from", ""),
+            candidate_edges_by_id[edge_id].attrib.get("to", ""),
+        }
+    }
+    live_normal_endpoints = {
+        endpoint
+        for edge in candidate_root.findall("edge")
+        if not edge.attrib.get("id", "").startswith(":")
+        and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if endpoint
+    }
+    cleaned_orphaned_replaced_endpoint_junctions = []
+    for orphan_id in sorted(replaced_old_endpoints - live_normal_endpoints - {junction_id}):
+        orphan = candidate_root.find(f"junction[@id='{orphan_id}']")
+        if orphan is None:
+            continue
+        orphan_prefix = f":{orphan_id}_"
+        for connection in list(candidate_root.findall("connection")):
+            if connection.attrib.get("via", "").startswith(orphan_prefix) or any(
+                connection.attrib.get(attr, "").startswith(orphan_prefix)
+                for attr in ("from", "to")
+            ):
+                candidate_root.remove(connection)
+        for edge in list(candidate_root.findall("edge")):
+            edge_id = edge.attrib.get("id", "")
+            if edge_id.startswith(orphan_prefix):
+                candidate_root.remove(edge)
+                candidate_edge_ids.discard(edge_id)
+                candidate_edges_by_id.pop(edge_id, None)
+        for tllogic in list(candidate_root.findall("tlLogic")):
+            if tllogic.attrib.get("id") == orphan_id:
+                candidate_root.remove(tllogic)
+        for child in list(orphan):
+            orphan.remove(child)
+        orphan.set("type", "dead_end")
+        orphan.set("incLanes", "")
+        orphan.set("intLanes", "")
+        cleaned_orphaned_replaced_endpoint_junctions.append(orphan_id)
+
+    cleaned_replaced_endpoint_dead_ends = []
+    for endpoint_id in sorted((replaced_old_endpoints & live_normal_endpoints) - {junction_id}):
+        incident_edges = [
+            edge
+            for edge in candidate_root.findall("edge")
+            if not edge.attrib.get("id", "").startswith(":")
+            and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+            and endpoint_id in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        ]
+        if any(edge.attrib.get("to") == endpoint_id for edge in incident_edges) and any(
+            edge.attrib.get("from") == endpoint_id for edge in incident_edges
+        ):
+            continue
+        endpoint = candidate_root.find(f"junction[@id='{endpoint_id}']")
+        if endpoint is None:
+            continue
+        endpoint_prefix = f":{endpoint_id}_"
+        for connection in list(candidate_root.findall("connection")):
+            if connection.attrib.get("via", "").startswith(endpoint_prefix) or any(
+                connection.attrib.get(attr, "").startswith(endpoint_prefix) for attr in ("from", "to")
+            ):
+                candidate_root.remove(connection)
+        for edge in list(candidate_root.findall("edge")):
+            edge_id = edge.attrib.get("id", "")
+            if edge_id.startswith(endpoint_prefix):
+                candidate_root.remove(edge)
+                candidate_edge_ids.discard(edge_id)
+                candidate_edges_by_id.pop(edge_id, None)
+        for tllogic in list(candidate_root.findall("tlLogic")):
+            if tllogic.attrib.get("id") == endpoint_id:
+                candidate_root.remove(tllogic)
+        for child in list(endpoint):
+            endpoint.remove(child)
+        endpoint.set("type", "dead_end")
+        endpoint.set("intLanes", "")
+        cleaned_replaced_endpoint_dead_ends.append(endpoint_id)
+
     preserved_existing_crossing_edge_ids = sorted(
         {
             edge_id
@@ -3318,20 +3406,21 @@ def write_teacher_target_internal_replay_net(
         from_edge_id = connection.attrib.get("from", "")
         to_edge_id = connection.attrib.get("to", "")
         connection_edge_ids = {from_edge_id, to_edge_id}
-        source_endpoint = edge_endpoints.get(from_edge_id)
-        target_endpoint = edge_endpoints.get(to_edge_id)
-        shared_endpoint = (
-            source_endpoint[1]
-            if source_endpoint and target_endpoint and source_endpoint[1] and source_endpoint[1] == target_endpoint[0]
-            else ""
+        if not connection_edge_ids & replaced_boundary_edge_ids or _touches_target_replay_scope(
+            connection,
+            internal_prefix,
+            junction_id,
+            candidate_edges_by_id,
+        ):
+            continue
+        shared_endpoint = _connection_shared_endpoint(
+            connection,
+            edge_endpoints,
+            candidate_junction_ids,
         )
         via_edge_id = connection.attrib.get("via", "")
         stale_via = bool(via_edge_id and shared_endpoint and not via_edge_id.startswith(f":{shared_endpoint}_"))
-        if (
-            not _touches_target_replay_scope(connection, internal_prefix, junction_id, candidate_edges_by_id)
-            and connection_edge_ids & replaced_boundary_edge_ids
-            and (not shared_endpoint or stale_via or not _connection_lane_indices_valid(connection, edge_lane_counts))
-        ):
+        if not shared_endpoint or stale_via or not _connection_lane_indices_valid(connection, edge_lane_counts):
             removed_stale_replaced_edge_connections.append(dict(connection.attrib))
             candidate_root.remove(connection)
 
@@ -3469,11 +3558,19 @@ def write_teacher_target_internal_replay_net(
         "skipped_connection_count": 0,
         "skipped_connections": [],
     }
-    if preserve_mapped_boundary_endpoints:
+    unchanged_remote_boundary_edge_ids = {
+        edge_id
+        for edge_id in replaced_boundary_edge_ids
+        if (source_edge := replaced_boundary_source_edges.get(edge_id)) is not None
+        and (target_edge := candidate_edges_by_id.get(edge_id)) is not None
+        and _boundary_remote_endpoint(source_edge, junction_id)
+        == _boundary_remote_endpoint(target_edge, junction_id)
+    }
+    if unchanged_remote_boundary_edge_ids:
         external_boundary_connection_report = _restore_external_boundary_connections(
             source_root=source_candidate_root,
             target_root=candidate_root,
-            boundary_edge_ids=set(replaced_boundary_edge_ids),
+            boundary_edge_ids=unchanged_remote_boundary_edge_ids,
             source_local_junction_ids={junction_id},
         )
 
@@ -3638,6 +3735,10 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_boundary_edges": removed_stale_boundary_edges,
         "removed_stale_boundary_edge_connection_count": len(removed_stale_boundary_edge_connections),
         "removed_stale_boundary_edge_connections": removed_stale_boundary_edge_connections,
+        "cleaned_orphaned_replaced_endpoint_junctions": (
+            cleaned_orphaned_replaced_endpoint_junctions
+        ),
+        "cleaned_replaced_endpoint_dead_ends": cleaned_replaced_endpoint_dead_ends,
         "removed_stale_replaced_edge_connection_count": len(removed_stale_replaced_edge_connections),
         "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
         "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
@@ -10964,6 +11065,31 @@ def _connection_edges_are_adjacent(connection: ET.Element, edge_endpoints: dict[
     return bool(source and target and source[1] == target[0])
 
 
+def _connection_shared_endpoint(
+    connection: ET.Element,
+    edge_endpoints: dict[str, tuple[str, str]],
+    junction_ids: set[str],
+) -> str:
+    from_edge_id = connection.attrib.get("from", "")
+    to_edge_id = connection.attrib.get("to", "")
+    source = edge_endpoints.get(from_edge_id)
+    target = edge_endpoints.get(to_edge_id)
+    if source and target and source[1] and source[1] == target[0]:
+        return source[1]
+
+    def internal_owner(edge_id: str) -> str:
+        return next(
+            (junction_id for junction_id in sorted(junction_ids, key=len, reverse=True) if edge_id.startswith(f":{junction_id}_")),
+            "",
+        )
+
+    if source and source[1] and source[1] == internal_owner(to_edge_id):
+        return source[1]
+    if target and target[0] and target[0] == internal_owner(from_edge_id):
+        return target[0]
+    return ""
+
+
 def _write_replay_node_file(node_file: Path, join_patch_file: Path, output_file: Path) -> Path:
     if not join_patch_file.is_file():
         return node_file
@@ -15934,6 +16060,14 @@ def _restore_external_boundary_connections(
         "skipped_connection_count": len(skipped),
         "skipped_connections": skipped,
     }
+
+
+def _boundary_remote_endpoint(edge: ET.Element, local_junction_id: str) -> str:
+    if edge.attrib.get("from") == local_junction_id:
+        return edge.attrib.get("to", "")
+    if edge.attrib.get("to") == local_junction_id:
+        return edge.attrib.get("from", "")
+    return ""
 
 
 def _warp_anchor_shape_to_teacher_endpoint(

@@ -419,6 +419,55 @@ def test_visual_comparison_keeps_palette_layers_inside_registered_lane_focus(tmp
     assert report["reasons"] == ["pass_layer_extra"]
 
 
+def test_run_visual_gate_scopes_palette_to_capture_focus(tmp_path: Path, monkeypatch) -> None:
+    net = tmp_path / "net.xml"
+    net.write_text(
+        "<net>"
+        '<location netOffset="0,0" convBoundary="0,0,100,100"/>'
+        '<edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,50 50,50"/></edge>'
+        '<edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="50,50 100,50"/></edge>'
+        '<junction id="j" type="priority" x="50" y="50" incLanes="in_0" intLanes=""/>'
+        '<connection from="in" to="out" fromLane="0" toLane="0"/>'
+        "</net>",
+        encoding="utf-8",
+    )
+    teacher = Image.new("RGB", (240, 180), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((120, 100, 120, 160), fill=(0, 255, 255), width=4)
+        ImageDraw.Draw(image).line((120, 90, 180, 90), fill=(0, 255, 0), width=4)
+    ImageDraw.Draw(candidate).line((40, 40, 80, 40), fill=(255, 0, 255), width=4)
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    def capture(_spec, *, output_dir, zoom, window_size):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        source = teacher_file if output_dir.name == "teacher" else candidate_file
+        return {
+            "status": "pass",
+            "reasons": [],
+            "click": [120, 120],
+            "canvas_rect": [0, 0, 240, 180],
+            "semantic_focus_points": [[120, 120], [160, 90]],
+            "semantic_focus_radius": 24,
+            "screenshot_file": str(source),
+            "screenshot_sha256": file_sha256(source),
+        }
+
+    monkeypatch.setattr(visual_gate, "_capture", capture)
+    report = visual_gate.run_connection_visual_gate(
+        teacher_net_file=net,
+        candidate_net_file=net,
+        teacher_junction="j",
+        candidate_junction="j",
+        lane_pairs=(("in_0", "in_0"),),
+        output_dir=tmp_path / "gate",
+    )
+
+    assert report["status"] == "pass"
+
+
 def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:
     class FakeSession:
         hwnd = 17
