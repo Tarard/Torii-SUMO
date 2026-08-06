@@ -816,6 +816,51 @@ def test_real_input_requires_and_records_english_keyboard_layout(
     assert report["keyboard_layout"] == layout
 
 
+def test_real_input_retries_transient_context_restore_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGui:
+        @staticmethod
+        def GetForegroundWindow():
+            return 42
+
+        @staticmethod
+        def IsChild(parent, child):
+            return parent == 42 and child == 43
+
+    restores = iter(({"restored": False}, {"restored": True}))
+    sleeps = []
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(
+        netedit,
+        "_assert_physical_input_idle",
+        lambda _action: {"status": "idle", "checked_virtual_keys": []},
+    )
+    monkeypatch.setattr(
+        netedit,
+        "_activate_target_window",
+        lambda _hwnd, _pid: {"previous_foreground_hwnd": 7, "previous_focus_hwnd": 7, "previous_cursor": [1, 2]},
+    )
+    monkeypatch.setattr(
+        netedit,
+        "_ensure_english_window_layout",
+        lambda _hwnd: {"status": "pass", "layout_name": "00000409", "changed_by_torii": False},
+    )
+    monkeypatch.setattr(netedit, "_send_inputs", lambda inputs: len(inputs))
+    monkeypatch.setattr(netedit, "_gui_focus", lambda _hwnd: 43)
+    monkeypatch.setattr(netedit, "_restore_input_context", lambda _context: next(restores))
+    monkeypatch.setattr(netedit.time, "sleep", sleeps.append)
+
+    report = netedit._perform_real_input(
+        42,
+        9001,
+        {"type": "key", "virtual_key": ord("I"), "modifier_keys": []},
+    )
+
+    assert report["restore"] == {"restored": True, "retry_count": 1}
+    assert sleeps == [0.2, 0.1]
+
+
 def test_ensure_english_window_layout_switches_non_english_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

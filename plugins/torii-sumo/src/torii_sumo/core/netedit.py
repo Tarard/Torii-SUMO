@@ -816,6 +816,9 @@ def _perform_real_input(
             raise RuntimeError("NetEdit lost foreground or focus before consuming the injected input")
     finally:
         restored = _restore_input_context(context)
+        if not restored["restored"]:
+            time.sleep(0.1)
+            restored = {**_restore_input_context(context), "retry_count": 1}
     if not restored["restored"]:
         raise RuntimeError("previous input context was not restored after NetEdit action")
     return {
