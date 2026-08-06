@@ -2370,10 +2370,12 @@ def write_teacher_target_internal_replay_net(
         mapped_from = (
             junction_id
             if teacher_edge.attrib.get("from") == teacher_junction_id
-            else teacher_edge.attrib.get("from", "")
+            else _canonical_sumo_cluster_id(teacher_edge.attrib.get("from", ""))
         )
         mapped_to = (
-            junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
+            junction_id
+            if teacher_edge.attrib.get("to") == teacher_junction_id
+            else _canonical_sumo_cluster_id(teacher_edge.attrib.get("to", ""))
         )
         mapped_candidate_edge_id = replay_edge_map.get(edge_id, edge_id)
         mapped_candidate_edge = candidate_edges_by_id.get(mapped_candidate_edge_id)

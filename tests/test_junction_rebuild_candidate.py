@@ -9791,6 +9791,42 @@ def test_target_internal_replay_adds_missing_teacher_endpoint_junctions(tmp_path
     assert root.find("junction[@id='teacher_cluster']") is not None
 
 
+def test_target_internal_replay_reuses_canonical_teacher_endpoint_junction(tmp_path: Path) -> None:
+    full_id = "cluster_1_10_11_12_13_14"
+    short_id = "cluster_1_10_11_12_#2more"
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        f"""<net>
+  <edge id="out" from="candidate" to="{short_id}"><lane id="out_0" index="0"/></edge>
+  <junction id="candidate" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="{short_id}" type="priority" x="10" y="0" incLanes="out_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        f"""<net>
+  <edge id="out" from="teacher" to="{full_id}"><lane id="out_0" index="0"/></edge>
+  <junction id="teacher" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="{full_id}" type="priority" x="10" y="0" incLanes="out_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replay.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="teacher",
+        edge_map={"out": "out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert len(root.findall(f"junction[@id='{short_id}']")) == 1
+    assert root.find(f"junction[@id='{full_id}']") is None
+
+
 def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
