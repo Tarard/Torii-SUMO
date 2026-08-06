@@ -687,6 +687,19 @@ def evaluate_lane_pair(
         "teacher": teacher_capture.get("selection", {"status": "pass", "reasons": []}),
         "candidate": candidate_capture.get("selection", {"status": "pass", "reasons": []}),
     }
+    if (
+        visual["status"] == "review_required"
+        and visual["reasons"] == ["source_lane_not_selected"]
+        and "selection" in teacher_capture
+        and "selection" in candidate_capture
+        and all(value["status"] == "pass" for value in selections.values())
+    ):
+        visual = {
+            **visual,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": ["source_lane_not_selected"],
+        }
     if visual["status"] == "fail" or structure["status"] == "fail":
         status = "fail"
     elif visual["status"] != "pass" or any(value["status"] != "pass" for value in selections.values()):

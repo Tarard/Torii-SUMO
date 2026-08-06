@@ -731,6 +731,53 @@ def test_lane_evidence_binds_canvas_radius_and_native_selection(
     assert arguments["semantic_radius"] == 300
 
 
+def test_lane_evidence_accepts_shared_missing_source_layer_when_native_selection_passes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    teacher_net = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="tls", link_index="3")
+    candidate_net = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="tls", link_index="7")
+    teacher_image, candidate_image = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    for path in (teacher_image, candidate_image):
+        Image.new("RGB", (240, 180), "white").save(path)
+    monkeypatch.setattr(
+        module,
+        "analyze_connection_pair",
+        lambda *_args, **_kwargs: {
+            "status": "review_required",
+            "reasons": ["source_lane_not_selected"],
+            "layers": {},
+        },
+    )
+
+    report = module.evaluate_lane_pair(
+        teacher_net=teacher_net,
+        candidate_net=candidate_net,
+        record={
+            "teacher_lane": "in_0",
+            "candidate_lane": "in_0",
+            "outgoing_lane_pairs": {"out_0": "out_0"},
+        },
+        teacher_capture={
+            "screenshot_file": str(teacher_image),
+            "junction_pixel": [120, 90],
+            "selection": {"status": "pass", "reasons": []},
+        },
+        candidate_capture={
+            "screenshot_file": str(candidate_image),
+            "junction_pixel": [120, 90],
+            "selection": {"status": "pass", "reasons": []},
+        },
+        lane_dir=tmp_path / "lane",
+        failure_dir=tmp_path / "failures",
+    )
+
+    assert report["status"] == "pass"
+    assert report["visual"]["status"] == "pass"
+    assert report["visual"]["resolved_reasons"] == ["source_lane_not_selected"]
+
+
 def test_tiles_expand_from_the_verified_seed() -> None:
     manifest = {
         "junction_pairs": [
