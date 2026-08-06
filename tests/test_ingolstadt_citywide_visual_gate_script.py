@@ -311,6 +311,25 @@ def test_lane_registration_is_one_to_one_by_road_and_bearing() -> None:
     assert report["candidate_only"] == []
 
 
+def test_lane_registration_prefers_exact_id_for_parallel_lanes() -> None:
+    module = _module()
+    teacher = [
+        {"id": "road_1", "road_root": "road", "bearing": 0.0},
+        {"id": "road_2", "road_root": "road", "bearing": 0.01},
+    ]
+    candidate = [
+        {"id": "road_1", "road_root": "road", "bearing": 0.009},
+        {"id": "road_2", "road_root": "road", "bearing": 0.001},
+    ]
+
+    report = module.register_lanes(teacher, candidate, max_bearing_gap=15.0)
+
+    assert [(row["teacher_lane"], row["candidate_lane"]) for row in report["matched"]] == [
+        ("road_1", "road_1"),
+        ("road_2", "road_2"),
+    ]
+
+
 def test_resume_requires_policy_hashes_and_unchanged_evidence_artifacts(tmp_path: Path) -> None:
     module = _module()
     state = tmp_path / "state.json"

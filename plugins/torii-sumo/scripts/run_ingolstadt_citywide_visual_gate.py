@@ -197,6 +197,18 @@ def register_lanes(
     used: set[str] = set()
     matched, teacher_only, ambiguous = [], [], []
     for teacher in sorted(teacher_lanes, key=lambda row: str(row["id"])):
+        teacher_id = str(teacher["id"])
+        exact = available.get(teacher_id)
+        if exact is not None and teacher_id not in used and teacher["road_root"] == exact["road_root"]:
+            gap = angle_gap(float(teacher["bearing"]), float(exact["bearing"]))
+            if gap <= max_bearing_gap:
+                used.add(teacher_id)
+                matched.append({
+                    "teacher_lane": teacher_id,
+                    "candidate_lane": teacher_id,
+                    "bearing_gap": round(gap, 6),
+                })
+                continue
         choices = []
         for candidate_id, candidate in available.items():
             gap = angle_gap(float(teacher["bearing"]), float(candidate["bearing"]))

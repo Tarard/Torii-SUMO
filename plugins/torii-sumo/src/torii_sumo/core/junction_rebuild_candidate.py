@@ -2107,6 +2107,7 @@ def write_teacher_target_internal_replay_net(
     prune_unmapped_micro_boundary_edges: bool = False,
     prune_strict_unmapped_outgoing_boundary_edges: bool = False,
     preserve_target_junction_shape: bool = False,
+    prefer_network_location_offset: bool = False,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2115,6 +2116,9 @@ def write_teacher_target_internal_replay_net(
     candidate_root = candidate_tree.getroot()
     source_candidate_root = copy.deepcopy(candidate_root)
     teacher_root = ET.parse(teacher_net_file).getroot()
+    replayed_network_version = teacher_root.attrib.get("version", candidate_root.attrib.get("version", ""))
+    if replayed_network_version:
+        candidate_root.set("version", replayed_network_version)
     internal_prefix = f":{junction_id}_"
     teacher_internal_prefix = f":{teacher_junction_id}_"
     candidate_edges_by_id = {
@@ -2144,7 +2148,7 @@ def write_teacher_target_internal_replay_net(
         teacher_offset = [float(value) for value in teacher_location.attrib["netOffset"].split(",")[:2]]
         offset_dx = candidate_offset[0] - teacher_offset[0]
         offset_dy = candidate_offset[1] - teacher_offset[1]
-        if math.hypot(dx - offset_dx, dy - offset_dy) > 100.0:
+        if prefer_network_location_offset or math.hypot(dx - offset_dx, dy - offset_dy) > 100.0:
             dx, dy = offset_dx, offset_dy
             translation_source = "network_location_offset"
     except (AttributeError, KeyError, TypeError, ValueError, IndexError):
@@ -2272,6 +2276,34 @@ def write_teacher_target_internal_replay_net(
             ]
         )
     )
+    teacher_types = {
+        edge_type.attrib["id"]: edge_type
+        for edge_type in teacher_root.findall("type")
+        if edge_type.attrib.get("id")
+    }
+    candidate_types = {
+        edge_type.attrib["id"]: edge_type
+        for edge_type in candidate_root.findall("type")
+        if edge_type.attrib.get("id")
+    }
+    replayed_edge_type_ids = []
+    for type_id in sorted(
+        {
+            teacher_edges[edge_id].attrib.get("type", "")
+            for edge_id in teacher_boundary_edge_ids
+            if edge_id in teacher_edges
+        }
+        & teacher_types.keys()
+        & candidate_types.keys()
+    ):
+        teacher_type = teacher_types[type_id]
+        candidate_type = candidate_types[type_id]
+        if ET.tostring(candidate_type) == ET.tostring(teacher_type):
+            continue
+        type_index = list(candidate_root).index(candidate_type)
+        candidate_root.remove(candidate_type)
+        candidate_root.insert(type_index, copy.deepcopy(teacher_type))
+        replayed_edge_type_ids.append(type_id)
     skipped_unmapped_teacher_boundary_edges = []
     if not copy_unmapped_boundary_edges:
         skipped_unmapped_teacher_boundary_edges = [
@@ -3417,6 +3449,8 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_edge_count": len(copied_boundary_edges),
         "copied_boundary_edges": copied_boundary_edges,
         "copied_boundary_candidate_edges": copied_boundary_candidate_edges,
+        "replayed_network_version": replayed_network_version,
+        "replayed_edge_type_ids": replayed_edge_type_ids,
         "copy_unmapped_boundary_edges": copy_unmapped_boundary_edges,
         "preserve_mapped_boundary_endpoints": preserve_mapped_boundary_endpoints,
         "preserve_unmapped_boundary_edges": preserve_unmapped_boundary_edges,
@@ -3538,6 +3572,7 @@ def write_scoped_teacher_tls_cell_replay_net(
     teacher_junction_id: str | None = None,
     collapse_junction_ids: set[str] | None = None,
     junction_map: dict[str, str] | None = None,
+    preserve_candidate_boundary_geometry: bool = True,
 ) -> dict[str, object]:
     """Replay one reference TLS cell while collapsing a split OSM junction group.
 
@@ -3579,6 +3614,7 @@ def write_scoped_teacher_tls_cell_replay_net(
         junction_id=junction_id,
         teacher_junction_id=teacher_junction_id,
         edge_map=edge_map,
+        prefer_network_location_offset=len(collapse_ids) > 1 or teacher_junction_id != junction_id,
     )
     if replay_report.get("status") != "pass":
         return {
@@ -3672,6 +3708,13 @@ def write_scoped_teacher_tls_cell_replay_net(
             if inc_lanes:
                 junction.set("incLanes", " ".join(lane for lane in inc_lanes if lane not in lane_ids))
 
+    def remove_lane_refs_from_junction(junction_id_value: str, lane_ids: set[str]) -> None:
+        junction = candidate_root.find(f"junction[@id='{junction_id_value}']")
+        if junction is None or not lane_ids:
+            return
+        inc_lanes = _split(junction.attrib.get("incLanes", ""))
+        junction.set("incLanes", " ".join(lane for lane in inc_lanes if lane not in lane_ids))
+
     def append_lane_refs(junction_id_value: str, lane_ids: set[str]) -> None:
         junction = candidate_root.find(f"junction[@id='{junction_id_value}']")
         if junction is None or not lane_ids:
@@ -3685,6 +3728,8 @@ def write_scoped_teacher_tls_cell_replay_net(
     removed_edge_ids: set[str] = set()
     removed_non_boundary_edge_ids: list[str] = []
     removed_non_boundary_edges_added_by_replay: list[str] = []
+    restored_unprotected_edge_ids: list[str] = []
+    external_junction_ids_to_restore: set[str] = set()
     candidate_edges = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
     # First remove the old split road graph around the supplied physical cell.
     # Internal/crossing/walkingarea elements are handled separately so the
@@ -3693,6 +3738,31 @@ def write_scoped_teacher_tls_cell_replay_net(
         if edge_id in protected_edge_ids or edge_id.startswith(":"):
             continue
         if edge.attrib.get("from") in collapse_ids or edge.attrib.get("to") in collapse_ids:
+            source_edge = source_edges.get(edge_id)
+            if source_edge is not None and not {
+                source_edge.attrib.get("from", ""),
+                source_edge.attrib.get("to", ""),
+            }.issubset(collapse_ids):
+                old_lane_ids = edge_lane_ids(edge)
+                old_to = edge.attrib.get("to", "")
+                replacement = copy.deepcopy(source_edge)
+                for attr in ("from", "to"):
+                    endpoint = replacement.attrib.get(attr, "")
+                    if endpoint in collapse_ids:
+                        replacement.set(attr, junction_id)
+                    elif endpoint:
+                        external_junction_ids_to_restore.add(endpoint)
+                replacement_lane_ids = edge_lane_ids(replacement)
+                remove_lane_refs(old_lane_ids - replacement_lane_ids)
+                if old_to != replacement.attrib.get("to", ""):
+                    remove_lane_refs_from_junction(old_to, old_lane_ids)
+                insert_at = list(candidate_root).index(edge)
+                candidate_root.remove(edge)
+                candidate_root.insert(insert_at, replacement)
+                if replacement.attrib.get("to") == junction_id:
+                    append_lane_refs(junction_id, edge_lane_ids(replacement))
+                restored_unprotected_edge_ids.append(edge_id)
+                continue
             remove_lane_refs(edge_lane_ids(edge))
             candidate_root.remove(edge)
             removed_edge_ids.add(edge_id)
@@ -3713,6 +3783,42 @@ def write_scoped_teacher_tls_cell_replay_net(
         candidate_root.remove(edge)
         removed_edge_ids.add(edge_id)
         removed_non_boundary_edges_added_by_replay.append(edge_id)
+
+    remaining_candidate_edge_ids = {
+        edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")
+    }
+    for edge_id, source_edge in source_edges.items():
+        source_endpoints = {
+            source_edge.attrib.get("from", ""),
+            source_edge.attrib.get("to", ""),
+        }
+        if (
+            edge_id in remaining_candidate_edge_ids
+            or edge_id in protected_edge_ids
+            or not source_endpoints.intersection(collapse_ids)
+            or source_endpoints.issubset(collapse_ids)
+        ):
+            continue
+        replacement = copy.deepcopy(source_edge)
+        for attr in ("from", "to"):
+            endpoint = replacement.attrib.get(attr, "")
+            if endpoint in collapse_ids:
+                replacement.set(attr, junction_id)
+            elif endpoint:
+                external_junction_ids_to_restore.add(endpoint)
+        candidate_root.insert(0, replacement)
+        if replacement.attrib.get("to") == junction_id:
+            append_lane_refs(junction_id, edge_lane_ids(replacement))
+        restored_unprotected_edge_ids.append(edge_id)
+
+    for external_junction_id in sorted(external_junction_ids_to_restore):
+        source_junction = source_root.find(f"junction[@id='{external_junction_id}']")
+        current_junction = candidate_root.find(f"junction[@id='{external_junction_id}']")
+        if source_junction is None or current_junction is None:
+            continue
+        insert_at = list(candidate_root).index(current_junction)
+        candidate_root.remove(current_junction)
+        candidate_root.insert(insert_at, copy.deepcopy(source_junction))
 
     # Remove member-owned internal artifacts but retain the newly replayed
     # target prefix.  This is the actual split-junction collapse.
@@ -3740,6 +3846,11 @@ def write_scoped_teacher_tls_cell_replay_net(
     replayed_boundary_geometry_edge_ids: list[str] = []
     preserved_mapped_boundary_geometry_edge_ids: list[str] = []
     boundary_geometry_preservation_failures: list[dict[str, object]] = []
+    preserved_source_lane_ids = {
+        lane_id
+        for edge_id in restored_unprotected_edge_ids
+        for lane_id in edge_lane_ids(source_edges[edge_id])
+    }
     candidate_edges = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
     for teacher_edge_id in teacher_boundary_edge_ids:
         teacher_edge = teacher_edges.get(teacher_edge_id)
@@ -3747,6 +3858,11 @@ def write_scoped_teacher_tls_cell_replay_net(
             continue
         candidate_edge_id = effective_edge_map.get(teacher_edge_id, teacher_edge_id)
         candidate_edge = candidate_edges.get(candidate_edge_id)
+        source_boundary_edge = source_edges.get(candidate_edge_id)
+        if source_boundary_edge is not None:
+            preserved_source_lane_ids.update(edge_lane_ids(source_boundary_edge))
+        old_to = candidate_edge.attrib.get("to", "") if candidate_edge is not None else ""
+        old_lane_ids = edge_lane_ids(candidate_edge) if candidate_edge is not None else set()
         if candidate_edge is None:
             candidate_edge = _clone_transformed_boundary_edge(
                 teacher_edge,
@@ -3770,7 +3886,7 @@ def write_scoped_teacher_tls_cell_replay_net(
                 junction_id,
             )
             lane_cardinality_changed = len(candidate_edge.findall("lane")) != len(teacher_edge.findall("lane"))
-            remove_lane_refs(edge_lane_ids(candidate_edge))
+            remove_lane_refs(old_lane_ids - edge_lane_ids(replacement))
             insert_at = list(candidate_root).index(candidate_edge)
             candidate_root.remove(candidate_edge)
             candidate_root.insert(insert_at, replacement)
@@ -3781,11 +3897,12 @@ def write_scoped_teacher_tls_cell_replay_net(
                 replaced_lane_cardinality_edge_ids.append(candidate_edge_id)
         mapped_from = map_boundary_junction(teacher_edge.attrib.get("from", ""))
         mapped_to = map_boundary_junction(teacher_edge.attrib.get("to", ""))
-        remove_lane_refs(edge_lane_ids(candidate_edge))
+        if old_to and old_to != mapped_to:
+            remove_lane_refs_from_junction(old_to, old_lane_ids)
         candidate_edge.set("from", mapped_from)
         candidate_edge.set("to", mapped_to)
         geometry_source_edge = source_edges.get(candidate_edge_id)
-        if geometry_source_edge is not None:
+        if preserve_candidate_boundary_geometry and geometry_source_edge is not None:
             geometry_report = _preserve_mapped_boundary_geometry(
                 candidate_edge,
                 geometry_source_edge,
@@ -3804,6 +3921,37 @@ def write_scoped_teacher_tls_cell_replay_net(
                 )
         append_lane_refs(mapped_to, edge_lane_ids(candidate_edge))
         remapped_boundary_edge_count += 1
+
+    removed_mapped_teacher_junction_ids: list[str] = []
+    edge_endpoint_ids = {
+        endpoint
+        for edge in candidate_root.findall("edge")
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if endpoint
+    }
+    for teacher_endpoint_id, mapped_endpoint_id in ordinary_junction_map.items():
+        if teacher_endpoint_id == mapped_endpoint_id or teacher_endpoint_id in edge_endpoint_ids:
+            continue
+        teacher_endpoint = candidate_root.find(f"junction[@id='{teacher_endpoint_id}']")
+        if teacher_endpoint is not None:
+            candidate_root.remove(teacher_endpoint)
+            removed_mapped_teacher_junction_ids.append(teacher_endpoint_id)
+
+    collapse_internal_prefixes = tuple(f":{member_id}_" for member_id in sorted(collapse_ids))
+    for source_junction in source_root.findall("junction"):
+        source_junction_id = source_junction.attrib.get("id", "")
+        if (
+            source_junction_id in collapse_ids
+            or source_junction_id.startswith(collapse_internal_prefixes)
+            or not preserved_source_lane_ids.intersection(_split(source_junction.attrib.get("incLanes", "")))
+        ):
+            continue
+        current_junction = candidate_root.find(f"junction[@id='{source_junction_id}']")
+        if current_junction is None:
+            continue
+        insert_at = list(candidate_root).index(current_junction)
+        candidate_root.remove(current_junction)
+        candidate_root.insert(insert_at, copy.deepcopy(source_junction))
 
     # Rewrite connection edge aliases before removing stale member references.
     remapped_connection_count = 0
@@ -3841,9 +3989,34 @@ def write_scoped_teacher_tls_cell_replay_net(
             effective_edge_map.get(edge_id, edge_id)
             for edge_id in teacher_boundary_edge_ids
             if effective_edge_map.get(edge_id, edge_id) in source_edges
-        },
+        }
+        | set(restored_unprotected_edge_ids),
         source_local_junction_ids=collapse_ids,
     )
+
+    fully_external_restored_edge_ids = {
+        edge_id
+        for edge_id in restored_unprotected_edge_ids
+        if not {
+            source_edges[edge_id].attrib.get("from", ""),
+            source_edges[edge_id].attrib.get("to", ""),
+        }.intersection(collapse_ids)
+    }
+    restored_fully_external_connections = [
+        connection
+        for connection in source_root.findall("connection")
+        if connection.attrib.get("from", "") in fully_external_restored_edge_ids
+        or connection.attrib.get("to", "") in fully_external_restored_edge_ids
+    ]
+    if fully_external_restored_edge_ids:
+        for connection in list(candidate_root.findall("connection")):
+            if (
+                connection.attrib.get("from", "") in fully_external_restored_edge_ids
+                or connection.attrib.get("to", "") in fully_external_restored_edge_ids
+            ):
+                candidate_root.remove(connection)
+        for connection in restored_fully_external_connections:
+            candidate_root.append(copy.deepcopy(connection))
 
     # Clean stale lane references left by removed split fragments and reject
     # dangling connections before netconvert sees the variant.
@@ -3909,6 +4082,8 @@ def write_scoped_teacher_tls_cell_replay_net(
         "protected_boundary_edge_ids": sorted(protected_edge_ids),
         "effective_edge_map": dict(sorted(effective_edge_map.items())),
         "junction_map": dict(sorted(ordinary_junction_map.items())),
+        "preserve_candidate_boundary_geometry": preserve_candidate_boundary_geometry,
+        "removed_mapped_teacher_junction_ids": sorted(removed_mapped_teacher_junction_ids),
         "remapped_boundary_edge_count": remapped_boundary_edge_count,
         "remapped_connection_endpoint_count": remapped_connection_count,
         "replaced_lane_cardinality_edge_ids": sorted(replaced_lane_cardinality_edge_ids),
@@ -3928,6 +4103,9 @@ def write_scoped_teacher_tls_cell_replay_net(
         "skipped_external_boundary_connections": external_boundary_connection_report["skipped_connections"],
         "removed_non_boundary_edge_count": len(removed_non_boundary_edge_ids),
         "removed_non_boundary_edge_ids": sorted(removed_non_boundary_edge_ids),
+        "restored_unprotected_edge_count": len(restored_unprotected_edge_ids),
+        "restored_unprotected_edge_ids": sorted(restored_unprotected_edge_ids),
+        "restored_fully_external_connection_count": len(restored_fully_external_connections),
         "removed_replay_continuation_edge_count": len(removed_non_boundary_edges_added_by_replay),
         "removed_replay_continuation_edge_ids": sorted(removed_non_boundary_edges_added_by_replay),
         "removed_member_internal_edge_count": len(removed_member_internal_edge_ids),

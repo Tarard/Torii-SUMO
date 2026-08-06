@@ -21,6 +21,7 @@ _PALETTE = {
     "target": (0, 255, 0),
     "conflict": (255, 255, 0),
     "pass": (255, 0, 255),
+    "dark_target": (64, 0, 64),
 }
 _NATIVE_TEST_REFERENCE = (304, 168)
 
@@ -419,7 +420,9 @@ def analyze_connection_pair(
             "teacher_component_count": teacher_stats[name]["component_count"],
             "candidate_component_count": candidate_stats[name]["component_count"],
         }
-        if teacher_pixels >= 40 and candidate_pixels < max(20, teacher_pixels // 10):
+        if candidate_pixels >= 40 and teacher_pixels < max(20, candidate_pixels // 10):
+            reasons.append(f"{name}_layer_extra")
+        elif teacher_pixels >= 40 and candidate_pixels < max(20, teacher_pixels // 10):
             reasons.append(f"{name}_layer_missing")
         elif teacher_pixels >= 40 and candidate_pixels >= 40 and not 0.5 <= ratio <= 2.0:
             reasons.append(f"{name}_layer_scale_mismatch")

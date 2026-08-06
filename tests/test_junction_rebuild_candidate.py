@@ -9709,6 +9709,55 @@ def test_target_internal_replay_preserves_replaced_boundary_edge_order(tmp_path:
     assert children.index(("edge", "teacher_out")) < children.index(("junction", "b"))
 
 
+def test_target_internal_replay_restores_teacher_boundary_edge_types(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net version="1.20">
+  <type id="highway.service" disallow="pedestrian cable_car subway" oneway="0"/>
+  <type id="candidate.only" allow="passenger"/>
+  <edge id="in" from="a" to="j" type="highway.service"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b" type="highway.service"><lane id="out_0" index="0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="b" type="priority" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net version="1.6">
+  <type id="highway.service" allow="pedestrian delivery bicycle" oneway="1"/>
+  <edge id="in" from="a" to="j" type="highway.service"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b" type="highway.service"><lane id="out_0" index="0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="b" type="priority" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replay.net.xml",
+        junction_id="j",
+        edge_map={"in": "in", "out": "out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert report["replayed_network_version"] == "1.6"
+    assert root.attrib["version"] == "1.6"
+    assert report["replayed_edge_type_ids"] == ["highway.service"]
+    assert root.find("type[@id='highway.service']").attrib == {
+        "id": "highway.service",
+        "allow": "pedestrian delivery bicycle",
+        "oneway": "1",
+    }
+    assert root.find("type[@id='candidate.only']") is not None
+
+
 def test_target_internal_replay_adds_missing_teacher_endpoint_junctions(tmp_path: Path) -> None:
     candidate_net = tmp_path / "candidate.net.xml"
     candidate_net.write_text(
@@ -15290,6 +15339,77 @@ def test_write_scoped_teacher_tls_cell_replay_collapses_split_member_and_preserv
     )
 
 
+def test_scoped_replay_restores_unprotected_edges_and_remote_junction_semantics(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <location netOffset="-1000,0"/>
+  <edge id="in" from="a" to="teacher"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="teacher" to="teacher_b"><lane id="out_0" index="0"/></edge>
+  <edge id="foot" from="p" to="teacher"><lane id="foot_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0"/></edge>
+  <junction id="teacher" type="priority" x="10" y="0" incLanes="in_0 foot_0" intLanes=":teacher_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="teacher_b" type="dead_end" x="20" y="0" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <location netOffset="-900,0"/>
+  <edge id="in" from="a" to="member"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="member" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="foot" from="p" to="remote"><lane id="foot_0" index="0" allow="pedestrian"/><lane id="foot_1" index="1" allow="bicycle"/></edge>
+  <edge id="remote_out" from="remote" to="q"><lane id="remote_out_0" index="0"/></edge>
+  <edge id="local_foot" from="candidate" to="x"><lane id="local_foot_0" index="0" allow="pedestrian"/></edge>
+  <edge id="other" from="z" to="b"><lane id="other_0" index="0"/></edge>
+  <edge id=":walk_in" function="walkingarea"><lane id=":walk_in_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":walk_out" function="walkingarea"><lane id=":walk_out_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":remote_0" function="internal"><lane id=":remote_0_0" index="0"/></edge>
+  <edge id=":b_0" function="internal"><lane id=":b_0_0" index="0"/></edge>
+  <junction id="candidate" type="priority" x="112" y="0" incLanes="" intLanes=""/>
+  <junction id="member" type="priority" x="111" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="out_0 other_0" intLanes=":b_0_0"/>
+  <junction id="remote" type="priority" x="0" y="10" incLanes="foot_0 foot_1" intLanes=":remote_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="x" type="dead_end" x="20" y="10" incLanes="local_foot_0" intLanes=""/>
+  <junction id=":b_0" type="internal" x="20" y="0" incLanes="out_0" intLanes=":b_0_0"/>
+  <connection from="foot" to="remote_out" fromLane="0" toLane="0" via=":remote_0_0"/>
+  <connection from=":walk_in" to="foot" fromLane="0" toLane="1"/>
+  <connection from="foot" to=":walk_out" fromLane="1" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_scoped_teacher_tls_cell_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "scoped.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="teacher",
+        edge_map={"in": "in", "out": "out"},
+        collapse_junction_ids={"candidate", "member"},
+        junction_map={"teacher_b": "b"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("junction[@id='candidate']").attrib["x"] == "110.00"
+    assert root.find("edge[@id='foot']").attrib["to"] == "remote"
+    assert root.find("junction[@id='remote']").attrib["incLanes"] == "foot_0 foot_1"
+    assert root.find("connection[@from='foot'][@to='remote_out']") is not None
+    assert root.find("connection[@from=':walk_in'][@to='foot']") is not None
+    assert root.find("connection[@from='foot'][@to=':walk_out']") is not None
+    assert root.find("edge[@id='local_foot']").attrib["from"] == "candidate"
+    assert root.find("junction[@id='x']").attrib["incLanes"] == "local_foot_0"
+    assert root.find("junction[@id='b']").attrib["incLanes"] == "out_0 other_0"
+    assert root.find("junction[@id=':b_0']").attrib["incLanes"] == "out_0"
+    assert root.find("junction[@id='teacher_b']") is None
+
+
 def test_scoped_tls_replay_preserves_osm_boundary_geometry_and_remote_connections(
     tmp_path: Path,
 ) -> None:
@@ -15365,6 +15485,19 @@ def test_scoped_tls_replay_preserves_osm_boundary_geometry_and_remote_connection
     assert candidate_out_lane.attrib["length"] == "10.00"
     assert root.find("connection[@from='before'][@to='candidate_in']") is not None
     assert root.find("connection[@from='candidate_out'][@to='after']") is not None
+
+    strict_report = write_scoped_teacher_tls_cell_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "strict_teacher_geometry.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="teacher",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        collapse_junction_ids={"candidate", "member"},
+        preserve_candidate_boundary_geometry=False,
+    )
+    strict_root = ET.parse(strict_report["net_file"]).getroot()
+    assert strict_root.find("edge[@id='candidate_in']/lane").attrib["shape"] == "-90.00,0.00 10.00,0.00"
 
 
 def test_scoped_tls_plan_reports_shared_controller_owner_closure(tmp_path: Path) -> None:

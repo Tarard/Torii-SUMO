@@ -56,6 +56,27 @@ def test_geometry_and_missing_conflict_layer(tmp_path: Path) -> None:
     assert "conflict_layer_missing" in report["reasons"]
 
 
+def test_visual_gate_rejects_candidate_only_dark_target_layer(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (240, 180), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((30, 90, 210, 90), fill=(0, 255, 255), width=8)
+    ImageDraw.Draw(candidate).line((80, 120, 180, 120), fill=(64, 0, 64), width=8)
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    report = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_center=(120, 90),
+        candidate_center=(120, 90),
+    )
+
+    assert report["status"] == "fail"
+    assert report["reasons"] == ["dark_target_layer_extra"]
+
+
 def test_candidate_zoom_preserves_world_scale_across_different_network_bounds() -> None:
     zoom = visual_gate.normalized_viewport_zoom(
         reference_boundary=(0.0, 0.0, 10000.0, 10000.0),
