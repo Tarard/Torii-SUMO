@@ -15409,6 +15409,21 @@ def test_scoped_replay_restores_unprotected_edges_and_remote_junction_semantics(
     assert root.find("junction[@id=':b_0']").attrib["incLanes"] == "out_0"
     assert root.find("junction[@id='teacher_b']") is None
 
+    dropped_report = write_scoped_teacher_tls_cell_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "dropped.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="teacher",
+        edge_map={"in": "in", "out": "out"},
+        collapse_junction_ids={"candidate", "member"},
+        junction_map={"teacher_b": "b"},
+        drop_unprotected_edge_ids={"local_foot"},
+    )
+    dropped_root = ET.parse(dropped_report["net_file"]).getroot()
+    assert dropped_root.find("edge[@id='local_foot']") is None
+    assert dropped_root.find("junction[@id='x']").attrib["incLanes"] == ""
+
 
 def test_scoped_tls_replay_preserves_osm_boundary_geometry_and_remote_connections(
     tmp_path: Path,

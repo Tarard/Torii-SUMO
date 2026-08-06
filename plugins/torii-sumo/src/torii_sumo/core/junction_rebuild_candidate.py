@@ -3573,6 +3573,7 @@ def write_scoped_teacher_tls_cell_replay_net(
     collapse_junction_ids: set[str] | None = None,
     junction_map: dict[str, str] | None = None,
     preserve_candidate_boundary_geometry: bool = True,
+    drop_unprotected_edge_ids: set[str] | None = None,
 ) -> dict[str, object]:
     """Replay one reference TLS cell while collapsing a split OSM junction group.
 
@@ -3594,6 +3595,7 @@ def write_scoped_teacher_tls_cell_replay_net(
     ordinary_junction_map = {
         str(key): str(value) for key, value in (junction_map or {}).items() if str(key) and str(value)
     }
+    dropped_unprotected_ids = {str(value) for value in (drop_unprotected_edge_ids or set()) if str(value)}
     output_file.parent.mkdir(parents=True, exist_ok=True)
     if not candidate_net_file.exists():
         return _failure(f"candidate net file does not exist: {candidate_net_file}")
@@ -3739,7 +3741,7 @@ def write_scoped_teacher_tls_cell_replay_net(
             continue
         if edge.attrib.get("from") in collapse_ids or edge.attrib.get("to") in collapse_ids:
             source_edge = source_edges.get(edge_id)
-            if source_edge is not None and not {
+            if source_edge is not None and edge_id not in dropped_unprotected_ids and not {
                 source_edge.attrib.get("from", ""),
                 source_edge.attrib.get("to", ""),
             }.issubset(collapse_ids):
@@ -3795,6 +3797,7 @@ def write_scoped_teacher_tls_cell_replay_net(
         if (
             edge_id in remaining_candidate_edge_ids
             or edge_id in protected_edge_ids
+            or edge_id in dropped_unprotected_ids
             or not source_endpoints.intersection(collapse_ids)
             or source_endpoints.issubset(collapse_ids)
         ):
@@ -4083,6 +4086,7 @@ def write_scoped_teacher_tls_cell_replay_net(
         "effective_edge_map": dict(sorted(effective_edge_map.items())),
         "junction_map": dict(sorted(ordinary_junction_map.items())),
         "preserve_candidate_boundary_geometry": preserve_candidate_boundary_geometry,
+        "requested_dropped_unprotected_edge_ids": sorted(dropped_unprotected_ids),
         "removed_mapped_teacher_junction_ids": sorted(removed_mapped_teacher_junction_ids),
         "remapped_boundary_edge_count": remapped_boundary_edge_count,
         "remapped_connection_endpoint_count": remapped_connection_count,
