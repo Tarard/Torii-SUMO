@@ -83,6 +83,8 @@ TLS_CONNECTION_REPAIR_ATTRS = (
 
 GEOMETRY_RESTORE_LANE_ATTRS = (
     "speed",
+    "allow",
+    "disallow",
     "shape",
     "length",
     "width",
@@ -6871,7 +6873,7 @@ def build_teacher_guided_junction_variant(
                     teacher_junction_id=teacher_compound_junction_id,
                     geometry_anchor_edge_file=tl_logic_input_file,
                     blend_geometry_anchor_at_target=True,
-                    copy_unmapped_boundary_edges=True,
+                    copy_unmapped_boundary_edges=False,
                     preserve_mapped_boundary_endpoints=True,
                     preserve_unmapped_boundary_edges=True,
                     prune_unmapped_micro_boundary_edges=True,
@@ -7533,13 +7535,18 @@ def build_teacher_guided_junction_variant(
         if isinstance(item, dict)
         and _lane_surface_overlap_touches_junctions(item, set(compound_junction_ids))
     ]
+    target_related_non_area_exclusions = [
+        item
+        for item in surface_overlap_report.get("non_area_junction_exclusions", []) or []
+        if isinstance(item, dict) and item.get("junction_id") in set(compound_junction_ids)
+    ]
     baseline_surface_overlap_report_file = output_dir / f"{prefix}_baseline_surface_overlap.json"
     baseline_surface_overlap_report = (
         audit_sumo_lane_junction_surface_overlaps(
             candidate_net_file,
             report_file=baseline_surface_overlap_report_file,
         )
-        if target_related_surface_overlaps
+        if target_related_surface_overlaps or target_related_non_area_exclusions
         else None
     )
     target_junction_surface_overlaps = [
@@ -7558,7 +7565,7 @@ def build_teacher_guided_junction_variant(
             teacher_net_file,
             report_file=reference_surface_overlap_report_file,
         )
-        if target_junction_surface_overlaps
+        if target_junction_surface_overlaps or target_related_non_area_exclusions
         else None
     )
     target_surface_overlap_gates = {
@@ -12565,6 +12572,25 @@ def _target_surface_overlap_gate(
     reference_valid = reference_identity.get("status") == "pass"
     lane_edge_aliases = lane_edge_aliases or {}
 
+    def non_area_key(item: dict[str, Any]) -> tuple[str, str]:
+        return str(item.get("junction_id", "")), str(item.get("reason", ""))
+
+    inherited_non_area_keys = {
+        non_area_key(item)
+        for source in (
+            audited_baseline_report if baseline_valid else {},
+            audited_reference_report if reference_valid else {},
+        )
+        for item in source.get("non_area_junction_exclusions", []) or []
+        if isinstance(item, dict)
+    }
+    inherited_non_area_exclusions = [
+        item for item in non_area_exclusions if non_area_key(item) in inherited_non_area_keys
+    ]
+    regressed_non_area_exclusions = [
+        item for item in non_area_exclusions if non_area_key(item) not in inherited_non_area_keys
+    ]
+
     def normalized_lane_id(lane_id: object) -> str:
         value = str(lane_id or "")
         for source_edge_id, target_edge_id in sorted(
@@ -12719,7 +12745,7 @@ def _target_surface_overlap_gate(
     ) = classify_overlap_regressions(lane_target_owner_overlaps)
     blocked = bool(
         report_identity.get("status") != "pass"
-        or non_area_exclusions
+        or regressed_non_area_exclusions
         or geometry_errors
         or regressed_junction_overlaps
         or regressed_lane_non_owner_overlaps
@@ -12733,6 +12759,10 @@ def _target_surface_overlap_gate(
         "report_identity": report_identity,
         "non_area_exclusion_count": len(non_area_exclusions),
         "non_area_exclusions": non_area_exclusions,
+        "non_area_exclusion_regression_count": len(regressed_non_area_exclusions),
+        "non_area_exclusion_regressions": regressed_non_area_exclusions,
+        "non_area_exclusion_inherited_count": len(inherited_non_area_exclusions),
+        "non_area_exclusion_inherited": inherited_non_area_exclusions,
         "geometry_error_count": len(geometry_errors),
         "geometry_errors": geometry_errors,
         "junction_overlap_count": len(junction_overlaps),

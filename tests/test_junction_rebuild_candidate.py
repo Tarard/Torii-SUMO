@@ -14694,6 +14694,37 @@ def test_target_surface_overlap_gate_blocks_target_non_area_and_boundary_lane_er
     assert gate["geometry_error_count"] == 1
 
 
+def test_target_surface_overlap_gate_allows_inherited_non_area_exclusion(tmp_path: Path) -> None:
+    exclusion = {
+        "junction_id": "target",
+        "reason": "fewer_than_three_distinct_shape_points",
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        non_area_junction_exclusions=[exclusion],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        non_area_junction_exclusions=[exclusion],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["non_area_exclusion_regression_count"] == 0
+    assert gate["non_area_exclusion_inherited_count"] == 1
+
+
 def test_compound_short_internal_lane_gate_includes_bicycles(
     tmp_path: Path,
 ) -> None:
@@ -16920,7 +16951,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     replayed = tmp_path / "replayed.net.xml"
     replayed.write_text(
         """<net>
-  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="8.17" shape="0,0 10,0" length="10.00"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="8.17" disallow="pedestrian tram ship" shape="0,0 10,0" length="10.00"/></edge>
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="8.17" shape="10,0 20,0" length="10.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="50,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-1 9,1" outlineShape="8,-1 10,-1 10,1 8,1"/></edge>
@@ -16938,7 +16969,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     normalized = tmp_path / "normalized.net.xml"
     normalized.write_text(
         """<net>
-  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="6.98" shape="0,0 11,0" length="11.00"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="6.98" disallow="pedestrian tram ship cable_car subway" shape="0,0 11,0" length="11.00"/></edge>
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="6.98" shape="11,0 20,0" length="9.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="51,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-2 9,2" outlineShape="bad"/></edge>
@@ -16965,6 +16996,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert report["status"] == "pass"
     assert root.find("edge[@id='in']/lane").attrib["shape"] == "0,0 10,0"
     assert root.find("edge[@id='in']/lane").attrib["speed"] == "8.17"
+    assert root.find("edge[@id='in']/lane").attrib["disallow"] == "pedestrian tram ship"
     assert root.find("edge[@id='out']/lane").attrib["length"] == "9.00"
     assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
@@ -19298,6 +19330,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
     assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
     assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is False
+    assert report["compound_internal_replays"][0]["copy_unmapped_boundary_edges"] is False
     assert report["connection_plan"]["structural_teacher_junction_ids"] == ["j"]
     assert report["connection_plan"]["emit_crossings"] is False
     assert report["connection_plan"]["emitted_crossing_count"] == 0

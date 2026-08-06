@@ -459,6 +459,24 @@ def analyze_connection_pair(
     }
     layers: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
+    teacher_target = teacher_stats["target"]
+    candidate_target = candidate_stats["target"]
+    target_ratio = (
+        candidate_target["pixel_count"] / teacher_target["pixel_count"]
+        if teacher_target["pixel_count"]
+        else None
+    )
+    primary_target_matches = bool(
+        min(teacher_target["pixel_count"], candidate_target["pixel_count"]) >= 40
+        and target_ratio is not None
+        and 0.5 <= target_ratio <= 2.0
+        and all(
+            any(min((teacher_bin - candidate_bin) % 8, (candidate_bin - teacher_bin) % 8) <= 1
+                for candidate_bin in candidate_target["angular_bins"])
+            for teacher_bin in teacher_target["angular_bins"]
+        )
+        and abs(teacher_target["component_count"] - candidate_target["component_count"]) <= 1
+    )
     for name in _PALETTE:
         teacher_pixels = teacher_stats[name]["pixel_count"]
         candidate_pixels = candidate_stats[name]["pixel_count"]
@@ -481,7 +499,8 @@ def analyze_connection_pair(
             "candidate_component_count": candidate_stats[name]["component_count"],
         }
         if candidate_pixels >= 40 and teacher_pixels < max(20, candidate_pixels // 10):
-            reasons.append(f"{name}_layer_extra")
+            if name != "dark_target" or not primary_target_matches:
+                reasons.append(f"{name}_layer_extra")
         elif teacher_pixels >= 40 and candidate_pixels < max(20, teacher_pixels // 10):
             reasons.append(f"{name}_layer_missing")
         elif teacher_pixels >= 40 and candidate_pixels >= 40 and not 0.5 <= ratio <= 2.0:
