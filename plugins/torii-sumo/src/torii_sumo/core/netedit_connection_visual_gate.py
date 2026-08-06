@@ -44,6 +44,10 @@ def point_before_lane_end(
 def lane_click_points(points: Sequence[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
     length = sum(math.dist(start, end) for start, end in zip(points, points[1:], strict=False))
     distances = (min(8.0, length * 0.75), min(4.0, length * 0.5), min(2.0, length * 0.25))
+    if length >= 10.0:
+        distances = (distances[0], 6.0, *distances[1:])
+    if length >= 24.0:
+        distances = (20.0, 12.0, *distances)
     return tuple(dict.fromkeys(point_before_lane_end(points, distance_m=distance) for distance in distances))
 
 
@@ -268,11 +272,21 @@ def _point_stats(
     points: set[tuple[int, int]],
     center: tuple[int, int],
     radius: int = 160,
+    *,
+    focus_points: Sequence[tuple[int, int]] | None = None,
+    focus_radius: int = 24,
 ) -> dict[str, Any]:
     points = {
         point
         for point in points
         if (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 <= radius**2
+        and (
+            focus_points is None
+            or any(
+                (point[0] - focus[0]) ** 2 + (point[1] - focus[1]) ** 2 <= focus_radius**2
+                for focus in focus_points
+            )
+        )
     }
     components = _meaningful_components(points)
     points = set().union(*components) if components else set()
@@ -302,6 +316,9 @@ def write_semantic_mask(
     *,
     center: tuple[int, int],
     tolerance: int = 12,
+    radius: int = 160,
+    focus_points: Sequence[tuple[int, int]] | None = None,
+    focus_radius: int = 24,
 ) -> dict[str, Any]:
     with Image.open(source) as opened:
         image = opened.convert("RGB")
@@ -313,9 +330,18 @@ def write_semantic_mask(
     stats: dict[str, Any] = {}
     for index, name in enumerate(_PALETTE, 1):
         points = points_by_layer[name]
+        if focus_points is not None:
+            points = {
+                point
+                for point in points
+                if any(
+                    (point[0] - focus[0]) ** 2 + (point[1] - focus[1]) ** 2 <= focus_radius**2
+                    for focus in focus_points
+                )
+            }
         for point in points:
             mask_pixels[point] = index
-        stats[name] = _point_stats(points, center)
+        stats[name] = _point_stats(points, center, radius)
     destination.parent.mkdir(parents=True, exist_ok=True)
     mask.save(destination)
     return {"file": str(destination), "sha256": file_sha256(destination), "layers": stats}
@@ -352,9 +378,18 @@ def verify_expected_lane_semantics(
     if not nearby((_PALETTE["source"],), source_point):
         reasons.append("registered_source_lane_not_selected")
     target_colors = tuple(_PALETTE[name] for name in ("target", "pass", "conflict"))
-    if any(not any(nearby(target_colors, point) for point in group) for group in target_point_groups):
+    target_group_visibility = [
+        any(nearby(target_colors, point) for point in group) for group in target_point_groups
+    ]
+    if not all(target_group_visibility):
         reasons.append("registered_target_lane_not_visible")
-    return {"status": "review_required", "reasons": reasons} if reasons else {"status": "pass", "reasons": []}
+    return {
+        "status": "review_required" if reasons else "pass",
+        "reasons": reasons,
+        "target_lane_group_count": len(target_group_visibility),
+        "visible_target_lane_group_count": sum(target_group_visibility),
+        "occluded_target_lane_group_count": target_group_visibility.count(False),
+    }
 
 
 def analyze_connection_pair(
@@ -366,6 +401,9 @@ def analyze_connection_pair(
     teacher_canvas_rect: tuple[int, int, int, int] | None = None,
     candidate_canvas_rect: tuple[int, int, int, int] | None = None,
     semantic_radius: int = 160,
+    teacher_focus_points: Sequence[tuple[int, int]] | None = None,
+    candidate_focus_points: Sequence[tuple[int, int]] | None = None,
+    focus_radius: int = 24,
 ) -> dict[str, Any]:
     with Image.open(teacher_file) as source:
         teacher = source.convert("RGB")
@@ -378,6 +416,11 @@ def analyze_connection_pair(
                 teacher_center[0] - teacher_canvas_rect[0],
                 teacher_center[1] - teacher_canvas_rect[1],
             )
+        if teacher_focus_points is not None:
+            teacher_focus_points = tuple(
+                (point[0] - teacher_canvas_rect[0], point[1] - teacher_canvas_rect[1])
+                for point in teacher_focus_points
+            )
     if candidate_canvas_rect is not None:
         candidate = candidate.crop(candidate_canvas_rect)
         if candidate_center is not None:
@@ -385,16 +428,33 @@ def analyze_connection_pair(
                 candidate_center[0] - candidate_canvas_rect[0],
                 candidate_center[1] - candidate_canvas_rect[1],
             )
+        if candidate_focus_points is not None:
+            candidate_focus_points = tuple(
+                (point[0] - candidate_canvas_rect[0], point[1] - candidate_canvas_rect[1])
+                for point in candidate_focus_points
+            )
     if teacher.size != candidate.size:
         return {"status": "blocked", "reasons": ["image_size_mismatch"], "layers": {}}
     teacher_center = teacher_center or (teacher.width // 2, teacher.height // 2)
     candidate_center = candidate_center or (candidate.width // 2, candidate.height // 2)
     teacher_stats = {
-        name: _point_stats(points, teacher_center, semantic_radius)
+        name: _point_stats(
+            points,
+            teacher_center,
+            semantic_radius,
+            focus_points=teacher_focus_points,
+            focus_radius=focus_radius,
+        )
         for name, points in _palette_points(teacher, 12).items()
     }
     candidate_stats = {
-        name: _point_stats(points, candidate_center, semantic_radius)
+        name: _point_stats(
+            points,
+            candidate_center,
+            semantic_radius,
+            focus_points=candidate_focus_points,
+            focus_radius=focus_radius,
+        )
         for name, points in _palette_points(candidate, 12).items()
     }
     layers: dict[str, dict[str, Any]] = {}

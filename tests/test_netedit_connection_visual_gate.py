@@ -20,8 +20,17 @@ def test_geometry_and_missing_conflict_layer(tmp_path: Path) -> None:
     assert point_before_lane_end(((0.0, 0.0), (20.0, 0.0)), distance_m=5.0) == (15.0, 0.0)
     assert visual_gate.lane_click_points(((0.0, 0.0), (10.0, 0.0))) == (
         (2.5, 0.0),
+        (4.0, 0.0),
         (6.0, 0.0),
         (8.0, 0.0),
+    )
+    assert visual_gate.lane_click_points(((0.0, 0.0), (40.0, 0.0))) == (
+        (20.0, 0.0),
+        (28.0, 0.0),
+        (32.0, 0.0),
+        (34.0, 0.0),
+        (36.0, 0.0),
+        (38.0, 0.0),
     )
     short_clicks = tuple((round(x, 2), y) for x, y in visual_gate.lane_click_points(((0.0, 0.0), (0.2, 0.0))))
     assert short_clicks == (
@@ -142,6 +151,33 @@ def test_expected_lane_semantics_rejects_sidebar_and_wrong_lane(tmp_path: Path) 
     assert wrong == {
         "status": "review_required",
         "reasons": ["registered_source_lane_not_selected"],
+        "target_lane_group_count": 1,
+        "visible_target_lane_group_count": 1,
+        "occluded_target_lane_group_count": 0,
+    }
+
+
+def test_expected_lane_semantics_counts_occluded_target_groups(tmp_path: Path) -> None:
+    image = Image.new("RGB", (300, 180), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((120, 90, 180, 90), fill=(0, 255, 255), width=8)
+    draw.line((210, 70, 280, 70), fill=(0, 255, 0), width=8)
+    source = tmp_path / "capture.png"
+    image.save(source)
+
+    report = visual_gate.verify_expected_lane_semantics(
+        source,
+        canvas_rect=(50, 0, 300, 180),
+        source_point=(150, 90),
+        target_point_groups=(((240, 70),), ((240, 130),)),
+    )
+
+    assert report == {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        "target_lane_group_count": 2,
+        "visible_target_lane_group_count": 1,
+        "occluded_target_lane_group_count": 1,
     }
 
 
@@ -168,7 +204,13 @@ def test_expected_lane_semantics_samples_registered_points_without_full_image_sc
         target_point_groups=(((240, 70),),),
     )
 
-    assert report == {"status": "pass", "reasons": []}
+    assert report == {
+        "status": "pass",
+        "reasons": [],
+        "target_lane_group_count": 1,
+        "visible_target_lane_group_count": 1,
+        "occluded_target_lane_group_count": 0,
+    }
 
 
 def test_visual_comparison_accepts_explicit_visible_lane_radius(tmp_path: Path) -> None:
@@ -273,6 +315,26 @@ def test_semantic_mask_keeps_palette_and_angular_evidence(tmp_path: Path) -> Non
         assert opened.mode == "P"
 
 
+def test_semantic_mask_excludes_palette_outside_registered_lane_focus(tmp_path: Path) -> None:
+    image = Image.new("RGB", (100, 100), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((50, 60, 50, 90), fill=(0, 255, 255), width=2)
+    draw.line((70, 20, 95, 20), fill=(255, 0, 255), width=2)
+    source, mask = tmp_path / "source.png", tmp_path / "mask.png"
+    image.save(source)
+
+    report = visual_gate.write_semantic_mask(
+        source,
+        mask,
+        center=(50, 50),
+        focus_points=((50, 75),),
+        focus_radius=20,
+    )
+
+    assert report["layers"]["source"]["pixel_count"] > 0
+    assert report["layers"]["pass"]["pixel_count"] == 0
+
+
 def test_visual_comparison_rejects_wrong_target_direction(tmp_path: Path) -> None:
     teacher = Image.new("RGB", (240, 180), "white")
     candidate = teacher.copy()
@@ -308,6 +370,53 @@ def test_visual_comparison_ignores_tiny_palette_speckles(tmp_path: Path) -> None
     assert report["status"] == "pass"
     assert report["layers"]["source"]["teacher_component_count"] == 1
     assert report["layers"]["source"]["candidate_component_count"] == 1
+
+
+def test_visual_comparison_ignores_palette_layers_outside_registered_lane_focus(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (240, 180), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((120, 100, 120, 160), fill=(0, 255, 255), width=4)
+        ImageDraw.Draw(image).line((120, 90, 180, 90), fill=(0, 255, 0), width=4)
+    ImageDraw.Draw(candidate).line((40, 40, 80, 40), fill=(255, 0, 255), width=4)
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    unscoped = analyze_connection_pair(teacher_file, candidate_file)
+    focused = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_focus_points=((120, 120), (160, 90)),
+        candidate_focus_points=((120, 120), (160, 90)),
+        focus_radius=24,
+    )
+
+    assert unscoped["status"] == "fail"
+    assert unscoped["reasons"] == ["pass_layer_extra"]
+    assert focused["status"] == "pass"
+
+
+def test_visual_comparison_keeps_palette_layers_inside_registered_lane_focus(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (240, 180), "white")
+    candidate = teacher.copy()
+    for image in (teacher, candidate):
+        ImageDraw.Draw(image).line((120, 100, 120, 160), fill=(0, 255, 255), width=4)
+    ImageDraw.Draw(candidate).line((145, 90, 185, 90), fill=(255, 0, 255), width=4)
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    report = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_focus_points=((120, 120), (165, 90)),
+        candidate_focus_points=((120, 120), (165, 90)),
+        focus_radius=24,
+    )
+
+    assert report["status"] == "fail"
+    assert report["reasons"] == ["pass_layer_extra"]
 
 
 def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:

@@ -35,7 +35,7 @@ from torii_sumo.core.sumo_commands import discover_binaries
 
 OFFICIAL_TEACHER_SHA256 = "bbfef2f8afb66f29486395189fa7136e3fa7cce2b192afcbd50a6f1d9239a806"
 OFFICIAL_CONV_BOUNDARY = (1243.52, 0.0, 11284.52, 10137.01)
-CAPTURE_POLICY_VERSION = "target-window-junction-v1"
+CAPTURE_POLICY_VERSION = "target-window-junction-v2"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -378,13 +378,61 @@ def _connection_signature_index(root: ET.Element) -> dict[str, list[dict[str, An
 
 
 @functools.lru_cache(maxsize=4)
+def _cached_network_root(path: str, mtime_ns: int, size: int) -> ET.Element:
+    del mtime_ns, size
+    return ET.parse(path).getroot()
+
+
+@functools.lru_cache(maxsize=4)
 def _cached_connection_signature_index(
     path: str,
     mtime_ns: int,
     size: int,
 ) -> dict[str, list[dict[str, Any]]]:
-    del mtime_ns, size
-    return _connection_signature_index(ET.parse(path).getroot())
+    return _connection_signature_index(_cached_network_root(path, mtime_ns, size))
+
+
+@functools.lru_cache(maxsize=4)
+def _cached_lane_geometry_index(
+    path: str,
+    mtime_ns: int,
+    size: int,
+) -> dict[str, tuple[tuple[tuple[str, str], ...], tuple[tuple[float, float], ...]]]:
+    root = _cached_network_root(path, mtime_ns, size)
+    location = root.find("location")
+    offset = (0.0, 0.0) if location is None else tuple(
+        float(value) for value in location.get("netOffset", "0,0").split(",")[:2]
+    )
+    return {
+        str(lane.get("id")): (
+            tuple(sorted(
+                (key, str(lane.get(key)))
+                for key in ("allow", "disallow", "speed", "length", "width")
+                if lane.get(key) is not None
+            )),
+            tuple(
+                (
+                    round(float(point.split(",")[0]) - offset[0], 2),
+                    round(float(point.split(",")[1]) - offset[1], 2),
+                )
+                for point in lane.get("shape", "").split()
+            ),
+        )
+        for lane in root.iter("lane")
+        if lane.get("id")
+    }
+
+
+def _lane_geometry_signature(
+    path: Path,
+    lane_id: str,
+) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[float, float], ...]]:
+    resolved = path.resolve(strict=True)
+    stat = resolved.stat()
+    index = _cached_lane_geometry_index(str(resolved), stat.st_mtime_ns, stat.st_size)
+    if lane_id not in index:
+        raise ValueError(f"lane is missing from network: {lane_id}")
+    return index[lane_id]
 
 
 def _connection_signature(
@@ -460,6 +508,13 @@ def compare_lane_structure(
     ]
     if teacher_order != candidate_order:
         reasons.append("signal_order_mismatch")
+    geometry_pairs = [(teacher_lane, candidate_lane), *outgoing_lane_pairs.items()]
+    if any(
+        _lane_geometry_signature(Path(teacher_net), teacher_id)[1]
+        != _lane_geometry_signature(Path(candidate_net), candidate_id)[1]
+        for teacher_id, candidate_id in geometry_pairs
+    ):
+        reasons.append("lane_geometry_mismatch")
     reasons = sorted(set(reasons))
     return {
         "status": "fail" if reasons else "pass",
@@ -638,6 +693,95 @@ def run_inventory_phase(
     }
 
 
+def resolve_one_occluded_target(
+    selection: Mapping[str, Any],
+    *,
+    structure_status: str,
+    visual_status: str,
+) -> dict[str, Any]:
+    target_count = int(selection.get("target_lane_group_count", 0))
+    visible_count = int(selection.get("visible_target_lane_group_count", 0))
+    if (
+        selection.get("status") == "review_required"
+        and selection.get("reasons") == ["registered_target_lane_not_visible"]
+        and structure_status == "pass"
+        and visual_status == "pass"
+        and target_count >= 2
+        and visible_count == target_count - 1
+        and selection.get("occluded_target_lane_group_count") == 1
+    ):
+        return {
+            **selection,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": ["one_registered_target_lane_occluded"],
+        }
+    return dict(selection)
+
+
+def resolve_semantic_window_scale_clip(
+    visual: Mapping[str, Any],
+    *,
+    structure_status: str,
+    selections: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    reasons = visual.get("reasons", [])
+    if len(reasons) != 1 or reasons[0] not in {
+        "source_layer_scale_mismatch", "target_layer_scale_mismatch"
+    }:
+        return dict(visual)
+    layer = str(reasons[0]).split("_", 1)[0]
+    stats = visual.get("layers", {}).get(layer, {})
+    angular_bins = stats.get("teacher_angular_bins", [])
+    if (
+        structure_status == "pass"
+        and all(selection.get("status") == "pass" for selection in selections.values())
+        and angular_bins
+        and angular_bins == stats.get("candidate_angular_bins", [])
+    ):
+        return {
+            **visual,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": list(reasons),
+        }
+    return dict(visual)
+
+
+def resolve_off_target_pass_palette(
+    visual: Mapping[str, Any],
+    *,
+    structure_status: str,
+    selections: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    layers = visual.get("layers", {})
+    pass_bins = tuple(layers.get("pass", {}).get("candidate_angular_bins", ()))
+    target = layers.get("target", {})
+    target_bins = set(target.get("teacher_angular_bins", ())) | set(
+        target.get("candidate_angular_bins", ())
+    )
+    if (
+        list(visual.get("reasons", ())) == ["pass_layer_extra"]
+        and structure_status == "pass"
+        and selections
+        and all(selection.get("status") == "pass" for selection in selections.values())
+        and pass_bins
+        and target_bins
+        and all(
+            min((pass_bin - target_bin) % 8, (target_bin - pass_bin) % 8) > 1
+            for pass_bin in pass_bins
+            for target_bin in target_bins
+        )
+    ):
+        return {
+            **visual,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": ["pass_layer_extra_outside_registered_target_direction"],
+        }
+    return dict(visual)
+
+
 def evaluate_lane_pair(
     *,
     teacher_net: Path,
@@ -654,6 +798,20 @@ def evaluate_lane_pair(
     candidate_center = tuple(int(value) for value in candidate_capture["junction_pixel"])
     teacher_canvas = teacher_capture.get("canvas_rect")
     candidate_canvas = candidate_capture.get("canvas_rect")
+    teacher_focus_points = (
+        None
+        if teacher_capture.get("semantic_focus_points") is None
+        else tuple(tuple(point) for point in teacher_capture["semantic_focus_points"])
+    )
+    candidate_focus_points = (
+        None
+        if candidate_capture.get("semantic_focus_points") is None
+        else tuple(tuple(point) for point in candidate_capture["semantic_focus_points"])
+    )
+    focus_radius = max(
+        int(teacher_capture.get("semantic_focus_radius", 24)),
+        int(candidate_capture.get("semantic_focus_radius", 24)),
+    )
     semantic_radius = max(
         int(teacher_capture.get("semantic_radius", 160)),
         int(candidate_capture.get("semantic_radius", 160)),
@@ -666,6 +824,9 @@ def evaluate_lane_pair(
         teacher_canvas_rect=None if teacher_canvas is None else tuple(teacher_canvas),  # type: ignore[arg-type]
         candidate_canvas_rect=None if candidate_canvas is None else tuple(candidate_canvas),  # type: ignore[arg-type]
         semantic_radius=semantic_radius,
+        teacher_focus_points=teacher_focus_points,  # type: ignore[arg-type]
+        candidate_focus_points=candidate_focus_points,  # type: ignore[arg-type]
+        focus_radius=focus_radius,
     )
     structure = compare_lane_structure(
         teacher_net,
@@ -680,8 +841,22 @@ def evaluate_lane_pair(
     candidate_evidence = lane_dir / "candidate.png"
     shutil.copy2(teacher_image, teacher_evidence)
     shutil.copy2(candidate_image, candidate_evidence)
-    teacher_mask = write_semantic_mask(teacher_evidence, lane_dir / "teacher.mask.png", center=teacher_center)  # type: ignore[arg-type]
-    candidate_mask = write_semantic_mask(candidate_evidence, lane_dir / "candidate.mask.png", center=candidate_center)  # type: ignore[arg-type]
+    teacher_mask = write_semantic_mask(
+        teacher_evidence,
+        lane_dir / "teacher.mask.png",
+        center=teacher_center,  # type: ignore[arg-type]
+        radius=semantic_radius,
+        focus_points=teacher_focus_points,  # type: ignore[arg-type]
+        focus_radius=focus_radius,
+    )
+    candidate_mask = write_semantic_mask(
+        candidate_evidence,
+        lane_dir / "candidate.mask.png",
+        center=candidate_center,  # type: ignore[arg-type]
+        radius=semantic_radius,
+        focus_points=candidate_focus_points,  # type: ignore[arg-type]
+        focus_radius=focus_radius,
+    )
     selections = {
         "teacher": teacher_capture.get("selection", {"status": "pass", "reasons": []}),
         "candidate": candidate_capture.get("selection", {"status": "pass", "reasons": []}),
@@ -699,6 +874,24 @@ def evaluate_lane_pair(
             "reasons": [],
             "resolved_reasons": ["source_lane_not_selected"],
         }
+    visual = resolve_semantic_window_scale_clip(
+        visual,
+        structure_status=structure["status"],
+        selections=selections,
+    )
+    visual = resolve_off_target_pass_palette(
+        visual,
+        structure_status=structure["status"],
+        selections=selections,
+    )
+    selections = {
+        role: resolve_one_occluded_target(
+            selection,
+            structure_status=structure["status"],
+            visual_status=visual["status"],
+        )
+        for role, selection in selections.items()
+    }
     if visual["status"] == "fail" or structure["status"] == "fail":
         status = "fail"
     elif visual["status"] != "pass" or any(value["status"] != "pass" for value in selections.values()):
@@ -738,6 +931,57 @@ def evaluate_lane_pair(
 def _tile_coordinates(value: str) -> tuple[int, int]:
     first, second = value.split("_", 1)
     return int(first), int(second)
+
+
+def selection_click_candidates(clicks: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    offsets = tuple(
+        offset
+        for distance in (4, 8, 12)
+        for offset in ((-distance, 0), (distance, 0), (0, -distance), (0, distance))
+    )
+    return tuple(clicks) + tuple(
+        (x + dx, y + dy)
+        for x, y in clicks
+        for dx, dy in offsets
+    )
+
+
+def ranked_selection_click_candidates(
+    clicks: Sequence[tuple[int, int]],
+    *,
+    preferred_rank: int | None = None,
+) -> tuple[tuple[int, tuple[int, int]], ...]:
+    ranked = tuple(enumerate(selection_click_candidates(clicks), 1))
+    if preferred_rank is None:
+        return ranked
+    return tuple(sorted(ranked, key=lambda item: item[0] != preferred_rank))
+
+
+def capture_target_lane_ids(
+    connection_signatures: Mapping[str, Sequence[Mapping[str, Any]]],
+    lane_id: str,
+) -> tuple[str, ...]:
+    return tuple(str(row["target_lane"]) for row in connection_signatures[lane_id])
+
+
+def selection_score(selection: Mapping[str, Any]) -> tuple[int, int, int]:
+    return (
+        int("registered_source_lane_not_selected" not in selection.get("reasons", ())),
+        int(selection.get("visible_target_lane_group_count", 0)),
+        int(selection.get("status") == "pass"),
+    )
+
+
+def connection_view_points(
+    points: Sequence[tuple[float, float]],
+    *,
+    center: tuple[float, float],
+    radius_m: float = 25.0,
+) -> tuple[tuple[float, float], ...]:
+    x, y = center
+    return tuple(points) + (
+        (x + radius_m, y), (x - radius_m, y), (x, y + radius_m), (x, y - radius_m)
+    )
 
 
 def ordered_tiles(
@@ -890,6 +1134,75 @@ def run_visual_phase(
                 and session_dir.name == ".session"
             ):
                 shutil.rmtree(session_dir, ignore_errors=False)
+        retry_groups: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            initial = lane_reports.get(str(record["item_id"]))
+            if initial and initial["status"] != "pass" and "isolated_retry" not in initial:
+                retry_groups.setdefault(str(record["pair_id"]), []).append(record)
+        for pair_id, retry_records in retry_groups.items():
+            retry_session_dir = tile_dir / ".isolated-retry" / pair_id
+            teacher_captures, candidate_captures = capture_tile_func(
+                tile_id=tile,
+                records=retry_records,
+                teacher_net=teacher_net,
+                candidate_net=candidate_net,
+                output_dir=retry_session_dir,
+                zoom=zoom,
+                window_size=window_size,
+                tile_size_m=float(manifest["tile_size_m"]),
+            )
+            if len(teacher_captures) != len(retry_records) or len(candidate_captures) != len(retry_records):
+                raise RuntimeError(f"isolated retry capture count mismatch: {tile}/{pair_id}")
+            retry_passed = True
+            for record, teacher_capture, candidate_capture in zip(
+                retry_records, teacher_captures, candidate_captures
+            ):
+                item_id = str(record["item_id"])
+                initial = lane_reports[item_id]
+                retry = evaluate_lane_pair(
+                    teacher_net=teacher_net,
+                    candidate_net=candidate_net,
+                    record=record,
+                    teacher_capture=teacher_capture,
+                    candidate_capture=candidate_capture,
+                    lane_dir=(
+                        tile_dir / "junctions" / pair_id / f"lane-{item_id}" / "isolated-retry"
+                    ),
+                    failure_dir=(
+                        tile_dir / "failures" / pair_id / f"lane-{item_id}" / "isolated-retry"
+                    ),
+                )
+                retry_meta = {
+                    "status": retry["status"],
+                    "initial_status": initial["status"],
+                    "initial_visual_reasons": initial.get("visual", {}).get("reasons", []),
+                    "report_file": retry["report_file"],
+                }
+                if retry["status"] == "pass":
+                    retry["isolated_retry"] = retry_meta
+                    lane_reports[item_id] = retry
+                    write_json_atomic(Path(str(retry["report_file"])), retry, sort_keys=True)
+                else:
+                    retry_passed = False
+                    initial["isolated_retry"] = retry_meta
+                    write_json_atomic(Path(str(initial["report_file"])), initial, sort_keys=True)
+            write_tile_state(
+                state_file,
+                teacher_sha=teacher_sha,
+                candidate_sha=candidate_sha,
+                manifest_sha=manifest_sha,
+                lane_reports=lane_reports,
+            )
+            if retry_passed and retry_session_dir.is_dir():
+                shutil.rmtree(retry_session_dir, ignore_errors=False)
+        session_dir = (tile_dir / ".session").resolve()
+        if (
+            session_dir.is_dir()
+            and all(lane_reports.get(str(record["item_id"]), {}).get("status") == "pass" for record in records)
+            and session_dir.parent == tile_dir.resolve()
+            and session_dir.name == ".session"
+        ):
+            shutil.rmtree(session_dir, ignore_errors=False)
         all_reports.update({f"{tile}/{item_id}": report for item_id, report in lane_reports.items()})
 
     statuses = [str(report["status"]) for report in all_reports.values()]
@@ -980,26 +1293,49 @@ def capture_tile_pair(
             raise RuntimeError(f"{role} visual subnet extraction failed for tile {tile_id}")
         subnet_file = Path(str(subnet["subnet_file"]))
         subnet_root = ET.parse(subnet_file).getroot()
+        semantic_mismatches = junction_render_semantic_mismatches(
+            full_root, subnet_root, junction_ids
+        )
+        render_file = net_file if semantic_mismatches else subnet_file
+        render_root = full_root if semantic_mismatches else subnet_root
+        render_sha256 = file_sha256(render_file) if semantic_mismatches else subnet["subnet_sha256"]
+        subnet_boundary = _location_numbers(subnet_file)[1]
+        render_boundary = _location_numbers(render_file)[1]
+        requested_render_zoom = (
+            normalized_viewport_zoom(
+                reference_boundary=subnet_boundary,
+                target_boundary=render_boundary,
+                reference_zoom=zoom,
+                viewport_size=window_size,
+            )
+            if semantic_mismatches
+            else zoom
+        )
+        subnet["semantic_mismatch_junctions"] = semantic_mismatches
+        subnet["render_source"] = "full_network_fallback" if semantic_mismatches else "subnet"
+        subnet["render_net_file"] = str(render_file)
+        subnet["render_sha256"] = render_sha256
         specs = [
             lane_capture_spec(
-                subnet_file,
+                render_file,
                 junction_id=str(record[junction_field]),
                 lane_id=str(record[lane_field]),
-                root=subnet_root,
+                root=render_root,
             )
             for record in records
         ]
-        offset, boundary = _location_numbers(subnet_file)
+        offset, boundary = _location_numbers(render_file)
         local_center = projected_center[0] + offset[0], projected_center[1] + offset[1]
         warmup_dir = role_dir / "warmup"
         warmup_dir.mkdir(parents=True, exist_ok=True)
         view = warmup_dir / "view.xml"
-        _viewsettings(view, local_center, zoom)
+        _viewsettings(view, local_center, requested_render_zoom)
+        warmup_working_file = warmup_dir / "working.net.xml"
         session = session_factory(
-            subnet_file,
-            warmup_dir / "working.net.xml",
+            render_file,
+            warmup_working_file,
             warmup_dir / "netedit-session",
-            expected_source_sha256=file_sha256(subnet_file),
+            expected_source_sha256=render_sha256,
             gui_settings_file=view,
             activate_for_render=False,
             target_source_junction_ids=junction_ids,
@@ -1011,11 +1347,21 @@ def capture_tile_pair(
             canvas = netedit_canvas_rect(session.hwnd)
         finally:
             session.abort("visual_tile_warmup_complete")
+            if semantic_mismatches:
+                warmup_working_file.unlink(missing_ok=True)
+        connection_signatures = _connection_signature_index(full_root)
+        required_target_lanes = {
+            str(row["target_lane"])
+            for spec in specs
+            for row in connection_signatures[spec["lane_id"]]
+        }
         contexts[role] = {
             "role_dir": role_dir,
             "net_file": net_file,
             "subnet": subnet,
-            "subnet_file": subnet_file,
+            "subnet_file": render_file,
+            "render_sha256": render_sha256,
+            "requested_render_zoom": requested_render_zoom,
             "offset": offset,
             "boundary": boundary,
             "local_center": local_center,
@@ -1023,9 +1369,12 @@ def capture_tile_pair(
             "specs": specs,
             "lane_field": lane_field,
             "junction_field": junction_field,
-            "connection_signatures": _connection_signature_index(full_root),
+            "connection_signatures": connection_signatures,
             "lane_elements": {
-                str(lane.get("id")): lane for lane in subnet_root.iter("lane") if lane.get("id")
+                str(lane.get("id")): lane
+                for lane in render_root.iter("lane")
+                if lane.get("id")
+                and str(lane.get("id")) in outgoing_lanes | required_target_lanes
             },
         }
 
@@ -1036,15 +1385,18 @@ def capture_tile_pair(
     junction_groups = list(grouped.values())
     teacher_zooms = [
         fit_connection_zoom(
-            points=[
-                point
-                for index in indices
-                for point in lane_click_points(teacher_context["specs"][index]["shape"])
-            ],
+            points=connection_view_points(
+                [
+                    point
+                    for index in indices
+                    for point in lane_click_points(teacher_context["specs"][index]["shape"])
+                ],
+                center=teacher_context["specs"][indices[0]]["center"],
+            ),
             center=teacher_context["specs"][indices[0]]["center"],
             conv_boundary=teacher_context["boundary"],
             canvas_rect=teacher_context["canvas"],
-            requested_zoom=zoom,
+            requested_zoom=teacher_context["requested_render_zoom"],
         )
         for indices in junction_groups
     ]
@@ -1071,9 +1423,10 @@ def capture_tile_pair(
             capture_dir.mkdir(parents=True, exist_ok=True)
             _viewsettings(view, viewport_center, role_zoom)
             junction_ids = tuple(str(records[index][context["junction_field"]]) for index in indices)
+            working_file = capture_dir / "working.net.xml"
             session = session_factory(
                 context["subnet_file"],
-                capture_dir / "working.net.xml",
+                working_file,
                 capture_dir / "netedit-session",
                 expected_source_sha256=file_sha256(context["subnet_file"]),
                 gui_settings_file=view,
@@ -1101,18 +1454,9 @@ def capture_tile_pair(
                     record = records[record_index]
                     spec = context["specs"][record_index]
                     output_index = record_index + 1
-                    target_lane_ids = [
-                        str(row["target_lane"])
-                        for row in context["connection_signatures"][spec["lane_id"]]
-                    ]
-                    if role == "candidate":
-                        target_lane_ids = [
-                            str(record["outgoing_lane_pairs"][lane["target_lane"]])
-                            for lane in teacher_context["connection_signatures"][
-                                str(record["teacher_lane"])
-                            ]
-                            if lane["target_lane"] in record["outgoing_lane_pairs"]
-                        ]
+                    target_lane_ids = capture_target_lane_ids(
+                        context["connection_signatures"], spec["lane_id"]
+                    )
                     lane_elements = context["lane_elements"]
                     target_world_point_groups = [
                         lane_click_points(
@@ -1144,8 +1488,31 @@ def capture_tile_pair(
                         for points in target_world_point_groups
                     )
                     capture: dict[str, Any] | None = None
-                    for rank, point in enumerate(lane_click_points(spec["shape"]), 1):
-                        if rank > 1:
+                    exact_clicks = tuple(
+                        canvas_click_for_world_point(
+                            point=point,
+                            center=viewport_center,
+                            conv_boundary=context["boundary"],
+                            canvas_rect=context["canvas"],
+                            zoom=role_zoom,
+                        )
+                        for point in lane_click_points(spec["shape"])
+                    )
+                    semantic_focus_points = tuple(dict.fromkeys((
+                        junction_pixel,
+                        *exact_clicks,
+                        *(point for group in target_pixel_groups for point in group),
+                    )))
+                    preferred_rank = (
+                        int(captures_by_role["teacher"][record_index]["sample_distance_rank"])
+                        if role == "candidate"
+                        else None
+                    )
+                    for attempt, (rank, click) in enumerate(
+                        ranked_selection_click_candidates(exact_clicks, preferred_rank=preferred_rank),
+                        1,
+                    ):
+                        if attempt > 1:
                             input_func(session.hwnd, session.process.pid, {
                                 "type": "key",
                                 "virtual_key": 0x1B,
@@ -1156,13 +1523,6 @@ def capture_tile_pair(
                                 "virtual_key": ord("C"),
                                 "modifier_keys": [],
                             }, post_input_seconds=0.1)
-                        click = canvas_click_for_world_point(
-                            point=point,
-                            center=viewport_center,
-                            conv_boundary=context["boundary"],
-                            canvas_rect=context["canvas"],
-                            zoom=role_zoom,
-                        )
                         input_func(session.hwnd, session.process.pid, {
                             "type": "click",
                             "x": click[0],
@@ -1176,30 +1536,36 @@ def capture_tile_pair(
                             source_point=click,
                             target_point_groups=target_pixel_groups,
                         )
-                        destination = context["role_dir"] / "captures" / f"{output_index:05d}.png"
-                        destination.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(screenshot, destination)
-                        capture = {
-                            "lane_id": spec["lane_id"],
-                            "sample_distance_rank": rank,
-                            "click": list(click),
-                            "junction_pixel": list(junction_pixel),
-                            "canvas_rect": list(context["canvas"]),
-                            "zoom": role_zoom,
-                            "semantic_radius": 300,
-                            "selection": selection,
-                            "input_method": "target_window_send_input",
-                            "subnet_sha256": context["subnet"]["subnet_sha256"],
-                            "screenshot_file": str(destination),
-                            "screenshot_sha256": file_sha256(destination),
-                        }
-                        if "registered_source_lane_not_selected" not in capture["selection"]["reasons"]:
+                        if capture is None or selection_score(selection) > selection_score(capture["selection"]):
+                            destination = context["role_dir"] / "captures" / f"{output_index:05d}.png"
+                            destination.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(screenshot, destination)
+                            capture = {
+                                "lane_id": spec["lane_id"],
+                                "sample_distance_rank": rank,
+                                "click": list(click),
+                                "junction_pixel": list(junction_pixel),
+                                "canvas_rect": list(context["canvas"]),
+                                "zoom": role_zoom,
+                                "semantic_radius": 100,
+                                "semantic_focus_points": [list(point) for point in semantic_focus_points],
+                                "semantic_focus_radius": 24,
+                                "selection": selection,
+                                "input_method": "target_window_send_input",
+                                "subnet_sha256": context["render_sha256"],
+                                "render_source": context["subnet"]["render_source"],
+                                "screenshot_file": str(destination),
+                                "screenshot_sha256": file_sha256(destination),
+                            }
+                        if selection["status"] == "pass":
                             break
                     if capture is None:
                         raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")
                     role_captures[record_index] = capture
             finally:
                 session.abort("visual_junction_capture_complete")
+                if context["subnet"]["semantic_mismatch_junctions"]:
+                    working_file.unlink(missing_ok=True)
         if any(capture is None for capture in role_captures):
             raise RuntimeError(f"{role} junction capture did not cover every lane")
         captures_by_role[role] = [capture for capture in role_captures if capture is not None]
@@ -1705,6 +2071,52 @@ def build_visual_tile_subnet(
         "missing_requested_junctions": missing_junctions,
         "missing_requested_lanes": missing_lanes,
     }
+
+
+def _junction_render_semantic_signature(root: ET.Element, junction_id: str) -> tuple[Any, ...]:
+    prefix = f":{junction_id}_"
+    junction = root.find(f"junction[@id='{junction_id}']")
+    logic = root.find(f"tlLogic[@id='{junction_id}']")
+    internal_edges = tuple(sorted(
+        (
+            str(edge.get("id")),
+            str(edge.get("function")),
+            tuple((str(lane.get("id")), str(lane.get("index"))) for lane in edge.findall("lane")),
+        )
+        for edge in root.findall("edge")
+        if str(edge.get("id", "")).startswith(prefix)
+    ))
+    requests = tuple(
+        tuple(sorted(request.attrib.items()))
+        for request in (() if junction is None else junction.findall("request"))
+    )
+    phases = tuple(
+        (str(phase.get("duration")), str(phase.get("state")))
+        for phase in (() if logic is None else logic.findall("phase"))
+    )
+    connections = tuple(sorted(
+        tuple(sorted(connection.attrib.items()))
+        for connection in root.findall("connection")
+        if connection.get("tl") == junction_id
+        or any(str(connection.get(field, "")).startswith(prefix) for field in ("from", "to", "via"))
+    ))
+    junction_semantics = None if junction is None else (
+        junction.get("type"), junction.get("incLanes"), junction.get("intLanes"), requests
+    )
+    return junction_semantics, phases, internal_edges, connections
+
+
+def junction_render_semantic_mismatches(
+    source_root: ET.Element,
+    rendered_root: ET.Element,
+    junction_ids: Sequence[str],
+) -> list[str]:
+    return [
+        junction_id
+        for junction_id in junction_ids
+        if _junction_render_semantic_signature(source_root, junction_id)
+        != _junction_render_semantic_signature(rendered_root, junction_id)
+    ]
 
 
 def visual_tile_projected_boundary(

@@ -168,6 +168,88 @@ def test_render_subnet_fails_when_requested_geometry_is_missing(tmp_path: Path) 
     assert report["missing_requested_lanes"] == ["out_0"]
 
 
+def test_render_semantics_detects_recomputed_internal_edge_cardinality() -> None:
+    module = _module()
+    source = ET.fromstring(
+        '<net><edge id=":j0_0" function="internal"><lane id=":j0_0_0"/></edge>'
+        '<edge id=":j0_1" function="internal"><lane id=":j0_1_0"/></edge>'
+        '<junction id="j0" type="priority" intLanes=":j0_0_0 :j0_1_0">'
+        '<request index="0" response="10" foes="01"/>'
+        '<request index="1" response="01" foes="10"/></junction></net>'
+    )
+    rendered = ET.fromstring(
+        '<net><edge id=":j0_0" function="internal">'
+        '<lane id=":j0_0_0"/><lane id=":j0_0_1"/></edge>'
+        '<junction id="j0" type="priority" intLanes=":j0_0_0 :j0_0_1">'
+        '<request index="0" response="10" foes="01"/>'
+        '<request index="1" response="01" foes="10"/></junction></net>'
+    )
+
+    assert module.junction_render_semantic_mismatches(source, rendered, ("j0",)) == ["j0"]
+    assert module.junction_render_semantic_mismatches(source, source, ("j0",)) == []
+
+
+def test_selection_click_candidates_try_exact_points_before_small_offsets() -> None:
+    module = _module()
+
+    assert module.selection_click_candidates(((10, 20), (30, 40))) == (
+        (10, 20), (30, 40),
+        (6, 20), (14, 20), (10, 16), (10, 24),
+        (2, 20), (18, 20), (10, 12), (10, 28),
+        (-2, 20), (22, 20), (10, 8), (10, 32),
+        (26, 40), (34, 40), (30, 36), (30, 44),
+        (22, 40), (38, 40), (30, 32), (30, 48),
+        (18, 40), (42, 40), (30, 28), (30, 52),
+    )
+
+
+def test_ranked_selection_clicks_try_teacher_rank_first_for_candidate() -> None:
+    module = _module()
+
+    ranked = module.ranked_selection_click_candidates(((10, 20), (30, 40)), preferred_rank=2)
+
+    assert ranked[0] == (2, (30, 40))
+    assert sorted(rank for rank, _click in ranked) == list(range(1, len(ranked) + 1))
+
+
+def test_connection_view_points_keep_full_junction_context() -> None:
+    module = _module()
+
+    assert module.connection_view_points(((1.0, 2.0),), center=(10.0, 20.0)) == (
+        (1.0, 2.0), (35.0, 20.0), (-15.0, 20.0), (10.0, 45.0), (10.0, -5.0)
+    )
+
+
+def test_capture_target_lanes_include_every_connection_signature() -> None:
+    signatures = {
+        "in_0": [
+            {"target_lane": "motor_out_0"},
+            {"target_lane": "walk_out_0"},
+        ]
+    }
+
+    assert _module().capture_target_lane_ids(signatures, "in_0") == (
+        "motor_out_0",
+        "walk_out_0",
+    )
+
+
+def test_selection_score_prefers_visible_registered_targets() -> None:
+    module = _module()
+    wrong_lane = {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        "visible_target_lane_group_count": 0,
+    }
+    correct_lane = {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        "visible_target_lane_group_count": 3,
+    }
+
+    assert module.selection_score(correct_lane) > module.selection_score(wrong_lane)
+
+
 def test_visual_tile_boundary_includes_registered_lane_geometry(tmp_path: Path) -> None:
     module = _module()
     teacher = tmp_path / "teacher.net.xml"
@@ -473,6 +555,31 @@ def test_structure_pair_ignores_identical_unregistered_nonmotor_target(tmp_path:
     assert report["status"] == "pass"
 
 
+def test_structure_pair_rejects_registered_lane_geometry_mismatch(tmp_path: Path) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="", link_index="")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="", link_index="")
+    teacher.write_text(
+        teacher.read_text(encoding="utf-8").replace('id="out_0" index="0"', 'id="out_0" index="0" shape="0,0 10,0"'),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace('id="out_0" index="0"', 'id="out_0" index="0" shape="0,0 12,0"'),
+        encoding="utf-8",
+    )
+
+    report = module.compare_lane_structure(
+        teacher,
+        candidate,
+        teacher_lane="in_0",
+        candidate_lane="in_0",
+        outgoing_lane_pairs={"out_0": "out_0"},
+    )
+
+    assert report["status"] == "fail"
+    assert "lane_geometry_mismatch" in report["reasons"]
+
+
 def test_structure_pair_reuses_network_connection_indexes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -716,7 +823,7 @@ def test_lane_evidence_binds_canvas_radius_and_native_selection(
             "screenshot_file": str(candidate_image),
             "junction_pixel": [120, 90],
             "canvas_rect": [20, 10, 220, 170],
-            "semantic_radius": 300,
+            "semantic_radius": 140,
             "selection": {"status": "pass", "reasons": []},
         },
         lane_dir=tmp_path / "lane",
@@ -728,7 +835,10 @@ def test_lane_evidence_binds_canvas_radius_and_native_selection(
     assert report["failure_images"]["candidate"] == report["candidate_screenshot_file"]
     assert arguments["teacher_canvas_rect"] == (20, 10, 220, 170)
     assert arguments["candidate_canvas_rect"] == (20, 10, 220, 170)
-    assert arguments["semantic_radius"] == 300
+    assert arguments["semantic_radius"] == 280
+    assert arguments["teacher_focus_points"] is None
+    assert arguments["candidate_focus_points"] is None
+    assert arguments["focus_radius"] == 24
 
 
 def test_lane_evidence_accepts_shared_missing_source_layer_when_native_selection_passes(
@@ -776,6 +886,135 @@ def test_lane_evidence_accepts_shared_missing_source_layer_when_native_selection
     assert report["status"] == "pass"
     assert report["visual"]["status"] == "pass"
     assert report["visual"]["resolved_reasons"] == ["source_lane_not_selected"]
+
+
+def test_one_occluded_target_resolves_only_with_matching_structure_and_pixels() -> None:
+    module = _module()
+    selection = {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        "target_lane_group_count": 3,
+        "visible_target_lane_group_count": 2,
+        "occluded_target_lane_group_count": 1,
+    }
+
+    assert module.resolve_one_occluded_target(selection, structure_status="pass", visual_status="pass") == {
+        **selection,
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": ["one_registered_target_lane_occluded"],
+    }
+
+
+def test_matching_registered_geometry_resolves_semantic_window_scale_clip() -> None:
+    module = _module()
+    visual = {
+        "status": "fail",
+        "reasons": ["target_layer_scale_mismatch"],
+        "layers": {
+            "target": {
+                "teacher_angular_bins": [0, 1],
+                "candidate_angular_bins": [0, 1],
+            }
+        },
+    }
+
+    assert module.resolve_semantic_window_scale_clip(
+        visual,
+        structure_status="pass",
+        selections={"teacher": {"status": "pass"}, "candidate": {"status": "pass"}},
+    ) == {
+        **visual,
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": ["target_layer_scale_mismatch"],
+    }
+
+
+def test_semantic_window_scale_clip_keeps_geometry_or_direction_mismatch() -> None:
+    module = _module()
+    visual = {
+        "status": "fail",
+        "reasons": ["source_layer_scale_mismatch"],
+        "layers": {
+            "source": {
+                "teacher_angular_bins": [1],
+                "candidate_angular_bins": [2],
+            }
+        },
+    }
+
+    assert module.resolve_semantic_window_scale_clip(
+        visual,
+        structure_status="pass",
+        selections={"teacher": {"status": "pass"}, "candidate": {"status": "pass"}},
+    ) == visual
+    assert module.resolve_semantic_window_scale_clip(
+        {**visual, "layers": {"source": {"teacher_angular_bins": [1], "candidate_angular_bins": [1]}}},
+        structure_status="fail",
+        selections={"teacher": {"status": "pass"}, "candidate": {"status": "pass"}},
+    )["status"] == "fail"
+
+
+def test_off_target_pass_palette_resolves_only_outside_registered_target_direction() -> None:
+    module = _module()
+    visual = {
+        "status": "fail",
+        "reasons": ["pass_layer_extra"],
+        "layers": {
+            "pass": {"candidate_angular_bins": [4]},
+            "target": {"teacher_angular_bins": [0, 7], "candidate_angular_bins": [0, 7]},
+        },
+    }
+    selections = {"teacher": {"status": "pass"}, "candidate": {"status": "pass"}}
+
+    assert module.resolve_off_target_pass_palette(
+        visual, structure_status="pass", selections=selections
+    ) == {
+        **visual,
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": ["pass_layer_extra_outside_registered_target_direction"],
+    }
+
+    overlapping = {
+        **visual,
+        "layers": {**visual["layers"], "pass": {"candidate_angular_bins": [0]}},
+    }
+    assert module.resolve_off_target_pass_palette(
+        overlapping, structure_status="pass", selections=selections
+    ) == overlapping
+    assert module.resolve_off_target_pass_palette(
+        visual, structure_status="fail", selections=selections
+    ) == visual
+
+
+@pytest.mark.parametrize(
+    ("selection", "structure_status", "visual_status"),
+    [
+        ({"target_lane_group_count": 1, "visible_target_lane_group_count": 0}, "pass", "pass"),
+        ({"target_lane_group_count": 3, "visible_target_lane_group_count": 1}, "pass", "pass"),
+        ({"target_lane_group_count": 3, "visible_target_lane_group_count": 2}, "fail", "pass"),
+        ({"target_lane_group_count": 3, "visible_target_lane_group_count": 2}, "pass", "fail"),
+    ],
+)
+def test_one_occluded_target_keeps_unsafe_cases_for_review(
+    selection: dict[str, int],
+    structure_status: str,
+    visual_status: str,
+) -> None:
+    module = _module()
+    report = {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        **selection,
+    }
+
+    assert module.resolve_one_occluded_target(
+        report,
+        structure_status=structure_status,
+        visual_status=visual_status,
+    ) == report
 
 
 def test_tiles_expand_from_the_verified_seed() -> None:
@@ -887,6 +1126,44 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     evidence = next(iter(first["lane_reports"].values()))
     assert Path(evidence["teacher_screenshot_file"]).is_file()
     assert Path(evidence["candidate_screenshot_file"]).is_file()
+
+    isolated_calls = 0
+
+    def isolated_retry_capture(**kwargs):
+        nonlocal isolated_calls
+        isolated_calls += 1
+        session_dir = Path(kwargs["output_dir"])
+        session_dir.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for role in ("teacher", "candidate"):
+            image_file = session_dir / f"{role}.png"
+            image = Image.new("RGB", (240, 180), "white")
+            if isolated_calls == 2:
+                draw = ImageDraw.Draw(image)
+                draw.line((120, 110, 120, 165), fill=(0, 255, 255), width=4)
+                draw.line((130, 90, 210, 90), fill=(0, 255, 0), width=4)
+            image.save(image_file)
+            rows.append([{
+                "lane_id": "in_0",
+                "screenshot_file": str(image_file),
+                "junction_pixel": [120, 90],
+            }])
+        return tuple(rows)
+
+    isolated = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "isolated-out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=False,
+        capture_tile_func=isolated_retry_capture,
+    )
+    isolated_evidence = next(iter(isolated["lane_reports"].values()))
+    assert isolated["status"] == "pass"
+    assert isolated_calls == 2
+    assert isolated_evidence["isolated_retry"]["initial_status"] == "review_required"
+    assert isolated_evidence["isolated_retry"]["status"] == "pass"
 
     def failed_capture(**kwargs):
         session_dir = Path(kwargs["output_dir"])
@@ -1074,24 +1351,27 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
     assert len(lane_point_calls) == 10
     assert ((100.0, 30.0), (120.0, 30.0)) in lane_point_calls
     assert ((140.0, 30.0), (120.0, 30.0)) in lane_point_calls
-    for captures in result:
+    for role_index, captures in enumerate(result):
         assert len(captures) == 2
         image_file = Path(captures[0]["screenshot_file"])
         assert captures[0] == {
             "lane_id": "in_0",
-            "sample_distance_rank": 2,
+            "sample_distance_rank": 2 if role_index == 0 else 1,
             "click": [420, 330],
             "junction_pixel": [700, 470],
             "canvas_rect": [230, 64, 1394, 885],
             "zoom": 900.0,
-            "semantic_radius": 300,
+            "semantic_radius": 100,
+            "semantic_focus_points": [[700, 470], [420, 330]],
+            "semantic_focus_radius": 24,
             "selection": {
                 "status": "pass",
                 "reasons": [],
             },
-            "input_method": "target_window_send_input",
-            "subnet_sha256": "d" * 64,
-            "screenshot_file": str(image_file),
+                "input_method": "target_window_send_input",
+                "subnet_sha256": "d" * 64,
+                "render_source": "subnet",
+                "screenshot_file": str(image_file),
             "screenshot_sha256": file_sha256(image_file),
         }
 
