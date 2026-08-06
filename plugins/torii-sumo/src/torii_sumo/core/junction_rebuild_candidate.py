@@ -2401,7 +2401,10 @@ def write_teacher_target_internal_replay_net(
         mapped_edge_id = replay_edge_map.get(edge_id, edge_id)
         if mapped_edge_id == edge_id:
             continue
-        if mapped_edge_id in needed_boundary_edge_id_set or mapped_boundary_counts[mapped_edge_id] > 1:
+        if (
+            mapped_edge_id in needed_boundary_edge_id_set
+            and replay_edge_map.get(mapped_edge_id, mapped_edge_id) == mapped_edge_id
+        ) or mapped_boundary_counts[mapped_edge_id] > 1:
             replay_edge_map[edge_id] = edge_id
             preserved_colliding_boundary_edges.append(edge_id)
     restored_teacher_split_boundary_edges = []
@@ -2415,6 +2418,16 @@ def write_teacher_target_internal_replay_net(
             or teacher_boundary_edge is None
             or teacher_continuation_edge is None
             or candidate_unsplit_edge is None
+            or (
+                candidate_unsplit_edge.attrib.get("from", "")
+                == _mapped_junction_ref(
+                    teacher_boundary_edge.attrib.get("from", ""), teacher_junction_id, junction_id
+                )
+                and candidate_unsplit_edge.attrib.get("to", "")
+                == _mapped_junction_ref(
+                    teacher_boundary_edge.attrib.get("to", ""), teacher_junction_id, junction_id
+                )
+            )
             or _signed_edge_family_id(edge_id) != _signed_edge_family_id(mapped_edge_id)
             or teacher_junction_id
             not in (
@@ -2597,6 +2610,8 @@ def write_teacher_target_internal_replay_net(
             ]
         )
     )
+    if preserve_unmapped_boundary_edges:
+        replay_boundary_candidate_edge_ids = []
     for edge_id in replay_boundary_candidate_edge_ids:
         copied_edge = candidate_edges_by_id.get(edge_id)
         if copied_edge is None:
@@ -2842,6 +2857,7 @@ def write_teacher_target_internal_replay_net(
             if (
                 followup_teacher_edge is None
                 or followup_candidate_edge is None
+                or not _lane_indices_match(followup_teacher_edge, followup_candidate_edge)
                 or not (
                     {
                         followup_candidate_edge.attrib.get("from", ""),
@@ -15253,6 +15269,12 @@ def _net_lane_counts(root: ET.Element) -> dict[str, int]:
         if edge_id:
             counts[edge_id] = max(1, len(edge.findall("lane")))
     return counts
+
+
+def _lane_indices_match(first: ET.Element, second: ET.Element) -> bool:
+    return {lane.attrib.get("index", "") for lane in first.findall("lane")} == {
+        lane.attrib.get("index", "") for lane in second.findall("lane")
+    }
 
 
 def _connection_lane_indices_valid(connection: ET.Element, lane_counts: dict[str, int]) -> bool:

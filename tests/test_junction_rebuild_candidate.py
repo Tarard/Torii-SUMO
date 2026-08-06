@@ -21,6 +21,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _final_context_parity_gate,
     _hybrid_osm_approach_authority_policy,
     _lane_surface_overlap_touches_junctions,
+    _lane_indices_match,
     _netedit_review_actions,
     _prune_unmapped_micro_boundary_edges,
     _prune_strict_unmapped_outgoing_boundary_edges,
@@ -103,6 +104,14 @@ def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() 
     assert root.find("edge[@id='short_b']") is None
     assert root.find("edge[@id='long']") is not None
     assert root.find("connection[@from='short_a']") is None
+
+
+def test_lane_indices_match_rejects_off_scope_lane_count_change() -> None:
+    one_lane = ET.fromstring('<edge><lane index="0"/></edge>')
+    two_lanes = ET.fromstring('<edge><lane index="0"/><lane index="1"/></edge>')
+
+    assert _lane_indices_match(one_lane, one_lane)
+    assert not _lane_indices_match(one_lane, two_lanes)
 
 
 def test_geometry_anchor_rejects_sumo_invalid_coordinate_sentinel(tmp_path: Path) -> None:
@@ -16664,6 +16673,50 @@ def test_write_teacher_target_internal_replay_net_restores_teacher_split_boundar
     assert report["copied_boundary_continuation_edges"] == ["road#1"]
 
 
+def test_write_teacher_target_internal_replay_net_preserves_explicit_shifted_split_map(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid"><lane id="road#0_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="road#1" from="mid" to="far"><lane id="road#1_0" index="0" shape="10,0 20,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="mid" type="priority" x="10" y="0" incLanes="road#0_0" intLanes=""/>
+  <junction id="far" type="dead_end" x="20" y="0" incLanes="road#1_0" intLanes=""/>
+  <connection from="road#0" to="road#1" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#1" from="j" to="mid"><lane id="road#1_0" index="0" shape="0,1 10,1"/></edge>
+  <edge id="road#2" from="mid" to="far"><lane id="road#2_0" index="0" shape="10,1 20,1"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="mid" type="priority" x="10" y="0" incLanes="road#1_0" intLanes=""/>
+  <junction id="far" type="dead_end" x="20" y="0" incLanes="road#2_0" intLanes=""/>
+  <connection from="road#1" to="road#2" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"road#0": "road#1", "road#1": "road#2"},
+        preserve_mapped_boundary_endpoints=True,
+        preserve_unmapped_boundary_edges=True,
+    )
+
+    assert report["effective_edge_map"]["road#0"] == "road#1"
+    assert report["effective_edge_map"]["road#1"] == "road#2"
+    assert report["preserved_colliding_boundary_edges"] == []
+    assert report["restored_teacher_split_boundary_edges"] == []
+
+
 def test_write_teacher_target_internal_replay_net_removes_replaced_boundary_connection_with_stale_lane_index(
     tmp_path: Path,
 ) -> None:
@@ -17983,6 +18036,21 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
     assert root.find("tlLogic[@id='stale']") is None
     assert report["removed_stale_split_fragment_edges"] == ["-road#1", "road#1"]
     assert report["rewired_stale_split_fragment_connection_count"] == 2
+
+    preserved_report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "preserved.net.xml",
+        junction_id="j",
+        edge_map={"-road#0": "-road#0", "road#0": "road#0"},
+        preserve_unmapped_boundary_edges=True,
+    )
+
+    preserved_root = ET.parse(preserved_report["net_file"]).getroot()
+    assert preserved_root.find("edge[@id='-road#1']") is not None
+    assert preserved_root.find("edge[@id='road#1']") is not None
+    assert preserved_report["removed_stale_split_fragment_edges"] == []
+    assert preserved_report["replayed_stale_split_followup_edges"] == []
 
 
 def test_write_teacher_target_internal_replay_net_removes_teacher_absent_cluster_member_residuals(
