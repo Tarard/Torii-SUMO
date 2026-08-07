@@ -580,6 +580,58 @@ def test_structure_pair_rejects_registered_lane_geometry_mismatch(tmp_path: Path
     assert "lane_geometry_mismatch" in report["reasons"]
 
 
+def test_structure_pair_accepts_subdecimeter_projection_noise(tmp_path: Path) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="", link_index="")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="", link_index="")
+    teacher.write_text(
+        teacher.read_text(encoding="utf-8").replace(
+            'id="out_0" index="0"', 'id="out_0" index="0" shape="0,0 10,0"'
+        ),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'id="out_0" index="0"', 'id="out_0" index="0" shape="0.01,0.01 10.01,0.01"'
+        ),
+        encoding="utf-8",
+    )
+
+    report = module.compare_lane_structure(
+        teacher,
+        candidate,
+        teacher_lane="in_0",
+        candidate_lane="in_0",
+        outgoing_lane_pairs={"out_0": "out_0"},
+    )
+
+    assert report["status"] == "pass"
+
+
+def test_structure_pair_rejects_priority_state_mismatch(tmp_path: Path) -> None:
+    module = _module()
+    teacher = _connection_net(tmp_path / "teacher.net.xml", target="out", tl="", link_index="")
+    candidate = _connection_net(tmp_path / "candidate.net.xml", target="out", tl="", link_index="")
+    teacher.write_text(
+        teacher.read_text(encoding="utf-8").replace('via=":j_0_0"', 'via=":j_0_0" state="M"'),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace('via=":j_0_0"', 'via=":j_0_0" state="m"'),
+        encoding="utf-8",
+    )
+
+    report = module.compare_lane_structure(
+        teacher,
+        candidate,
+        teacher_lane="in_0",
+        candidate_lane="in_0",
+        outgoing_lane_pairs={"out_0": "out_0"},
+    )
+
+    assert "priority_state_mismatch" in report["reasons"]
+
+
 def test_structure_pair_reuses_network_connection_indexes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -985,6 +1037,28 @@ def test_off_target_pass_palette_resolves_only_outside_registered_target_directi
         overlapping, structure_status="pass", selections=selections
     ) == overlapping
     assert module.resolve_off_target_pass_palette(
+        visual, structure_status="fail", selections=selections
+    ) == visual
+
+
+def test_registered_target_fragmentation_resolves_only_with_structure_and_selection() -> None:
+    module = _module()
+    visual = {
+        "status": "fail",
+        "reasons": ["target_component_mismatch"],
+        "layers": {"target": {"teacher_pixels": 100, "candidate_pixels": 140}},
+    }
+    selections = {"teacher": {"status": "pass"}, "candidate": {"status": "pass"}}
+
+    assert module.resolve_registered_target_fragmentation(
+        visual, structure_status="pass", selections=selections
+    ) == {
+        **visual,
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": ["target_component_mismatch_outside_registered_targets"],
+    }
+    assert module.resolve_registered_target_fragmentation(
         visual, structure_status="fail", selections=selections
     ) == visual
 

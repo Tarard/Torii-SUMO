@@ -10761,6 +10761,49 @@ def test_structural_connection_plan_does_not_count_raw_turnaround_as_connectivit
     assert report["structural_missing_lanes_by_source"] == {"in": [0]}
 
 
+def test_structural_connection_plan_counts_teacher_confirmed_raw_turnaround(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        '<connections><connection from="in" to="-in" fromLane="0" toLane="0"/></connections>',
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="-in" from="j" to="a"><lane index="0" allow="passenger"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={
+            "vehicle_connections": [
+                {"from": "in", "to": "-in", "fromLane": "0", "toLane": "0"}
+            ],
+            "crossings": [],
+        },
+        candidate_model={
+            "approaches": {
+                "incoming": [{"edge_id": "in", "lane_count": 1}],
+                "outgoing": [{"edge_id": "-in", "lane_count": 1}],
+            }
+        },
+        edge_map={},
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+    )
+
+    assert report["emitted_connection_count"] == 0
+    assert report["unresolved_structural_lanes"] == {}
+    assert report["unresolved_structural_target_lanes"] == {}
+
+
 def test_structural_connection_plan_does_not_count_bicycle_only_exit_as_motor_connectivity(
     tmp_path: Path,
 ) -> None:
@@ -15084,6 +15127,46 @@ def test_compound_turnaround_authority_resolves_sumo_shortened_teacher_cluster(t
     assert report["unresolved_candidate_turnaround_count"] == 0
 
 
+def test_compound_turnaround_authority_maps_neighbor_split_edges(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#8" from="x" to="neighbor"><lane id="road#8_0" index="0" allow="passenger"/></edge>
+  <edge id="-road#8" from="neighbor" to="x"><lane id="-road#8_0" index="0" allow="passenger"/></edge>
+  <junction id="target" type="priority" incLanes="" intLanes=""/>
+  <junction id="neighbor" type="priority" incLanes="road#8_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="-road#8_0" intLanes=""/>
+  <connection from="road#8" to="-road#8" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#9" from="x" to="neighbor"><lane id="road#9_0" index="0" allow="passenger"/></edge>
+  <edge id="-road#9" from="neighbor" to="x"><lane id="-road#9_0" index="0" allow="passenger"/></edge>
+  <junction id="target" type="priority" incLanes="" intLanes=""/>
+  <junction id="neighbor" type="priority" incLanes="road#9_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="-road#9_0" intLanes=""/>
+  <connection from="road#9" to="-road#9" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._compound_teacher_turnaround_evidence(
+        teacher_model=rebuild_candidate_module.extract_teacher_junction_model(teacher_net, "target"),
+        final_net_file=candidate_net,
+        junction_id="target",
+        edge_map={"road#8": "road#9", "-road#8": "-road#9"},
+        teacher_net_file=teacher_net,
+        teacher_junction_id="target",
+        compound_junction_ids=["neighbor"],
+    )
+
+    assert report["unresolved_candidate_turnaround_count"] == 0
+    assert report["authority_records"][0]["from_edge_id"] == "road#9"
+
+
 def test_reference_teacher_turnaround_authority_rejects_lane_vclass_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -16847,6 +16930,7 @@ def test_target_internal_replay_preserves_valid_neighbor_internal_connection_to_
   <edge id="main" from="old" to="j"><lane id="main_0" index="0" shape="0,1 10,1"/></edge>
   <edge id=":old_0" function="internal"><lane id=":old_0_0" index="0"/></edge>
   <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=":old_0_0"/>
+  <junction id=":old_0_0" type="internal" incLanes=":old_0_0 main_0" intLanes=""/>
   <junction id="j" type="priority" x="10" y="0" incLanes="main_0" intLanes=""/>
   <connection from=":old_0" to="main" fromLane="0" toLane="0" dir="s"/>
 </net>""",
@@ -16865,7 +16949,39 @@ def test_target_internal_replay_preserves_valid_neighbor_internal_connection_to_
 
     root = ET.parse(report["net_file"]).getroot()
     assert root.find("connection[@from=':old_0'][@to='main']") is not None
+    assert root.find("junction[@id=':old_0_0']").attrib["incLanes"] == ":old_0_0 main_0"
     assert report["removed_stale_replaced_edge_connection_count"] == 0
+
+
+def test_target_internal_replay_preserves_shape_from_declared_source(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        '<net><junction id="j" type="priority" x="0" y="0" shape="-2,-2 2,-2 2,2 -2,2"/></net>',
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        '<net><junction id="j" type="priority" x="0" y="0" shape="-3,-3 3,-3 3,3 -3,3"/></net>',
+        encoding="utf-8",
+    )
+    shape_source = tmp_path / "shape-source.net.xml"
+    shape_source.write_text(
+        '<net><junction id="j" type="priority" x="0" y="0" shape="-1,-1 1,-1 1,1 -1,1"/></net>',
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={},
+        preserve_target_junction_shape=True,
+        target_junction_shape_source_file=shape_source,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("junction[@id='j']").attrib["shape"] == "-1,-1 1,-1 1,1 -1,1"
 
 
 def test_target_internal_replay_preserves_valid_remote_internal_connection_when_lane_is_added(
@@ -19329,6 +19445,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
     assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
+    assert report["compound_core_final_replay"]["status"] == "pass"
     assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is False
     assert report["compound_internal_replays"][0]["copy_unmapped_boundary_edges"] is False
     assert report["connection_plan"]["structural_teacher_junction_ids"] == ["j"]

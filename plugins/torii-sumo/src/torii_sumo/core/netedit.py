@@ -587,11 +587,20 @@ def _activate_target_window(hwnd: int, pid: int) -> dict[str, Any]:
     }
     try:
         focus = _focus_canvas(hwnd)
-        _set_foreground_and_focus(hwnd, focus)
-        foreground = int(win32gui.GetForegroundWindow())
-        observed_focus = _gui_focus(hwnd)
-        if foreground != hwnd or not (observed_focus == hwnd or win32gui.IsChild(hwnd, observed_focus)):
-            raise RuntimeError("NetEdit did not acquire exact foreground and keyboard focus")
+        for attempt in range(2):
+            try:
+                _set_foreground_and_focus(hwnd, focus)
+                foreground = int(win32gui.GetForegroundWindow())
+                observed_focus = _gui_focus(hwnd)
+                if foreground != hwnd or not (
+                    observed_focus == hwnd or win32gui.IsChild(hwnd, observed_focus)
+                ):
+                    raise RuntimeError("NetEdit did not acquire exact foreground and keyboard focus")
+                break
+            except Exception:
+                if attempt:
+                    raise
+                time.sleep(0.1)
     except Exception:
         restored = _restore_input_context(context)
         if not restored["restored"]:

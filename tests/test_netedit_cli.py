@@ -777,6 +777,45 @@ def test_real_input_waits_for_target_and_requires_context_restore(
     assert sleeps == [0.25]
 
 
+def test_target_window_activation_retries_one_transient_focus_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGui:
+        calls = 0
+
+        @classmethod
+        def GetForegroundWindow(cls):
+            cls.calls += 1
+            return 7 if cls.calls == 1 else 42
+
+        @staticmethod
+        def GetCursorPos():
+            return 1, 2
+
+        @staticmethod
+        def IsChild(_parent, _child):
+            return False
+
+    attempts = []
+
+    def flaky_focus(_hwnd: int, _focus: int) -> None:
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError("transient foreground denial")
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit, "_gui_focus", lambda hwnd: hwnd)
+    monkeypatch.setattr(netedit, "_focus_canvas", lambda hwnd: hwnd)
+    monkeypatch.setattr(netedit, "_set_foreground_and_focus", flaky_focus)
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    report = netedit._activate_target_window(42, 9001)
+
+    assert len(attempts) == 2
+    assert report["target_foreground_hwnd"] == 42
+
+
 def test_real_input_requires_and_records_english_keyboard_layout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

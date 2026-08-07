@@ -979,6 +979,8 @@ def write_teacher_connection_plan(
         key = (source, target, str(from_lane), str(to_lane))
         allowed_pairs.add((source, target))
         if key in seen_connections:
+            structural_emitted_lanes_by_source.setdefault(source, set()).add(from_lane)
+            structural_emitted_lanes_by_target.setdefault(target, set()).add(to_lane)
             continue
         seen_connections.add(key)
         attributes = {"from": source, "to": target, "fromLane": str(from_lane), "toLane": str(to_lane)}
@@ -2193,6 +2195,7 @@ def write_teacher_target_internal_replay_net(
     prune_unmapped_micro_boundary_edges: bool = False,
     prune_strict_unmapped_outgoing_boundary_edges: bool = False,
     preserve_target_junction_shape: bool = False,
+    target_junction_shape_source_file: Path | None = None,
     prefer_network_location_offset: bool = False,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
@@ -2223,6 +2226,17 @@ def write_teacher_target_internal_replay_net(
         return _failure(f"teacher junction not found: {junction_id}")
     original_target_junction_shape = target_candidate_junction.attrib.get("shape")
     original_target_custom_shape = target_candidate_junction.attrib.get("customShape")
+    if preserve_target_junction_shape and target_junction_shape_source_file is not None:
+        try:
+            shape_source_junction = ET.parse(target_junction_shape_source_file).getroot().find(
+                f"junction[@id='{junction_id}']"
+            )
+        except (ET.ParseError, OSError) as exc:
+            return _failure(f"target junction shape source unreadable: {type(exc).__name__}: {exc}")
+        if shape_source_junction is None:
+            return _failure(f"target junction shape source missing junction: {junction_id}")
+        original_target_junction_shape = shape_source_junction.attrib.get("shape")
+        original_target_custom_shape = shape_source_junction.attrib.get("customShape")
 
     dx = float(target_candidate_junction.attrib.get("x", "0") or 0) - float(teacher_junction.attrib.get("x", "0") or 0)
     dy = float(target_candidate_junction.attrib.get("y", "0") or 0) - float(teacher_junction.attrib.get("y", "0") or 0)
@@ -2574,11 +2588,17 @@ def write_teacher_target_internal_replay_net(
                         max_endpoint_delta=None,
                     )
             insert_at = list(candidate_root).index(replaced_edge)
-            _remove_edge_lanes_from_destination_junction(
-                candidate_root,
-                replaced_edge,
-                all_junctions=True,
-            )
+            if (
+                replaced_edge.attrib.get("from") != copied_edge.attrib.get("from")
+                or replaced_edge.attrib.get("to") != copied_edge.attrib.get("to")
+                or {lane.attrib.get("id", "") for lane in replaced_edge.findall("lane")}
+                != {lane.attrib.get("id", "") for lane in copied_edge.findall("lane")}
+            ):
+                _remove_edge_lanes_from_destination_junction(
+                    candidate_root,
+                    replaced_edge,
+                    all_junctions=True,
+                )
             candidate_root.remove(replaced_edge)
             candidate_edge_ids.remove(copied_edge_id)
             replaced_boundary_edge_ids.add(copied_edge_id)
@@ -6414,6 +6434,12 @@ def build_teacher_guided_junction_variant(
         if str(value)
     }
     lane_cardinality_geometry_anchor_junction_ids = lane_cardinality_neighbor_junction_ids - {junction_id}
+    if preserve_target_junction_shape:
+        lane_cardinality_geometry_anchor_junction_ids.update(
+            str(value)
+            for value in lane_patch_report.get("mapped_edge_endpoint_junction_ids", []) or []
+            if str(value) and str(value) != junction_id
+        )
     compound_junction_ids = sorted({*compound_junction_ids, *lane_cardinality_neighbor_junction_ids})
     mapped_geometry_neighbor_junction_ids = (
         {
@@ -6763,6 +6789,7 @@ def build_teacher_guided_junction_variant(
     )
     target_internal_replay_report = None
     compound_internal_replay_reports: list[dict[str, object]] = []
+    compound_core_final_replay_report = None
     target_internal_replay_fallback = False
     target_internal_replay_fallback_tl_logic_report = None
     target_internal_replay_fallback_sumo_report = None
@@ -6812,6 +6839,7 @@ def build_teacher_guided_junction_variant(
             prune_unmapped_micro_boundary_edges=strict_teacher_replay,
             prune_strict_unmapped_outgoing_boundary_edges=strict_teacher_replay,
             preserve_target_junction_shape=preserve_target_junction_shape,
+            target_junction_shape_source_file=(candidate_net_file if preserve_target_junction_shape else None),
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -6923,6 +6951,40 @@ def build_teacher_guided_junction_variant(
                         },
                     )
                 tl_logic_input_file = compound_output_file
+            if compound_internal_replay_reports:
+                compound_core_final_file = _stage_file(
+                    output_dir,
+                    prefix,
+                    "compound_core_final.net.xml",
+                )
+                compound_core_final_replay_report = write_teacher_target_internal_replay_net(
+                    candidate_net_file=tl_logic_input_file,
+                    teacher_net_file=teacher_net_file,
+                    output_file=compound_core_final_file,
+                    junction_id=junction_id,
+                    edge_map=edge_map,
+                    teacher_junction_id=teacher_junction_id,
+                    copy_unmapped_boundary_edges=True,
+                    preserve_mapped_boundary_endpoints=True,
+                    preserve_unmapped_boundary_edges=True,
+                    prune_unmapped_micro_boundary_edges=True,
+                    prune_strict_unmapped_outgoing_boundary_edges=True,
+                    preserve_target_junction_shape=preserve_target_junction_shape,
+                    target_junction_shape_source_file=(candidate_net_file if preserve_target_junction_shape else None),
+                )
+                if compound_core_final_replay_report.get("status") != "pass":
+                    return _write_teacher_guided_report(
+                        report_file,
+                        {
+                            "status": "fail",
+                            "claim_status": "construction-invalid",
+                            "junction_id": junction_id,
+                            "target_internal_replay": target_internal_replay_report,
+                            "compound_internal_replays": compound_internal_replay_reports,
+                            "compound_core_final_replay": compound_core_final_replay_report,
+                        },
+                    )
+                tl_logic_input_file = compound_core_final_file
             target_internal_replay_file = tl_logic_input_file
 
     tl_logic_report = write_teacher_tllogic_net(
@@ -7540,15 +7602,6 @@ def build_teacher_guided_junction_variant(
         for item in surface_overlap_report.get("non_area_junction_exclusions", []) or []
         if isinstance(item, dict) and item.get("junction_id") in set(compound_junction_ids)
     ]
-    baseline_surface_overlap_report_file = output_dir / f"{prefix}_baseline_surface_overlap.json"
-    baseline_surface_overlap_report = (
-        audit_sumo_lane_junction_surface_overlaps(
-            candidate_net_file,
-            report_file=baseline_surface_overlap_report_file,
-        )
-        if target_related_surface_overlaps or target_related_non_area_exclusions
-        else None
-    )
     target_junction_surface_overlaps = [
         item
         for item in surface_overlap_report.get("junction_junction_overlaps", []) or []
@@ -7559,6 +7612,17 @@ def build_teacher_guided_junction_variant(
             item.get("second_junction_id", ""),
         }
     ]
+    baseline_surface_overlap_report_file = output_dir / f"{prefix}_baseline_surface_overlap.json"
+    baseline_surface_overlap_report = (
+        audit_sumo_lane_junction_surface_overlaps(
+            candidate_net_file,
+            report_file=baseline_surface_overlap_report_file,
+        )
+        if target_related_surface_overlaps
+        or target_related_non_area_exclusions
+        or target_junction_surface_overlaps
+        else None
+    )
     reference_surface_overlap_report_file = output_dir / f"{prefix}_reference_surface_overlap.json"
     reference_surface_overlap_report = (
         audit_sumo_lane_junction_surface_overlaps(
@@ -7604,6 +7668,10 @@ def build_teacher_guided_junction_variant(
         and isinstance(target_internal_replay_report, dict)
     ):
         comparison_edge_map = _valid_edge_map(target_internal_replay_report.get("effective_edge_map", {})) or edge_map
+    for compound_replay_report in compound_internal_replay_reports:
+        comparison_edge_map.update(
+            _valid_edge_map(compound_replay_report.get("effective_edge_map", {}))
+        )
     parity = _compare_teacher_models(
         teacher_model,
         final_model,
@@ -7784,6 +7852,7 @@ def build_teacher_guided_junction_variant(
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
             "compound_internal_replays": compound_internal_replay_reports,
+            "compound_core_final_replay": compound_core_final_replay_report,
             "normalization_scope_junction_ids": sorted(internal_restore_exclude_junction_ids),
             "target_internal_replay_fallback_tl_logic": target_internal_replay_fallback_tl_logic_report,
             "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
@@ -11953,8 +12022,8 @@ def _compound_teacher_turnaround_evidence(
 
     teacher_connections = {
         (
-            row.attrib.get("from", ""),
-            row.attrib.get("to", ""),
+            edge_map.get(row.attrib.get("from", ""), row.attrib.get("from", "")),
+            edge_map.get(row.attrib.get("to", ""), row.attrib.get("to", "")),
             row.attrib.get("fromLane", "0"),
             row.attrib.get("toLane", "0"),
         ): row
@@ -11994,8 +12063,10 @@ def _compound_teacher_turnaround_evidence(
         if signature in authorized_signatures:
             continue
         teacher_connection = teacher_connections.get(signature)
-        teacher_source_classes = lane_classes(teacher_edges, source, signature[2])
-        teacher_target_classes = lane_classes(teacher_edges, target, signature[3])
+        teacher_source = teacher_connection.attrib.get("from", "") if teacher_connection is not None else source
+        teacher_target = teacher_connection.attrib.get("to", "") if teacher_connection is not None else target
+        teacher_source_classes = lane_classes(teacher_edges, teacher_source, signature[2])
+        teacher_target_classes = lane_classes(teacher_edges, teacher_target, signature[3])
         candidate_source_classes = lane_classes(candidate_edges, source, signature[2])
         candidate_target_classes = lane_classes(candidate_edges, target, signature[3])
         teacher_classes = (
@@ -12033,7 +12104,7 @@ def _compound_teacher_turnaround_evidence(
                     "from_lane": signature[2],
                     "to_lane": signature[3],
                     "evidence_kind": "reference_teacher_movement",
-                    "evidence_ids": [f"{teacher_sha256}:{teacher_edges[source].attrib.get('to', '')}"],
+                    "evidence_ids": [f"{teacher_sha256}:{teacher_edges[teacher_source].attrib.get('to', '')}"],
                 }
             )
             authorized_signatures.add(signature)

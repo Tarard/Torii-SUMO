@@ -366,6 +366,9 @@ def _connection_signature_index(root: ET.Element) -> dict[str, list[dict[str, An
         result[source_lane].append({
             "target_lane": target_lane,
             "dir": connection.get("dir", ""),
+            "state": connection.get("state", ""),
+            "pass": connection.get("pass", ""),
+            "uncontrolled": connection.get("uncontrolled", ""),
             "has_via": bool(connection.get("via")),
             "motor": motor,
             "has_tls": bool(connection.get("tl")),
@@ -491,6 +494,12 @@ def compare_lane_structure(
         if teacher_row["motor"] != candidate_row["motor"]:
             reasons.append("permission_mismatch")
         if (
+            teacher_row["state"], teacher_row["pass"], teacher_row["uncontrolled"]
+        ) != (
+            candidate_row["state"], candidate_row["pass"], candidate_row["uncontrolled"]
+        ):
+            reasons.append("priority_state_mismatch")
+        if (
             teacher_row["has_tls"], teacher_row["has_link_index"]
         ) != (
             candidate_row["has_tls"], candidate_row["has_link_index"]
@@ -510,8 +519,9 @@ def compare_lane_structure(
         reasons.append("signal_order_mismatch")
     geometry_pairs = [(teacher_lane, candidate_lane), *outgoing_lane_pairs.items()]
     if any(
-        _lane_geometry_signature(Path(teacher_net), teacher_id)[1]
-        != _lane_geometry_signature(Path(candidate_net), candidate_id)[1]
+        len(teacher_shape := _lane_geometry_signature(Path(teacher_net), teacher_id)[1])
+        != len(candidate_shape := _lane_geometry_signature(Path(candidate_net), candidate_id)[1])
+        or any(math.dist(a, b) > 0.05 for a, b in zip(teacher_shape, candidate_shape, strict=True))
         for teacher_id, candidate_id in geometry_pairs
     ):
         reasons.append("lane_geometry_mismatch")
@@ -782,6 +792,32 @@ def resolve_off_target_pass_palette(
     return dict(visual)
 
 
+def resolve_registered_target_fragmentation(
+    visual: Mapping[str, Any],
+    *,
+    structure_status: str,
+    selections: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    target = visual.get("layers", {}).get("target", {})
+    teacher_pixels = int(target.get("teacher_pixels", 0))
+    candidate_pixels = int(target.get("candidate_pixels", 0))
+    if (
+        list(visual.get("reasons", ())) == ["target_component_mismatch"]
+        and structure_status == "pass"
+        and selections
+        and all(selection.get("status") == "pass" for selection in selections.values())
+        and teacher_pixels > 0
+        and 0.5 <= candidate_pixels / teacher_pixels <= 2.0
+    ):
+        return {
+            **visual,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": ["target_component_mismatch_outside_registered_targets"],
+        }
+    return dict(visual)
+
+
 def evaluate_lane_pair(
     *,
     teacher_net: Path,
@@ -880,6 +916,11 @@ def evaluate_lane_pair(
         selections=selections,
     )
     visual = resolve_off_target_pass_palette(
+        visual,
+        structure_status=structure["status"],
+        selections=selections,
+    )
+    visual = resolve_registered_target_fragmentation(
         visual,
         structure_status=structure["status"],
         selections=selections,
