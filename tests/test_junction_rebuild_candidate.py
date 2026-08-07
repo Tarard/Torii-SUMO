@@ -16459,7 +16459,7 @@ def test_teacher_target_replay_restores_remote_connections_and_keeps_teacher_sha
     assert root.find("connection[@from='candidate_out'][@to='after']") is not None
     assert root.find("connection[@from=':b_0'][@to='after']") is not None
     assert report["blended_geometry_anchor_edge_ids"] == ["candidate_in", "candidate_out"]
-    assert report["target_shape_anchor"]["reason"] == "no_approach_endpoints"
+    assert report["target_shape_anchor"]["reason"] == "declared_target_junction_shape_preserved"
     assert root.find("junction[@id='candidate']").attrib["shape"] == "-2,-2 2,-2 2,2 -2,2"
 
 
@@ -16982,6 +16982,70 @@ def test_target_internal_replay_preserves_shape_from_declared_source(tmp_path: P
 
     root = ET.parse(report["net_file"]).getroot()
     assert root.find("junction[@id='j']").attrib["shape"] == "-1,-1 1,-1 1,1 -1,1"
+
+
+def test_declared_shape_preservation_skips_geometry_anchor_expansion(tmp_path: Path) -> None:
+    network = (
+        '<net><edge id="main" from="a" to="j"><lane id="main_0" index="0" '
+        'shape="-10,0 4,0"/></edge><junction id="a" type="priority" x="-10" y="0"/>'
+        '<junction id="j" type="priority" x="0" y="0" incLanes="main_0" '
+        'shape="-1,-1 1,-1 1,1 -1,1"/></net>'
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    shape_source = tmp_path / "shape-source.net.xml"
+    for path in (teacher_net, candidate_net, shape_source):
+        path.write_text(network, encoding="utf-8")
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"main": "main"},
+        geometry_anchor_edge_file=shape_source,
+        preserve_target_junction_shape=True,
+        target_junction_shape_source_file=shape_source,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("junction[@id='j']").attrib["shape"] == "-1,-1 1,-1 1,1 -1,1"
+    assert report["target_shape_anchor"]["reason"] == "declared_target_junction_shape_preserved"
+
+
+def test_restore_junction_shape_attrs_restores_only_declared_scope(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    target = tmp_path / "target.net.xml"
+    source.write_text(
+        '<net><edge id="keep-edge" from="keep" to="other">'
+        '<lane id="keep-edge_0" index="0" shape="0,0 1,1" length="1.41"/></edge>'
+        '<junction id="keep" shape="0,0 1,0 0,1" customShape="true"/>'
+        '<junction id="other" shape="2,2 3,2 2,3"/></net>',
+        encoding="utf-8",
+    )
+    target.write_text(
+        '<net><edge id="keep-edge" from="keep" to="other">'
+        '<lane id="keep-edge_0" index="0" shape="9,9 10,10" length="9.99"/></edge>'
+        '<junction id="keep" shape="9,9 10,9 9,10"/>'
+        '<junction id="other" shape="8,8 9,8 8,9"/></net>',
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._restore_junction_shape_attrs(
+        source_file=source,
+        target_file=target,
+        junction_ids={"keep"},
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_junction_ids"] == ["keep"]
+    assert report["restored_incident_lane_count"] == 1
+    assert root.find("edge[@id='keep-edge']/lane").attrib["shape"] == "0,0 1,1"
+    assert root.find("edge[@id='keep-edge']/lane").attrib["length"] == "1.41"
+    assert root.find("junction[@id='keep']").attrib["shape"] == "0,0 1,0 0,1"
+    assert root.find("junction[@id='keep']").attrib["customShape"] == "true"
+    assert root.find("junction[@id='other']").attrib["shape"] == "8,8 9,8 8,9"
 
 
 def test_target_internal_replay_preserves_valid_remote_internal_connection_when_lane_is_added(
@@ -19319,7 +19383,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="teacher_in_0 teacher_ped_0" intLanes=":j_c0_0 :j_w0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
-  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes=""/>
+  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes="" shape="19,-1 21,-1 20,1"/>
   <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
   <connection from="teacher_ped" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
@@ -19338,7 +19402,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
   <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0" shape="0,0 10,0"/></edge>
   <edge id="cand_ped" from="p" to="j" type="highway.footway"><lane id="cand_ped_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0 cand_ped_0" intLanes=""/>
-  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes=""/>
+  <junction id="s" type="priority" x="20" y="0" incLanes="" intLanes="" shape="19,-1 21,-1 20,1"/>
 </net>
 """,
         encoding="utf-8",
@@ -19365,6 +19429,19 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
         '<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8"
     )
     calls: list[list[str]] = []
+    compound_edge_map_calls = 0
+    real_teacher_candidate_edge_map = rebuild_candidate_module._teacher_candidate_edge_map
+
+    def recording_teacher_candidate_edge_map(*args, **kwargs):
+        nonlocal compound_edge_map_calls
+        compound_edge_map_calls += 1
+        return real_teacher_candidate_edge_map(*args, **kwargs)
+
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "_teacher_candidate_edge_map",
+        recording_teacher_candidate_edge_map,
+    )
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         calls.append(command)
@@ -19446,8 +19523,9 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert [row["junction_id"] for row in report["compound_internal_replays"]] == ["s"]
     assert report["compound_internal_replays"][0]["blend_geometry_anchor_at_target"] is True
     assert report["compound_core_final_replay"]["status"] == "pass"
-    assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is False
+    assert report["compound_internal_replays"][0]["preserve_target_junction_shape"] is True
     assert report["compound_internal_replays"][0]["copy_unmapped_boundary_edges"] is False
+    assert compound_edge_map_calls == 1
     assert report["connection_plan"]["structural_teacher_junction_ids"] == ["j"]
     assert report["connection_plan"]["emit_crossings"] is False
     assert report["connection_plan"]["emitted_crossing_count"] == 0
@@ -19458,6 +19536,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["parity"]["delta"]["pedestrian_connection_count"] == 0
     root = ET.parse(report["final_net_file"]).getroot()
     assert root.find("edge[@id=':j_c0']") is not None
+    assert root.find("junction[@id='s']").attrib["shape"] == "19,-1 21,-1 20,1"
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
 
 

@@ -3623,7 +3623,12 @@ def write_teacher_target_internal_replay_net(
         )
 
     unblended_geometry_anchor_edge_ids = geometry_anchor_edge_ids - set(blended_geometry_anchor_edge_ids)
-    if geometry_anchor_edge_ids and not unblended_geometry_anchor_edge_ids:
+    if preserve_target_junction_shape:
+        target_shape_anchor_report = {
+            "status": "skipped",
+            "reason": "declared_target_junction_shape_preserved",
+        }
+    elif geometry_anchor_edge_ids and not unblended_geometry_anchor_edge_ids:
         target_shape_anchor_report = {
             "status": "skipped",
             "reason": "all_geometry_anchor_edges_blended_at_target",
@@ -6881,7 +6886,14 @@ def build_teacher_guided_junction_variant(
                 )
                 if not teacher_compound_junction_id:
                     continue
-                compound_edge_map = dict(edge_map)
+                compound_edge_map = _teacher_candidate_edge_map(
+                    extract_teacher_junction_model(teacher_net_file, teacher_compound_junction_id),
+                    extract_teacher_junction_model(tl_logic_input_file, candidate_compound_junction_id),
+                    teacher_junction_id=teacher_compound_junction_id,
+                    candidate_junction_id=candidate_compound_junction_id,
+                    drop_endpoint_mismatches=False,
+                    max_bearing_delta=45.0,
+                )
                 for boundary_edge_id in (
                     _external_boundary_edge_ids(teacher_net_file, teacher_compound_junction_id)
                     & _external_boundary_edge_ids(tl_logic_input_file, candidate_compound_junction_id)
@@ -6906,7 +6918,8 @@ def build_teacher_guided_junction_variant(
                     preserve_unmapped_boundary_edges=True,
                     prune_unmapped_micro_boundary_edges=True,
                     prune_strict_unmapped_outgoing_boundary_edges=True,
-                    preserve_target_junction_shape=False,
+                    preserve_target_junction_shape=True,
+                    target_junction_shape_source_file=candidate_net_file,
                 )
                 compound_report["junction_id"] = candidate_compound_junction_id
                 compound_report["teacher_junction_id"] = teacher_compound_junction_id
@@ -7320,6 +7333,13 @@ def build_teacher_guided_junction_variant(
                 exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
                 restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
             )
+            target_internal_normalize_report["compound_junction_shape_restore"] = (
+                _restore_junction_shape_attrs(
+                    source_file=target_internal_replay_file,
+                    target_file=target_internal_normalized_net_file,
+                    junction_ids=set(internal_restore_exclude_junction_ids) - {junction_id},
+                )
+            )
             normalized_tl_logic_report = write_teacher_tllogic_net(
                 candidate_net_file=target_internal_normalized_net_file,
                 output_file=final_net_file,
@@ -7352,6 +7372,13 @@ def build_teacher_guided_junction_variant(
                         junction_id=junction_id,
                         exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
                         restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
+                    )
+                    target_internal_normalize_report["unrestored_compound_junction_shape_restore"] = (
+                        _restore_junction_shape_attrs(
+                            source_file=target_internal_replay_file,
+                            target_file=target_internal_normalized_unrestored_net_file,
+                            junction_ids=set(internal_restore_exclude_junction_ids) - {junction_id},
+                        )
                     )
                     unrestored_tl_logic_report = write_teacher_tllogic_net(
                         candidate_net_file=target_internal_normalized_unrestored_net_file,
@@ -7411,6 +7438,13 @@ def build_teacher_guided_junction_variant(
                 junction_id=junction_id,
                 exclude_adjacent_junction_ids=internal_restore_exclude_junction_ids - {junction_id},
                 restore_edges_to_excluded_adjacent_junctions=strict_teacher_replay,
+            )
+            teacher_guided_normalize_report["compound_junction_shape_restore"] = (
+                _restore_junction_shape_attrs(
+                    source_file=final_net_file,
+                    target_file=teacher_guided_normalized_net_file,
+                    junction_ids=set(internal_restore_exclude_junction_ids) - {junction_id},
+                )
             )
             normalized_final_sumo_command = [
                 sumo_binary,
@@ -19647,6 +19681,58 @@ def _restore_non_target_internal_artifacts(
         ),
         "missing_non_target_tllogic_count": tl_logic_report["missing_source_tllogic_count"],
         "missing_non_target_tllogic_ids": tl_logic_report["missing_source_tllogic_ids"],
+    }
+
+
+def _restore_junction_shape_attrs(
+    *,
+    source_file: Path,
+    target_file: Path,
+    junction_ids: set[str],
+) -> dict[str, object]:
+    source_root = ET.parse(source_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    source_junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id") in junction_ids
+    }
+    restored = []
+    missing = []
+    for junction_id in sorted(junction_ids):
+        source_junction = source_junctions.get(junction_id)
+        target_junction = target_root.find(f"junction[@id='{junction_id}']")
+        if source_junction is None or target_junction is None:
+            missing.append(junction_id)
+            continue
+        for attr in ("shape", "customShape"):
+            if attr in source_junction.attrib:
+                target_junction.set(attr, source_junction.attrib[attr])
+            else:
+                target_junction.attrib.pop(attr, None)
+        restored.append(junction_id)
+    target_edges = {
+        edge.attrib.get("id", ""): edge for edge in target_root.findall("edge") if edge.attrib.get("id")
+    }
+    restored_incident_lane_count = 0
+    for source_edge in source_root.findall("edge"):
+        if not junction_ids & {source_edge.attrib.get("from", ""), source_edge.attrib.get("to", "")}:
+            continue
+        target_edge = target_edges.get(source_edge.attrib.get("id", ""))
+        if target_edge is None:
+            continue
+        before = [lane.attrib.get("shape", "") for lane in target_edge.findall("lane")]
+        _restore_existing_edge_geometry(target_edge, source_edge, target_root)
+        after = [lane.attrib.get("shape", "") for lane in target_edge.findall("lane")]
+        restored_incident_lane_count += sum(a != b for a, b in zip(before, after, strict=False))
+    ET.indent(target_root, space="    ")
+    target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass" if not missing else "fail",
+        "restored_junction_ids": restored,
+        "restored_incident_lane_count": restored_incident_lane_count,
+        "missing_junction_ids": missing,
     }
 
 
