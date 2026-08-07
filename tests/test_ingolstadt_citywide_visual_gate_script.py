@@ -1064,6 +1064,67 @@ def test_registered_target_fragmentation_resolves_only_with_structure_and_select
 
 
 @pytest.mark.parametrize(
+    ("reason", "structure_status", "structure_reasons"),
+    [
+        ("conflict_layer_extra", "fail", ["lane_geometry_mismatch"]),
+        ("source_direction_missing", "pass", []),
+    ],
+)
+def test_registered_target_noise_resolves_with_semantic_structure(
+    reason: str,
+    structure_status: str,
+    structure_reasons: list[str],
+) -> None:
+    module = _module()
+    visual = {
+        "status": "fail",
+        "reasons": [reason],
+        "layers": {
+            "target": {
+                "teacher_pixels": 100,
+                "candidate_pixels": 80,
+                "teacher_angular_bins": [0, 1],
+                "candidate_angular_bins": [0, 1],
+            }
+        },
+    }
+    selections = {"teacher": {"status": "pass"}, "candidate": {"status": "pass"}}
+
+    resolved = module.resolve_registered_target_fragmentation(
+        visual,
+        structure_status=structure_status,
+        structure_reasons=structure_reasons,
+        selections=selections,
+    )
+
+    assert resolved["status"] == "pass"
+    assert resolved["resolved_reasons"] == [f"{reason}_outside_registered_targets"]
+    if reason == "source_direction_missing":
+        mismatched = {
+            **visual,
+            "layers": {"target": {**visual["layers"]["target"], "candidate_angular_bins": [2]}},
+        }
+        assert module.resolve_registered_target_fragmentation(
+            mismatched,
+            structure_status=structure_status,
+            structure_reasons=structure_reasons,
+            selections=selections,
+        ) == mismatched
+
+
+def test_registered_lane_geometry_resolves_only_after_visual_pass() -> None:
+    module = _module()
+    structure = {"status": "fail", "reasons": ["lane_geometry_mismatch"]}
+
+    assert module.resolve_registered_lane_geometry(structure, visual_status="pass") == {
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": ["lane_geometry_mismatch_under_candidate_geometry_authority"],
+    }
+    assert module.resolve_registered_lane_geometry(structure, visual_status="fail") == structure
+
+
+@pytest.mark.parametrize(
     ("selection", "structure_status", "visual_status"),
     [
         ({"target_lane_group_count": 1, "visible_target_lane_group_count": 0}, "pass", "pass"),

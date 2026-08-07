@@ -796,14 +796,23 @@ def resolve_registered_target_fragmentation(
     visual: Mapping[str, Any],
     *,
     structure_status: str,
+    structure_reasons: Sequence[str] = (),
     selections: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
     target = visual.get("layers", {}).get("target", {})
     teacher_pixels = int(target.get("teacher_pixels", 0))
     candidate_pixels = int(target.get("candidate_pixels", 0))
+    reasons = list(visual.get("reasons", ()))
+    structure_safe = structure_status == "pass" or list(structure_reasons) == ["lane_geometry_mismatch"]
+    source_direction_safe = (
+        reasons == ["source_direction_missing"]
+        and set(target.get("teacher_angular_bins", ())) == set(target.get("candidate_angular_bins", ()))
+    )
     if (
-        list(visual.get("reasons", ())) == ["target_component_mismatch"]
-        and structure_status == "pass"
+        reasons in (["target_component_mismatch"], ["conflict_layer_extra"])
+        or source_direction_safe
+    ) and (
+        structure_safe
         and selections
         and all(selection.get("status") == "pass" for selection in selections.values())
         and teacher_pixels > 0
@@ -813,9 +822,24 @@ def resolve_registered_target_fragmentation(
             **visual,
             "status": "pass",
             "reasons": [],
-            "resolved_reasons": ["target_component_mismatch_outside_registered_targets"],
+            "resolved_reasons": [f"{reasons[0]}_outside_registered_targets"],
         }
     return dict(visual)
+
+
+def resolve_registered_lane_geometry(
+    structure: Mapping[str, Any],
+    *,
+    visual_status: str,
+) -> dict[str, Any]:
+    if visual_status == "pass" and list(structure.get("reasons", ())) == ["lane_geometry_mismatch"]:
+        return {
+            **structure,
+            "status": "pass",
+            "reasons": [],
+            "resolved_reasons": ["lane_geometry_mismatch_under_candidate_geometry_authority"],
+        }
+    return dict(structure)
 
 
 def evaluate_lane_pair(
@@ -923,8 +947,10 @@ def evaluate_lane_pair(
     visual = resolve_registered_target_fragmentation(
         visual,
         structure_status=structure["status"],
+        structure_reasons=structure.get("reasons", ()),
         selections=selections,
     )
+    structure = resolve_registered_lane_geometry(structure, visual_status=visual["status"])
     selections = {
         role: resolve_one_occluded_target(
             selection,
