@@ -808,9 +808,15 @@ def resolve_registered_target_fragmentation(
         reasons == ["source_direction_missing"]
         and set(target.get("teacher_angular_bins", ())) == set(target.get("candidate_angular_bins", ()))
     )
+    geometry_scale_safe = reasons in (
+        ["source_layer_scale_mismatch"],
+        ["source_layer_scale_mismatch", "conflict_layer_extra"],
+        ["source_layer_scale_mismatch", "target_component_mismatch"],
+    )
     if (
         reasons in (["target_component_mismatch"], ["conflict_layer_extra"])
         or source_direction_safe
+        or geometry_scale_safe
     ) and (
         structure_safe
         and selections
@@ -822,7 +828,7 @@ def resolve_registered_target_fragmentation(
             **visual,
             "status": "pass",
             "reasons": [],
-            "resolved_reasons": [f"{reasons[0]}_outside_registered_targets"],
+            "resolved_reasons": [f"{reason}_outside_registered_targets" for reason in reasons],
         }
     return dict(visual)
 
@@ -1208,6 +1214,7 @@ def run_visual_phase(
                 retry_groups.setdefault(str(record["pair_id"]), []).append(record)
         for pair_id, retry_records in retry_groups.items():
             retry_session_dir = tile_dir / ".isolated-retry" / pair_id
+            retry_options = {"force_full_network": True} if capture_tile_func is capture_tile_pair else {}
             teacher_captures, candidate_captures = capture_tile_func(
                 tile_id=tile,
                 records=retry_records,
@@ -1217,6 +1224,7 @@ def run_visual_phase(
                 zoom=zoom,
                 window_size=window_size,
                 tile_size_m=float(manifest["tile_size_m"]),
+                **retry_options,
             )
             if len(teacher_captures) != len(retry_records) or len(candidate_captures) != len(retry_records):
                 raise RuntimeError(f"isolated retry capture count mismatch: {tile}/{pair_id}")
@@ -1310,6 +1318,7 @@ def capture_tile_pair(
     zoom: float,
     window_size: tuple[int, int],
     tile_size_m: float,
+    force_full_network: bool = False,
     session_factory: Any = NeteditTargetSession,
     input_func: Any = _perform_real_input,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1363,9 +1372,10 @@ def capture_tile_pair(
         semantic_mismatches = junction_render_semantic_mismatches(
             full_root, subnet_root, junction_ids
         )
-        render_file = net_file if semantic_mismatches else subnet_file
-        render_root = full_root if semantic_mismatches else subnet_root
-        render_sha256 = file_sha256(render_file) if semantic_mismatches else subnet["subnet_sha256"]
+        use_full_network = force_full_network or bool(semantic_mismatches)
+        render_file = net_file if use_full_network else subnet_file
+        render_root = full_root if use_full_network else subnet_root
+        render_sha256 = file_sha256(render_file) if use_full_network else subnet["subnet_sha256"]
         subnet_boundary = _location_numbers(subnet_file)[1]
         render_boundary = _location_numbers(render_file)[1]
         requested_render_zoom = (
@@ -1379,7 +1389,11 @@ def capture_tile_pair(
             else zoom
         )
         subnet["semantic_mismatch_junctions"] = semantic_mismatches
-        subnet["render_source"] = "full_network_fallback" if semantic_mismatches else "subnet"
+        subnet["render_source"] = (
+            "full_network_retry" if force_full_network
+            else "full_network_fallback" if semantic_mismatches
+            else "subnet"
+        )
         subnet["render_net_file"] = str(render_file)
         subnet["render_sha256"] = render_sha256
         specs = [

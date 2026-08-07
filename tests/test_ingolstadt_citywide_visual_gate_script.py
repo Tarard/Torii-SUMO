@@ -1068,6 +1068,7 @@ def test_registered_target_fragmentation_resolves_only_with_structure_and_select
     [
         ("conflict_layer_extra", "fail", ["lane_geometry_mismatch"]),
         ("source_direction_missing", "pass", []),
+        ("source_layer_scale_mismatch", "fail", ["lane_geometry_mismatch"]),
     ],
 )
 def test_registered_target_noise_resolves_with_semantic_structure(
@@ -1099,6 +1100,15 @@ def test_registered_target_noise_resolves_with_semantic_structure(
 
     assert resolved["status"] == "pass"
     assert resolved["resolved_reasons"] == [f"{reason}_outside_registered_targets"]
+    if reason == "source_layer_scale_mismatch":
+        for extra in ("target_component_mismatch", "conflict_layer_extra"):
+            combined = {**visual, "reasons": [reason, extra]}
+            assert module.resolve_registered_target_fragmentation(
+                combined,
+                structure_status=structure_status,
+                structure_reasons=structure_reasons,
+                selections=selections,
+            )["status"] == "pass"
     if reason == "source_direction_missing":
         mismatched = {
             **visual,
@@ -1509,6 +1519,29 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
                 "screenshot_file": str(image_file),
             "screenshot_sha256": file_sha256(image_file),
         }
+
+    full_result = module.capture_tile_pair(
+        tile_id="0004_0008",
+        records=[{
+            "teacher_lane": "in_0",
+            "teacher_junction": "j0",
+            "candidate_lane": "in_0",
+            "candidate_junction": "j0",
+            "outgoing_lane_pairs": {"out_0": "out_0"},
+        }],
+        teacher_net=teacher,
+        candidate_net=candidate,
+        output_dir=tmp_path / "full-session",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        tile_size_m=250.0,
+        force_full_network=True,
+        session_factory=FakeSession,
+        input_func=fake_input,
+    )
+    assert session_sources[-4:] == [teacher, candidate, teacher, candidate]
+    assert full_result[0][0]["render_source"] == "full_network_retry"
+    assert full_result[1][0]["render_source"] == "full_network_retry"
 
 
 def test_main_runs_visual_phase_without_claiming_global_completion(tmp_path: Path) -> None:
