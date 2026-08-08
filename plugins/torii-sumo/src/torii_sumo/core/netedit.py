@@ -601,10 +601,13 @@ def _activate_target_window(hwnd: int, pid: int) -> dict[str, Any]:
                 if attempt:
                     raise
                 time.sleep(0.1)
-    except Exception:
+    except Exception as exc:
         restored = _restore_input_context(context)
         if not restored["restored"]:
-            raise RuntimeError("NetEdit activation failed and the previous input context was not restored")
+            raise RuntimeError(
+                "NetEdit activation failed and the previous input context was not restored: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         raise
     return {
         **context,
@@ -619,26 +622,34 @@ def _restore_input_context(context: dict[str, Any]) -> dict[str, Any]:
     ctypes.windll.user32.SetCursorPos(*cursor)
     previous = int(context["previous_foreground_hwnd"])
     focus = int(context["previous_focus_hwnd"])
+    restore_error = None
     if previous and win32gui.IsWindow(previous):
         if not focus or not (focus == previous or win32gui.IsChild(previous, focus)):
             focus = previous
-        _set_foreground_and_focus(previous, focus)
+        try:
+            _set_foreground_and_focus(previous, focus)
+        except Exception as exc:
+            restore_error = f"{type(exc).__name__}: {exc}"
     restored_foreground = int(win32gui.GetForegroundWindow())
     restored_cursor = tuple(int(value) for value in win32gui.GetCursorPos())
     restored_focus = _gui_focus(previous) if previous and win32gui.IsWindow(previous) else 0
     focus_restored = not previous or restored_focus == focus or (
         focus == previous and (restored_focus == previous or win32gui.IsChild(previous, restored_focus))
     )
-    return {
+    report = {
         "foreground_hwnd": restored_foreground,
         "focus_hwnd": restored_focus,
         "cursor": list(restored_cursor),
         "restored": (
-            (not previous or restored_foreground == previous)
+            restore_error is None
+            and (not previous or restored_foreground == previous)
             and focus_restored
             and restored_cursor == cursor
         ),
     }
+    if restore_error:
+        report["error"] = restore_error
+    return report
 
 
 def _send_inputs(inputs: list[_Input]) -> int:
@@ -838,6 +849,61 @@ def _perform_real_input(
         "target_foreground_after_input": foreground_after,
         "target_focus_after_input": focus_after,
         "restore": restored,
+    }
+
+
+def _perform_target_window_input(
+    hwnd: int,
+    pid: int,
+    action: dict[str, Any],
+    *,
+    post_input_seconds: float = 0.2,
+) -> dict[str, Any]:
+    win32con, win32gui, _, _ = _windows_modules()
+    _require_owned_window(hwnd, pid)
+    target = _focus_canvas(hwnd)
+    foreground = int(win32gui.GetForegroundWindow())
+    sent = 0
+    canvas_point = None
+    keyboard_layout = None
+    win32gui.SendMessage(hwnd, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, foreground)
+    win32gui.SendMessage(target, win32con.WM_SETFOCUS, foreground, 0)
+    try:
+        if action["type"] == "key":
+            if action.get("modifier_keys"):
+                raise ValueError("target-window key input does not support modifiers")
+            keyboard_layout = _ensure_english_window_layout(hwnd)
+            virtual_key = int(action["virtual_key"])
+            scan_code = int(ctypes.windll.user32.MapVirtualKeyW(virtual_key, 0))
+            key_down = 1 | (scan_code << 16)
+            key_up = key_down | (1 << 30) | (1 << 31)
+            for destination in dict.fromkeys((target, hwnd)):
+                win32gui.SendMessage(destination, win32con.WM_KEYDOWN, virtual_key, key_down)
+                win32gui.SendMessage(destination, win32con.WM_KEYUP, virtual_key, key_up)
+                sent += 2
+        elif action["type"] == "click":
+            screen_point = win32gui.ClientToScreen(hwnd, (int(action["x"]), int(action["y"])))
+            canvas_point = tuple(int(value) for value in win32gui.ScreenToClient(target, screen_point))
+            lparam = ((canvas_point[1] & 0xFFFF) << 16) | (canvas_point[0] & 0xFFFF)
+            win32gui.SendMessage(target, win32con.WM_MOUSEMOVE, 0, lparam)
+            win32gui.SendMessage(target, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
+            win32gui.SendMessage(target, win32con.WM_LBUTTONUP, 0, lparam)
+            sent = 3
+        else:
+            raise ValueError(f"unsupported target-window action: {action['type']}")
+        time.sleep(max(0.05, post_input_seconds))
+    finally:
+        win32gui.SendMessage(target, win32con.WM_KILLFOCUS, foreground, 0)
+        win32gui.SendMessage(hwnd, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, foreground)
+    foreground_after = int(win32gui.GetForegroundWindow())
+    return {
+        "target_window_message_count": sent,
+        "target_hwnd": target,
+        "canvas_point": list(canvas_point) if canvas_point else None,
+        "keyboard_layout": keyboard_layout,
+        "foreground_before": foreground,
+        "foreground_after": foreground_after,
+        "foreground_unchanged": foreground_after == foreground,
     }
 
 

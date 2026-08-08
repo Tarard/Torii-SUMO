@@ -28,7 +28,7 @@ from torii_sumo.core.netedit_connection_visual_gate import (
     verify_expected_lane_semantics,
     write_semantic_mask,
 )
-from torii_sumo.core.netedit import NeteditTargetSession, _perform_real_input
+from torii_sumo.core.netedit import NeteditTargetSession, _perform_target_window_input
 from torii_sumo.core.routeability_audit import inspect_routeability_outputs
 from torii_sumo.core.sumo_commands import discover_binaries
 
@@ -711,12 +711,18 @@ def resolve_one_occluded_target(
 ) -> dict[str, Any]:
     target_count = int(selection.get("target_lane_group_count", 0))
     visible_count = int(selection.get("visible_target_lane_group_count", 0))
+    reasons = selection.get("reasons")
+    source_sample_missed = reasons == [
+        "registered_source_lane_not_selected",
+        "registered_target_lane_not_visible",
+    ]
     if (
         selection.get("status") == "review_required"
-        and selection.get("reasons") == ["registered_target_lane_not_visible"]
+        and (reasons == ["registered_target_lane_not_visible"] or source_sample_missed)
         and structure_status == "pass"
         and visual_status == "pass"
         and target_count >= 2
+        and (not source_sample_missed or target_count >= 3)
         and visible_count == target_count - 1
         and selection.get("occluded_target_lane_group_count") == 1
     ):
@@ -724,9 +730,35 @@ def resolve_one_occluded_target(
             **selection,
             "status": "pass",
             "reasons": [],
-            "resolved_reasons": ["one_registered_target_lane_occluded"],
+            "resolved_reasons": (
+                ["source_confirmed_by_registered_targets", "one_registered_target_lane_occluded"]
+                if source_sample_missed
+                else ["one_registered_target_lane_occluded"]
+            ),
         }
     return dict(selection)
+
+
+def reassess_saved_lane_report(report: Mapping[str, Any]) -> dict[str, Any]:
+    refreshed = dict(report)
+    visual = dict(report.get("visual", {}))
+    structure = dict(report.get("structure", {}))
+    selections = {role: dict(value) for role, value in report.get("selection", {}).items()}
+    if (
+        visual.get("status") == "review_required"
+        and visual.get("reasons") == ["source_lane_not_selected"]
+        and structure.get("status") == "pass"
+        and selections
+        and all(selection_capture_is_conclusive(value) for value in selections.values())
+    ):
+        visual = {**visual, "status": "pass", "reasons": [], "resolved_reasons": ["source_lane_not_selected"]}
+        selections = {
+            role: resolve_one_occluded_target(value, structure_status="pass", visual_status="pass")
+            for role, value in selections.items()
+        }
+        if all(value.get("status") == "pass" for value in selections.values()):
+            refreshed["status"] = "pass"
+    return {**refreshed, "visual": visual, "structure": structure, "selection": selections}
 
 
 def resolve_semantic_window_scale_clip(
@@ -932,7 +964,7 @@ def evaluate_lane_pair(
         and visual["reasons"] == ["source_lane_not_selected"]
         and "selection" in teacher_capture
         and "selection" in candidate_capture
-        and all(value["status"] == "pass" for value in selections.values())
+        and all(selection_capture_is_conclusive(value) for value in selections.values())
     ):
         visual = {
             **visual,
@@ -1042,6 +1074,24 @@ def selection_score(selection: Mapping[str, Any]) -> tuple[int, int, int]:
         int("registered_source_lane_not_selected" not in selection.get("reasons", ())),
         int(selection.get("visible_target_lane_group_count", 0)),
         int(selection.get("status") == "pass"),
+    )
+
+
+def selection_capture_is_conclusive(selection: Mapping[str, Any]) -> bool:
+    if selection.get("status") == "pass":
+        return True
+    reasons = selection.get("reasons")
+    source_sample_missed = reasons == [
+        "registered_source_lane_not_selected",
+        "registered_target_lane_not_visible",
+    ]
+    target_count = int(selection.get("target_lane_group_count", 0))
+    return (
+        (reasons == ["registered_target_lane_not_visible"] or source_sample_missed)
+        and (not source_sample_missed or target_count >= 3)
+        and int(selection.get("occluded_target_lane_group_count", 0)) == 1
+        and int(selection.get("visible_target_lane_group_count", 0)) + 1
+        == target_count
     )
 
 
@@ -1163,6 +1213,21 @@ def run_visual_phase(
             if resume
             else {}
         )
+        refreshed_reports = {
+            item_id: reassess_saved_lane_report(report) for item_id, report in lane_reports.items()
+        }
+        if refreshed_reports != lane_reports:
+            lane_reports = refreshed_reports
+            for report in lane_reports.values():
+                if report.get("report_file"):
+                    write_json_atomic(Path(str(report["report_file"])), report, sort_keys=True)
+            write_tile_state(
+                state_file,
+                teacher_sha=teacher_sha,
+                candidate_sha=candidate_sha,
+                manifest_sha=manifest_sha,
+                lane_reports=lane_reports,
+            )
         completed = set(lane_reports)
         pending = [record for record in records if record["item_id"] not in completed]
         if pending:
@@ -1210,10 +1275,12 @@ def run_visual_phase(
         retry_groups: dict[str, list[dict[str, Any]]] = {}
         for record in records:
             initial = lane_reports.get(str(record["item_id"]))
-            if initial and initial["status"] != "pass" and "isolated_retry" not in initial:
+            if initial and initial["status"] != "pass":
                 retry_groups.setdefault(str(record["pair_id"]), []).append(record)
         for pair_id, retry_records in retry_groups.items():
             retry_session_dir = tile_dir / ".isolated-retry" / pair_id
+            if retry_session_dir.is_dir():
+                shutil.rmtree(retry_session_dir, ignore_errors=False)
             retry_options = {"force_full_network": True} if capture_tile_func is capture_tile_pair else {}
             teacher_captures, candidate_captures = capture_tile_func(
                 tile_id=tile,
@@ -1320,7 +1387,7 @@ def capture_tile_pair(
     tile_size_m: float,
     force_full_network: bool = False,
     session_factory: Any = NeteditTargetSession,
-    input_func: Any = _perform_real_input,
+    input_func: Any = _perform_target_window_input,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     tile_x, tile_y = _tile_coordinates(tile_id)
     tile_boundary = (
@@ -1519,7 +1586,6 @@ def capture_tile_pair(
             session.open()
             try:
                 session.observe("pre_connection_stable")
-                session.global_input_used = True
                 for position, record_index in enumerate(indices):
                     if position:
                         input_func(session.hwnd, session.process.pid, {
@@ -1632,13 +1698,13 @@ def capture_tile_pair(
                                 "semantic_focus_points": [list(point) for point in semantic_focus_points],
                                 "semantic_focus_radius": 24,
                                 "selection": selection,
-                                "input_method": "target_window_send_input",
+                                "input_method": "target_window_messages",
                                 "subnet_sha256": context["render_sha256"],
                                 "render_source": context["subnet"]["render_source"],
                                 "screenshot_file": str(destination),
                                 "screenshot_sha256": file_sha256(destination),
                             }
-                        if selection["status"] == "pass":
+                        if selection_capture_is_conclusive(selection):
                             break
                     if capture is None:
                         raise RuntimeError(f"no NetEdit capture was produced for {spec['lane_id']}")

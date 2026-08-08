@@ -28,7 +28,7 @@ from torii_sumo.core.osm_network import (
     build_routeability_probe,
 )
 from torii_sumo.core.osm_area import resolve_osm_place
-from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.osm_workflow import export_plain_net_for_teacher_guided_repair, run_osm_cleanup_workflow
 from torii_sumo.core.road_scope import (
     resolve_highway_classes as resolve_highway_classes_from_scope,
 )
@@ -725,6 +725,7 @@ def sumo_network_teacher_guided_repair_queue(
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
         connection_mode_regression_builder=build_connection_mode_regression_audit,
+        plain_exporter=export_plain_net_for_teacher_guided_repair,
     )
 
 

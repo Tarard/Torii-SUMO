@@ -777,6 +777,157 @@ def test_real_input_waits_for_target_and_requires_context_restore(
     assert sleeps == [0.25]
 
 
+def test_target_window_input_delivers_key_without_taking_foreground(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages = []
+
+    class FakeCon:
+        WM_ACTIVATE = 1
+        WA_ACTIVE = 2
+        WA_INACTIVE = 3
+        WM_SETFOCUS = 4
+        WM_KILLFOCUS = 5
+        WM_KEYDOWN = 6
+        WM_KEYUP = 7
+
+    class FakeGui:
+        @staticmethod
+        def GetForegroundWindow():
+            return 7
+
+        @staticmethod
+        def SendMessage(*args):
+            messages.append(args)
+
+    class FakeUser32:
+        @staticmethod
+        def MapVirtualKeyW(_virtual_key, _kind):
+            return 46
+
+    class FakeWindll:
+        user32 = FakeUser32()
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (FakeCon(), FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit, "_focus_canvas", lambda _hwnd: 43)
+    monkeypatch.setattr(
+        netedit,
+        "_ensure_english_window_layout",
+        lambda _hwnd: {"status": "pass"},
+    )
+    monkeypatch.setattr(netedit.ctypes, "windll", FakeWindll())
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    report = netedit._perform_target_window_input(
+        42,
+        9001,
+        {"type": "key", "virtual_key": ord("C"), "modifier_keys": []},
+    )
+
+    assert report["foreground_unchanged"] is True
+    assert messages[0] == (42, FakeCon.WM_ACTIVATE, FakeCon.WA_ACTIVE, 7)
+    assert (43, FakeCon.WM_KEYDOWN, ord("C"), 1 | (46 << 16)) in messages
+    assert (42, FakeCon.WM_KEYUP, ord("C"), 1 | (46 << 16) | (1 << 30) | (1 << 31)) in messages
+    assert messages[-1] == (42, FakeCon.WM_ACTIVATE, FakeCon.WA_INACTIVE, 7)
+
+
+def test_target_window_input_translates_click_to_canvas_coordinates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages = []
+
+    class FakeCon:
+        WM_ACTIVATE = 1
+        WA_ACTIVE = 2
+        WA_INACTIVE = 3
+        WM_SETFOCUS = 4
+        WM_KILLFOCUS = 5
+        WM_MOUSEMOVE = 6
+        WM_LBUTTONDOWN = 7
+        WM_LBUTTONUP = 8
+        MK_LBUTTON = 1
+
+    class FakeGui:
+        @staticmethod
+        def GetForegroundWindow():
+            return 7
+
+        @staticmethod
+        def SendMessage(*args):
+            messages.append(args)
+
+        @staticmethod
+        def ClientToScreen(_hwnd, point):
+            return point[0] + 100, point[1] + 200
+
+        @staticmethod
+        def ScreenToClient(_hwnd, point):
+            return point[0] - 110, point[1] - 220
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (FakeCon(), FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit, "_focus_canvas", lambda _hwnd: 43)
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    report = netedit._perform_target_window_input(
+        42,
+        9001,
+        {"type": "click", "x": 30, "y": 50},
+    )
+
+    canvas_lparam = (30 << 16) | 20
+    assert report["canvas_point"] == [20, 30]
+    assert (43, FakeCon.WM_MOUSEMOVE, 0, canvas_lparam) in messages
+    assert (43, FakeCon.WM_LBUTTONDOWN, FakeCon.MK_LBUTTON, canvas_lparam) in messages
+    assert (43, FakeCon.WM_LBUTTONUP, 0, canvas_lparam) in messages
+
+
+def test_target_window_input_records_unrelated_foreground_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCon:
+        WM_ACTIVATE = 1
+        WA_ACTIVE = 2
+        WA_INACTIVE = 3
+        WM_SETFOCUS = 4
+        WM_KILLFOCUS = 5
+        WM_MOUSEMOVE = 6
+        WM_LBUTTONDOWN = 7
+        WM_LBUTTONUP = 8
+        MK_LBUTTON = 1
+
+    class FakeGui:
+        foregrounds = iter((7, 99))
+
+        @classmethod
+        def GetForegroundWindow(cls):
+            return next(cls.foregrounds)
+
+        @staticmethod
+        def SendMessage(*_args):
+            return None
+
+        @staticmethod
+        def ClientToScreen(_hwnd, point):
+            return point
+
+        @staticmethod
+        def ScreenToClient(_hwnd, point):
+            return point
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (FakeCon(), FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit, "_focus_canvas", lambda _hwnd: 43)
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    report = netedit._perform_target_window_input(42, 9001, {"type": "click", "x": 30, "y": 50})
+
+    assert report["foreground_before"] == 7
+    assert report["foreground_after"] == 99
+    assert report["foreground_unchanged"] is False
+
+
 def test_target_window_activation_retries_one_transient_focus_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -814,6 +965,75 @@ def test_target_window_activation_retries_one_transient_focus_failure(
 
     assert len(attempts) == 2
     assert report["target_foreground_hwnd"] == 42
+
+
+def test_restore_input_context_reports_focus_restore_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGui:
+        @staticmethod
+        def GetCursorPos():
+            return 1, 2
+
+        @staticmethod
+        def IsWindow(_hwnd):
+            return True
+
+        @staticmethod
+        def IsChild(_parent, _child):
+            return False
+
+        @staticmethod
+        def GetForegroundWindow():
+            return 42
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_gui_focus", lambda hwnd: hwnd)
+    monkeypatch.setattr(netedit.ctypes.windll.user32, "SetCursorPos", lambda _x, _y: True)
+    monkeypatch.setattr(
+        netedit,
+        "_set_foreground_and_focus",
+        lambda _hwnd, _focus: (_ for _ in ()).throw(RuntimeError("focus denied")),
+    )
+
+    report = netedit._restore_input_context(
+        {
+            "previous_foreground_hwnd": 42,
+            "previous_focus_hwnd": 42,
+            "previous_cursor": [1, 2],
+        }
+    )
+
+    assert report["restored"] is False
+    assert report["error"] == "RuntimeError: focus denied"
+
+
+def test_target_window_activation_preserves_primary_failure_when_restore_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGui:
+        @staticmethod
+        def GetForegroundWindow():
+            return 7
+
+        @staticmethod
+        def GetCursorPos():
+            return 1, 2
+
+    monkeypatch.setattr(netedit, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(netedit, "_require_owned_window", lambda _hwnd, _pid: None)
+    monkeypatch.setattr(netedit, "_gui_focus", lambda hwnd: hwnd)
+    monkeypatch.setattr(netedit, "_focus_canvas", lambda hwnd: hwnd)
+    monkeypatch.setattr(
+        netedit,
+        "_set_foreground_and_focus",
+        lambda _hwnd, _focus: (_ for _ in ()).throw(RuntimeError("foreground denied")),
+    )
+    monkeypatch.setattr(netedit, "_restore_input_context", lambda _context: {"restored": False})
+    monkeypatch.setattr(netedit.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(RuntimeError, match="foreground denied"):
+        netedit._activate_target_window(42, 9001)
 
 
 def test_real_input_requires_and_records_english_keyboard_layout(

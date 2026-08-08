@@ -286,6 +286,22 @@ def build_teacher_guided_repair_queue(
         target_ids,
     )
     matched_cases = [*matched_cases, *same_id_pattern_cases, *same_id_tls_cases]
+    same_id_priority_state_cases = _same_id_priority_state_mismatch_cases(
+        matched_cases,
+        teacher_root,
+        candidate_root,
+        teacher_net_file,
+        candidate_net_file,
+        target_ids,
+    )
+    matched_cases = [*matched_cases, *same_id_priority_state_cases]
+    same_id_geometry_cases = _same_id_geometry_mismatch_cases(
+        matched_cases,
+        teacher_root,
+        candidate_root,
+        target_ids,
+    )
+    matched_cases = [*matched_cases, *same_id_geometry_cases]
     topology_fragmented_tls_cases = _topology_fragmented_tls_cases(
         matched_cases,
         teacher_root,
@@ -380,6 +396,8 @@ def build_teacher_guided_repair_queue(
         "matched_case_count": len(matched_cases),
         "same_id_pattern_candidate_count": len(same_id_pattern_cases),
         "same_id_tls_candidate_count": len(same_id_tls_cases),
+        "same_id_priority_state_candidate_count": len(same_id_priority_state_cases),
+        "same_id_geometry_candidate_count": len(same_id_geometry_cases),
         "topology_fragmented_tls_candidate_count": len(topology_fragmented_tls_cases),
         "topology_fragmented_non_tls_candidate_count": len(topology_fragmented_non_tls_cases),
         "turnaround_only_lane_candidate_count": len(turnaround_only_lane_cases),
@@ -1615,6 +1633,7 @@ def write_teacher_endpoint_patch_nodes(
     edge_file: Path,
     output_file: Path,
     lane_shape_delta: tuple[float, float] | None = None,
+    align_existing_teacher_node_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     tree = ET.parse(raw_node_file)
@@ -1645,6 +1664,39 @@ def write_teacher_endpoint_patch_nodes(
     unresolved_node_ids = []
     safe_attrs = ("id", "x", "y", "type", "shape", "radius", "keepClear", "rightOfWay", "fringe", "tl")
     dx, dy = lane_shape_delta if lane_shape_delta is not None else (0.0, 0.0)
+
+    aligned_existing_node_ids = []
+    existing_nodes = {node.attrib.get("id", ""): node for node in root.findall("node") if node.attrib.get("id")}
+    for node_id in sorted({str(value) for value in align_existing_teacher_node_ids if str(value)}):
+        node = existing_nodes.get(node_id)
+        teacher_node = teacher_nodes.get(node_id)
+        if node is None or teacher_node is None:
+            continue
+        desired_x = float(teacher_node.attrib["x"]) + dx if teacher_node.attrib.get("x") else None
+        desired_y = float(teacher_node.attrib["y"]) + dy if teacher_node.attrib.get("y") else None
+        if (
+            desired_x is not None
+            and desired_y is not None
+            and node.attrib.get("x")
+            and node.attrib.get("y")
+            and abs(float(node.attrib["x"]) - desired_x) <= 0.01
+            and abs(float(node.attrib["y"]) - desired_y) <= 0.01
+        ):
+            continue
+        candidate_shape = _shape_points(candidate_nodes.get(node_id, {}).attrib.get("shape", "")) if node_id in candidate_nodes else []
+        if (
+            desired_x is not None
+            and desired_y is not None
+            and len(candidate_shape) >= 3
+            and Polygon(candidate_shape).distance(Point(desired_x, desired_y)) <= 1.0
+        ):
+            continue
+        for attr in ("x", "y"):
+            if teacher_node.attrib.get(attr):
+                node.set(attr, _format_xy(float(teacher_node.attrib[attr]) + (dx if attr == "x" else dy)))
+        if teacher_node.attrib.get("shape"):
+            node.set("shape", _translate_shape(teacher_node.attrib["shape"], dx, dy))
+        aligned_existing_node_ids.append(node_id)
 
     for node_id in missing_node_ids:
         source_node = teacher_nodes.get(node_id)
@@ -1682,6 +1734,7 @@ def write_teacher_endpoint_patch_nodes(
         "added_missing_endpoint_node_ids": added_node_ids,
         "unresolved_missing_endpoint_node_ids": unresolved_node_ids,
         "node_shape_translation_applied": lane_shape_delta is not None,
+        "aligned_existing_teacher_node_ids": aligned_existing_node_ids,
     }
 
 
@@ -3130,7 +3183,8 @@ def write_teacher_target_internal_replay_net(
                     or boundary_edge is None
                     or continuation_edge_id in stale_split_replacements
                     or (
-                        continuation_edge_id in candidate_edges_by_id
+                        replay_edge_map.get(continuation_edge_id, continuation_edge_id)
+                        in candidate_edges_by_id
                         and boundary_edge_id not in restored_teacher_split_boundary_edges
                     )
                     or continuation_edge_id in teacher_boundary_edge_id_set
@@ -3403,7 +3457,20 @@ def write_teacher_target_internal_replay_net(
         teacher_internal_prefix,
         internal_prefix,
     )
-    preserved_target_shape = _safe_junction_shape(original_target_junction_shape or "")
+    original_target_shape = original_target_junction_shape or ""
+    original_target_shape_tokens = [token for token in original_target_shape.split() if "," in token]
+    original_target_shape_points = _shape_points(original_target_shape)
+    preserved_target_shape_exact = bool(
+        len(original_target_shape_points) >= 3
+        and len(original_target_shape_points) == len(original_target_shape_tokens)
+        and all(
+            math.isfinite(x) and math.isfinite(y) and abs(x) <= 1_000_000 and abs(y) <= 1_000_000
+            for x, y in original_target_shape_points
+        )
+    )
+    preserved_target_shape = (
+        original_target_shape if preserved_target_shape_exact else _safe_junction_shape(original_target_shape)
+    )
     if preserve_target_junction_shape and preserved_target_shape:
         mapped_target_attrs["shape"] = preserved_target_shape
         if original_target_custom_shape is not None:
@@ -3667,7 +3734,11 @@ def write_teacher_target_internal_replay_net(
     }
     junction_shape_sanitization = _sanitize_junction_shapes(
         candidate_root,
-        junction_ids=mutated_junction_ids,
+        junction_ids=(
+            mutated_junction_ids - {junction_id}
+            if preserve_target_junction_shape and preserved_target_shape_exact
+            else mutated_junction_ids
+        ),
     )
 
     ET.indent(candidate_root, space="    ")
@@ -6309,6 +6380,33 @@ def restore_scoped_pedestrian_internal_semantics_after_normalize(
     }
 
 
+def _load_passed_replay_root(
+    report: Mapping[str, Any],
+    output_file: Path,
+) -> ET.Element | None:
+    return ET.parse(output_file).getroot() if report.get("status") == "pass" else None
+
+
+def _existing_compound_replay_junction_ids(
+    junction_ids: Sequence[str],
+    candidate_net_file: Path,
+) -> list[str]:
+    return sorted({str(value) for value in junction_ids if str(value)} & _net_junction_ids(candidate_net_file))
+
+
+def _strict_movement_replay_junction_ids(
+    compound_junction_ids: Sequence[str],
+    teacher_net_file: Path,
+    *,
+    strict_teacher_replay: bool,
+) -> list[str]:
+    junction_ids = sorted({str(value) for value in compound_junction_ids if str(value)})
+    if not strict_teacher_replay:
+        return junction_ids
+    teacher_junction_ids = _net_junction_ids(teacher_net_file)
+    return [junction_id for junction_id in junction_ids if junction_id in teacher_junction_ids]
+
+
 def build_teacher_guided_junction_variant(
     *,
     raw_node_file: Path,
@@ -6378,7 +6476,11 @@ def build_teacher_guided_junction_variant(
         "declared_estimator_evidence" if source_conflict_core_node_ids is not None else "plain_join_definition"
     )
     compound_junction_ids = sorted({junction_id, *(str(value) for value in safety_junction_ids if str(value))})
-    movement_replay_junction_ids = [junction_id] if strict_teacher_replay else compound_junction_ids
+    movement_replay_junction_ids = _strict_movement_replay_junction_ids(
+        compound_junction_ids,
+        teacher_net_file,
+        strict_teacher_replay=strict_teacher_replay,
+    )
     control_cleanup_junction_ids = sorted(
         {
             *compound_junction_ids,
@@ -6472,6 +6574,11 @@ def build_teacher_guided_junction_variant(
         edge_file=patched_edge_file,
         output_file=patched_node_file,
         lane_shape_delta=lane_shape_delta,
+        align_existing_teacher_node_ids=(
+            lane_patch_report.get("mapped_edge_endpoint_junction_ids", []) or []
+            if strict_teacher_replay
+            else []
+        ),
     )
     type_patch_report = write_missing_edge_type_patch(
         raw_type_file=raw_type_file,
@@ -6871,12 +6978,13 @@ def build_teacher_guided_junction_variant(
         if strict_teacher_replay:
             teacher_junction_ids = _net_junction_ids(teacher_net_file)
             for replay_index, candidate_compound_junction_id in enumerate(
-                sorted(
-                    {
+                _existing_compound_replay_junction_ids(
+                    [
                         str(value)
                         for value in compound_junction_ids
                         if str(value) and str(value) not in {junction_id, teacher_junction_id}
-                    }
+                    ],
+                    candidate_net_file,
                 ),
                 start=1,
             ):
@@ -6886,14 +6994,17 @@ def build_teacher_guided_junction_variant(
                 )
                 if not teacher_compound_junction_id:
                     continue
-                compound_edge_map = _teacher_candidate_edge_map(
-                    extract_teacher_junction_model(teacher_net_file, teacher_compound_junction_id),
-                    extract_teacher_junction_model(tl_logic_input_file, candidate_compound_junction_id),
-                    teacher_junction_id=teacher_compound_junction_id,
-                    candidate_junction_id=candidate_compound_junction_id,
-                    drop_endpoint_mismatches=False,
-                    max_bearing_delta=45.0,
-                )
+                compound_edge_map = {
+                    **_teacher_candidate_edge_map(
+                        extract_teacher_junction_model(teacher_net_file, teacher_compound_junction_id),
+                        extract_teacher_junction_model(tl_logic_input_file, candidate_compound_junction_id),
+                        teacher_junction_id=teacher_compound_junction_id,
+                        candidate_junction_id=candidate_compound_junction_id,
+                        drop_endpoint_mismatches=False,
+                        max_bearing_delta=45.0,
+                    ),
+                    **edge_map,
+                }
                 for boundary_edge_id in (
                     _external_boundary_edge_ids(teacher_net_file, teacher_compound_junction_id)
                     & _external_boundary_edge_ids(tl_logic_input_file, candidate_compound_junction_id)
@@ -6924,10 +7035,22 @@ def build_teacher_guided_junction_variant(
                 compound_report["junction_id"] = candidate_compound_junction_id
                 compound_report["teacher_junction_id"] = teacher_compound_junction_id
                 compound_internal_replay_reports.append(compound_report)
+                if compound_report.get("status") != "pass":
+                    return _write_teacher_guided_report(
+                        report_file,
+                        {
+                            "status": "fail",
+                            "claim_status": "construction-invalid",
+                            "junction_id": junction_id,
+                            "target_internal_replay": target_internal_replay_report,
+                            "compound_internal_replays": compound_internal_replay_reports,
+                        },
+                    )
                 restore_mutable_edge_ids.update(
                     _valid_edge_map(compound_report.get("effective_edge_map", {})).values()
                 )
-                compound_output_root = ET.parse(compound_output_file).getroot()
+                compound_output_root = _load_passed_replay_root(compound_report, compound_output_file)
+                assert compound_output_root is not None
                 compound_boundary_edges = [
                     edge
                     for edge in compound_output_root.findall("edge")
@@ -6952,17 +7075,6 @@ def build_teacher_guided_junction_variant(
                     & {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
                 )
                 del compound_output_root, compound_boundary_edges
-                if compound_report.get("status") != "pass":
-                    return _write_teacher_guided_report(
-                        report_file,
-                        {
-                            "status": "fail",
-                            "claim_status": "construction-invalid",
-                            "junction_id": junction_id,
-                            "target_internal_replay": target_internal_replay_report,
-                            "compound_internal_replays": compound_internal_replay_reports,
-                        },
-                    )
                 tl_logic_input_file = compound_output_file
             if compound_internal_replay_reports:
                 compound_core_final_file = _stage_file(
@@ -7501,6 +7613,11 @@ def build_teacher_guided_junction_variant(
                 final_net_file = fallback_net_file
                 tl_logic_report = target_internal_replay_fallback_tl_logic_report
                 sumo_report = target_internal_replay_fallback_sumo_report
+    off_target_connection_semantics_restore = _restore_off_target_connection_semantics(
+        source_file=candidate_net_file,
+        target_file=final_net_file,
+        exclude_junction_ids=set(compound_junction_ids),
+    )
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
     final_junction_ids = _net_junction_ids(final_net_file)
     missing_compound_junction_ids = sorted(set(compound_junction_ids) - final_junction_ids)
@@ -7695,7 +7812,7 @@ def build_teacher_guided_junction_variant(
         "missing_junction_ids": missing_compound_junction_ids,
         "junction_gates": target_surface_overlap_gates,
     }
-    comparison_edge_map = edge_map
+    comparison_edge_map = dict(edge_map)
     if (
         replay_target_internal_subgraph
         and not target_internal_replay_fallback
@@ -7706,6 +7823,13 @@ def build_teacher_guided_junction_variant(
         comparison_edge_map.update(
             _valid_edge_map(compound_replay_report.get("effective_edge_map", {}))
         )
+    comparison_edge_map = _refresh_final_target_edge_map(
+        comparison_edge_map,
+        teacher_model,
+        final_model,
+        teacher_junction_id=teacher_junction_id,
+        candidate_junction_id=junction_id,
+    )
     parity = _compare_teacher_models(
         teacher_model,
         final_model,
@@ -7884,6 +8008,7 @@ def build_teacher_guided_junction_variant(
             "non_target_internal_restore": non_target_internal_restore_report,
             "pedestrian_ring": pedestrian_ring_report,
             "vehicle_connection_attrs": vehicle_attrs_report,
+            "off_target_connection_semantics_restore": off_target_connection_semantics_restore,
             "target_internal_replay": target_internal_replay_report,
             "compound_internal_replays": compound_internal_replay_reports,
             "compound_core_final_replay": compound_core_final_replay_report,
@@ -8219,6 +8344,89 @@ def _sequential_candidate_node_ids(candidate: Mapping[str, Any], junction_id: st
     return node_ids
 
 
+def _compound_adjacent_expanded_join_candidates(
+    candidates: list[dict[str, Any]],
+    teacher_net_file: Path,
+) -> list[dict[str, Any]]:
+    eligible = {
+        str(candidate.get("reference_id", "")): candidate
+        for candidate in candidates
+        if candidate.get("candidate_status") == "needs_expanded_rebuild_scope"
+        and candidate.get("learned_rule") == "tum_like_join_candidate"
+        and str(candidate.get("reference_id", "")).startswith("cluster_")
+    }
+    if len(eligible) < 2:
+        return candidates
+    try:
+        root = ET.parse(teacher_net_file).getroot()
+    except (ET.ParseError, OSError):
+        return candidates
+    neighbors = {reference_id: set() for reference_id in eligible}
+    for edge in root.findall("edge"):
+        source = edge.attrib.get("from", "")
+        target = edge.attrib.get("to", "")
+        if source in eligible and target in eligible and source != target:
+            neighbors[source].add(target)
+            neighbors[target].add(source)
+
+    order = [str(candidate.get("reference_id", "")) for candidate in candidates]
+    compound_by_member: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    for reference_id in order:
+        if reference_id not in eligible or reference_id in seen:
+            continue
+        stack = [reference_id]
+        component = []
+        seen.add(reference_id)
+        while stack:
+            current = stack.pop()
+            component.append(current)
+            for adjacent in neighbors[current]:
+                if adjacent not in seen:
+                    seen.add(adjacent)
+                    stack.append(adjacent)
+        component.sort(key=order.index)
+        if len(component) < 2:
+            continue
+        base = copy.deepcopy(eligible[component[0]])
+        edge_map: dict[str, str] = {}
+        for member in component:
+            edge_map.update(_valid_edge_map(eligible[member].get("edge_map", {})))
+        scope = dict(base.get("expanded_rebuild_scope", {}))
+        scope["junction_ids"] = sorted(
+            {
+                *component,
+                *(
+                    str(node_id)
+                    for member in component
+                    for node_id in (eligible[member].get("matched_candidate_node_ids", []) or [])
+                    if str(node_id)
+                ),
+            }
+        )
+        scope["join_junction_ids"] = list(base.get("matched_reference_source_node_ids", []) or [])
+        base.update(
+            {
+                "edge_map": dict(sorted(edge_map.items())),
+                "expanded_rebuild_scope": scope,
+                "compound_expanded_join_reference_ids": component,
+            }
+        )
+        for member in component:
+            compound_by_member[member] = base
+
+    result: list[dict[str, Any]] = []
+    emitted: set[int] = set()
+    for candidate in candidates:
+        compound = compound_by_member.get(str(candidate.get("reference_id", "")))
+        if compound is None:
+            result.append(candidate)
+        elif id(compound) not in emitted:
+            emitted.add(id(compound))
+            result.append(compound)
+    return result
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -8287,6 +8495,8 @@ def run_teacher_guided_repair_queue(
     if not isinstance(candidates, list):
         return _failure("queue report repair_candidates must be a list")
     candidates = list(candidates)
+    if sequential_accept_passed_variants:
+        candidates = _compound_adjacent_expanded_join_candidates(candidates, teacher_net_file)
 
     if teacher_join_groups_by_cluster is None:
         teacher_join_definition_value = teacher_join_definition_file or queue_report.get(
@@ -8549,10 +8759,10 @@ def run_teacher_guided_repair_queue(
                 str(item) for item in scope_report.get("joined_scope_junction_ids", []) or [] if str(item)
             ] or ([joined_scope_junction_id] if joined_scope_junction_id else [])
             replay_edge_map = edge_map
-            if not replay_edge_map and joined_scope_junction_id:
+            if joined_scope_junction_id:
                 try:
                     teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
-                    replay_edge_map = _teacher_candidate_edge_map(
+                    derived_edge_map = _teacher_candidate_edge_map(
                         teacher_model,
                         extract_teacher_junction_model(
                             Path(str(scope_report.get("net_file", ""))), joined_scope_junction_id
@@ -8562,17 +8772,18 @@ def run_teacher_guided_repair_queue(
                         drop_endpoint_mismatches=False,
                         max_bearing_delta=45.0,
                     )
-                    if not replay_edge_map:
-                        replay_edge_map = _edge_map_from_approach_endpoint_rebuild_plan(
+                    if not derived_edge_map:
+                        derived_edge_map = _edge_map_from_approach_endpoint_rebuild_plan(
                             teacher_model,
                             candidate.get("approach_endpoint_rebuild_plan", {}),
                             teacher_junction_id=teacher_junction_id,
                             candidate_junction_id=joined_scope_junction_id,
                             plan_junction_id=junction_id,
                         )
+                    replay_edge_map = {**derived_edge_map, **replay_edge_map}
                     scope_report["derived_edge_map"] = replay_edge_map
                 except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
-                    replay_edge_map = {}
+                    pass
             missing_node_ids = {str(item) for item in scope_report.get("missing_node_ids", []) or [] if str(item)}
             skipped_endpoint_missing_ids = {
                 str(node_id)
@@ -9085,14 +9296,6 @@ def run_teacher_guided_repair_queue(
                         refreshed_edge_map = {}
                         scope_report["full_network_join_refreshed_edge_map_error"] = f"{type(exc).__name__}: {exc}"
                     if refreshed_edge_map:
-                        refreshed_edge_map = {
-                            teacher_edge_id: (
-                                teacher_edge_id
-                                if replay_edge_map.get(teacher_edge_id) == teacher_edge_id
-                                else candidate_edge_id
-                            )
-                            for teacher_edge_id, candidate_edge_id in refreshed_edge_map.items()
-                        }
                         replacements = {
                             teacher_edge_id: {
                                 "old": replay_edge_map.get(teacher_edge_id, ""),
@@ -9104,6 +9307,43 @@ def run_teacher_guided_repair_queue(
                         replay_edge_map = dict(sorted({**replay_edge_map, **refreshed_edge_map}.items()))
                         scope_report["full_network_join_refreshed_edge_map"] = refreshed_edge_map
                         scope_report["full_network_join_refreshed_edge_map_replacements"] = replacements
+                    preconnection_corridor_ids = _teacher_absent_corridor_junction_ids(
+                        candidate.get("expanded_rebuild_scope", {}),
+                        replay_node_file,
+                        teacher_net_file,
+                        {
+                            str(value)
+                            for group in scope_report.get("join_groups", []) or []
+                            for value in (group if isinstance(group, list) else [])
+                            if str(value)
+                        },
+                        enabled=strict_teacher_replay
+                        and bool(candidate.get("compound_expanded_join_reference_ids")),
+                    )
+                    if preconnection_corridor_ids:
+                        preconnection_contraction = _prune_teacher_absent_residual_corridor(
+                            net_file=replay_candidate_net_file,
+                            teacher_net_file=teacher_net_file,
+                            junction_ids=set(preconnection_corridor_ids),
+                            edge_map=replay_edge_map,
+                        )
+                        scope_report["preconnection_teacher_absent_corridor_ids"] = preconnection_corridor_ids
+                        scope_report["preconnection_teacher_absent_corridor_contraction"] = preconnection_contraction
+                        if preconnection_contraction.get("status") != "pass" or plain_exporter is None:
+                            scope_report["status"] = "review"
+                            scope_report["reason"] = (
+                                "preconnection corridor contraction requires a successful plain export"
+                                if preconnection_contraction.get("status") == "pass"
+                                else "preconnection corridor contraction failed"
+                            )
+                            skipped_candidates.append(
+                                {
+                                    "index": index,
+                                    "junction_id": junction_id,
+                                    "candidate_status": "preconnection_corridor_contraction_failed",
+                                }
+                            )
+                            continue
                     if plain_exporter is not None:
                         join_plain_report = plain_exporter(
                             net_file=replay_candidate_net_file,
@@ -9311,23 +9551,13 @@ def run_teacher_guided_repair_queue(
                     for value in (group if isinstance(group, list) else [])
                     if str(value)
                 }
-                teacher_absent_corridor_junction_ids = sorted(
-                    (
-                        {
-                            str(value)
-                            for value in (
-                                expanded_scope_value.get("junction_ids", [])
-                                if isinstance(expanded_scope_value, dict)
-                                else []
-                            )
-                            if str(value)
-                        }
-                        & _plain_node_ids(replay_node_file)
-                    )
-                    - _net_junction_ids(teacher_net_file)
-                    - join_member_ids
-                    if strict_teacher_replay and is_followup_candidate
-                    else set()
+                teacher_absent_corridor_junction_ids = _teacher_absent_corridor_junction_ids(
+                    expanded_scope_value,
+                    replay_node_file,
+                    teacher_net_file,
+                    join_member_ids,
+                    enabled=strict_teacher_replay
+                    and (is_followup_candidate or bool(candidate.get("compound_expanded_join_reference_ids"))),
                 )
                 teacher_absent_tls_junction_ids = sorted(
                     {*teacher_absent_tls_junction_ids, *teacher_absent_corridor_junction_ids}
@@ -9411,8 +9641,7 @@ def run_teacher_guided_repair_queue(
                 if (
                     (use_full_network_replay or use_full_network_join_patch_replay)
                     and sequential_accept_passed_variants
-                    and attached_report.get("status") == "pass"
-                    and attached_report.get("parity_gate_status") == "pass"
+                    and _variant_passes_composite_acceptance(attached_report)
                     and final_net_file.exists()
                 ):
                     attached_report["composite_applied"] = True
@@ -9542,8 +9771,7 @@ def run_teacher_guided_repair_queue(
         final_net_file = Path(str(attached_report.get("final_net_file", "")))
         if (
             sequential_accept_passed_variants
-            and attached_report.get("status") == "pass"
-            and attached_report.get("parity_gate_status") == "pass"
+            and _variant_passes_composite_acceptance(attached_report)
             and final_net_file.exists()
         ):
             attached_report["composite_applied"] = True
@@ -9803,6 +10031,13 @@ def run_teacher_guided_repair_queue(
                         final_internal_replay_canonical_report.get("status") == "pass"
                         and canonical_composite_net_file.exists()
                     ):
+                        final_internal_replay_canonical_report["non_target_internal_restore"] = (
+                            _restore_non_target_internal_artifacts(
+                                source_file=normalized_composite_net_file,
+                                target_file=canonical_composite_net_file,
+                                exclude_junction_ids=excluded_replay_junction_ids,
+                            )
+                        )
                         canonical_geometry_restore_reports = []
                         for replay_entry, replay_report in zip(
                             accepted_internal_replays, final_internal_replay_reports
@@ -10085,6 +10320,13 @@ def _final_composite_parity_gate(
         try:
             teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, teacher_junction_id)
             candidate_model = _extract_teacher_junction_model(composite_root, composite_net_file, junction_id)
+            edge_map = _refresh_final_target_edge_map(
+                edge_map,
+                teacher_model,
+                candidate_model,
+                teacher_junction_id=teacher_junction_id,
+                candidate_junction_id=junction_id,
+            )
             parity = _compare_teacher_models(
                 teacher_model,
                 candidate_model,
@@ -10874,7 +11116,9 @@ def write_expanded_scope_plain_inputs(
             # are present in the current plain source.  Otherwise retain the
             # id so the report can explain the missing teacher endpoint.
             present_members = [member for member in members if member in raw_nodes]
-            if value.startswith("cluster_") and len(present_members) >= 2:
+            if (
+                value.startswith("cluster_") or value in teacher_join_groups_by_cluster
+            ) and len(present_members) >= 2:
                 expanded.update(present_members)
             elif value in raw_nodes:
                 expanded.add(value)
@@ -11775,7 +12019,7 @@ def _boundary_edge_replacement_aliases(
             continue
         split_candidates = [
             final_edge_id
-            for final_edge_id in sorted(final_boundary_edge_ids - source_boundary_edge_ids)
+            for final_edge_id in sorted(final_boundary_edge_ids)
             if (
                 (final_edge := final_edges.get(final_edge_id)) is not None
                 and _signed_edge_family_id(final_edge_id) == _signed_edge_family_id(source_edge_id)
@@ -12696,6 +12940,35 @@ def _target_surface_overlap_gate(
         item for item in non_area_exclusions if non_area_key(item) not in inherited_non_area_keys
     ]
 
+    def geometry_error_key(item: dict[str, Any]) -> tuple[str, ...]:
+        return tuple(
+            str(item.get(field, ""))
+            for field in (
+                "kind",
+                "junction_id",
+                "from_junction_id",
+                "to_junction_id",
+                "edge_id",
+                "lane_id",
+            )
+        )
+
+    inherited_geometry_error_keys = {
+        geometry_error_key(item)
+        for source in (
+            audited_baseline_report if baseline_valid else {},
+            audited_reference_report if reference_valid else {},
+        )
+        for item in source.get("geometry_errors", []) or []
+        if isinstance(item, dict)
+    }
+    inherited_geometry_errors = [
+        item for item in geometry_errors if geometry_error_key(item) in inherited_geometry_error_keys
+    ]
+    regressed_geometry_errors = [
+        item for item in geometry_errors if geometry_error_key(item) not in inherited_geometry_error_keys
+    ]
+
     def normalized_lane_id(lane_id: object) -> str:
         value = str(lane_id or "")
         for source_edge_id, target_edge_id in sorted(
@@ -12851,7 +13124,7 @@ def _target_surface_overlap_gate(
     blocked = bool(
         report_identity.get("status") != "pass"
         or regressed_non_area_exclusions
-        or geometry_errors
+        or regressed_geometry_errors
         or regressed_junction_overlaps
         or regressed_lane_non_owner_overlaps
         or regressed_lane_target_owner_overlaps
@@ -12870,6 +13143,10 @@ def _target_surface_overlap_gate(
         "non_area_exclusion_inherited": inherited_non_area_exclusions,
         "geometry_error_count": len(geometry_errors),
         "geometry_errors": geometry_errors,
+        "geometry_error_regression_count": len(regressed_geometry_errors),
+        "geometry_error_regressions": regressed_geometry_errors,
+        "geometry_error_inherited_count": len(inherited_geometry_errors),
+        "geometry_error_inherited": inherited_geometry_errors,
         "junction_overlap_count": len(junction_overlaps),
         "junction_overlaps": junction_overlaps,
         "junction_overlap_regression_count": len(regressed_junction_overlaps),
@@ -12992,6 +13269,24 @@ def _plain_node_ids(node_file: Path) -> set[str]:
         return {node.attrib["id"] for node in ET.parse(node_file).getroot().findall("node") if node.attrib.get("id")}
     except (ET.ParseError, OSError):
         return set()
+
+
+def _teacher_absent_corridor_junction_ids(
+    expanded_scope: object,
+    node_file: Path,
+    teacher_net_file: Path,
+    join_member_ids: set[str],
+    *,
+    enabled: bool,
+) -> list[str]:
+    if not enabled:
+        return []
+    scope_ids = {
+        str(value)
+        for value in (expanded_scope.get("junction_ids", []) if isinstance(expanded_scope, dict) else [])
+        if str(value)
+    }
+    return sorted((scope_ids & _plain_node_ids(node_file)) - _net_junction_ids(teacher_net_file) - join_member_ids)
 
 
 def _write_candidate_aligned_plain_geometry(
@@ -13203,12 +13498,20 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
     return dict(sorted(counts.items()))
 
 
+def _variant_passes_composite_acceptance(report: dict[str, object]) -> bool:
+    if report.get("status") != "pass":
+        return False
+    if report.get("parity_gate_status") == "pass":
+        return True
+    effective_gate = report.get("semantic_replay_effective_gate")
+    return isinstance(effective_gate, dict) and effective_gate.get("status") == "pass"
+
+
 def _accepted_connection_mode_regression_status(variant_reports: list[dict[str, object]]) -> str:
     accepted = [
         report.get("connection_mode_regression", {})
         for report in variant_reports
-        if report.get("status") == "pass"
-        and report.get("parity_gate_status") == "pass"
+        if _variant_passes_composite_acceptance(report)
         and not report.get("expanded_scope_followup_emitted")
         and isinstance(report.get("connection_mode_regression"), dict)
     ]
@@ -13821,7 +14124,7 @@ def _write_teacher_guided_promotion_gate(
         and (not effective_final_composite_sumo_load_required or final_composite_sumo_load_status == "pass")
         and approach_integrity_status == "pass"
         and items
-        and all(item["status"] == "pass" and item["parity_gate_status"] == "pass" for item in items)
+        and all(_variant_passes_composite_acceptance(report) for report in gate_reports)
         else ("blocked" if not items else "fail")
     )
     report = {
@@ -14235,6 +14538,98 @@ def _same_id_tls_matches_teacher(
         "controlled_duplicate_link_index_count",
     )
     return all(teacher.get(field) == candidate.get(field) for field in fields)
+
+
+def _same_id_priority_state_mismatch_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    target_reference_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    if not target_reference_ids:
+        return []
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    candidate_junction_ids = _real_junction_ids(candidate_root)
+    cases = []
+    for junction_id in sorted(target_reference_ids - covered_ids):
+        if junction_id not in candidate_junction_ids:
+            continue
+        try:
+            teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, junction_id)
+            candidate_model = _extract_teacher_junction_model(candidate_root, candidate_net_file, junction_id)
+        except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
+            continue
+        if _vehicle_priority_state_signature(teacher_model) == _vehicle_priority_state_signature(candidate_model):
+            continue
+        cases.append({
+            "reference_id": junction_id,
+            "matched_candidate_node_ids": [junction_id],
+            "learned_rule_basis": "same_id_priority_state_mismatch",
+            "learned_rule": "tum_like_same_id_priority_state_candidate",
+            "junction_pattern_mismatch_fields": ["priority_state"],
+            "netedit_review_actions": ["inspect_connection_priority_state"],
+        })
+    return cases
+
+
+def _vehicle_priority_state_signature(model: dict[str, object]) -> list[tuple[str, ...]]:
+    return sorted(
+        (
+            str(connection.get("from", "")),
+            str(connection.get("fromLane", "")),
+            str(connection.get("to", "")),
+            str(connection.get("toLane", "")),
+            str(connection.get("state", "")),
+        )
+        for connection in model.get("vehicle_connections", []) or []
+        if isinstance(connection, dict)
+    )
+
+
+def _same_id_geometry_mismatch_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    target_reference_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    if not target_reference_ids:
+        return []
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    cases = []
+    for junction_id in sorted(target_reference_ids - covered_ids):
+        teacher_signature = _absolute_junction_shape_signature(teacher_root, junction_id)
+        candidate_signature = _absolute_junction_shape_signature(candidate_root, junction_id)
+        if not teacher_signature or not candidate_signature or teacher_signature == candidate_signature:
+            continue
+        cases.append({
+            "reference_id": junction_id,
+            "matched_candidate_node_ids": [junction_id],
+            "learned_rule_basis": "same_id_junction_geometry_mismatch",
+            "learned_rule": "tum_like_same_id_pattern_candidate",
+            "junction_pattern_mismatch_fields": ["junction_signature"],
+            "netedit_review_actions": ["inspect_junction_geometry"],
+        })
+    return cases
+
+
+def _absolute_junction_shape_signature(
+    root: ET.Element,
+    junction_id: str,
+) -> tuple[tuple[float, float], ...]:
+    junction = root.find(f"junction[@id='{junction_id}']")
+    if junction is None:
+        return ()
+    location = root.find("location")
+    try:
+        offset_x, offset_y = (
+            float(value)
+            for value in (location.attrib.get("netOffset", "0,0") if location is not None else "0,0").split(",")[:2]
+        )
+    except (TypeError, ValueError):
+        offset_x = offset_y = 0.0
+    return tuple(sorted((round(x - offset_x, 2), round(y - offset_y, 2)) for x, y in _shape_points(junction.attrib.get("shape", ""))))
 
 
 def _topology_fragmented_tls_cases(
@@ -14683,6 +15078,10 @@ def _teacher_guided_repair_candidate(
         "matched_candidate_node_ids": candidate_node_ids,
         "learned_rule_basis": str(case.get("learned_rule_basis", "")),
         "learned_rule": str(case.get("learned_rule", "")),
+        "junction_pattern_mismatch_fields": [
+            str(value) for value in case.get("junction_pattern_mismatch_fields", []) or []
+        ],
+        "netedit_review_actions": [str(value) for value in case.get("netedit_review_actions", []) or []],
     }
     if not reference_id:
         return {**base, "candidate_status": "invalid_reference_id", "edge_map": {}, "missing_teacher_edge_ids": []}
@@ -14917,7 +15316,10 @@ def _teacher_guided_repair_candidate(
         len(missing_teacher_movement_plan),
         len(turnaround_only_lane_gaps),
     )
-    review_actions = ["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []
+    review_actions = list(dict.fromkeys([
+        *base["netedit_review_actions"],
+        *(["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []),
+    ]))
     current_candidate_node_ids = (
         joined_source_node_ids
         if candidate_junction_id == reference_id and len(joined_source_node_ids) >= 2
@@ -15097,6 +15499,28 @@ def _teacher_candidate_edge_map(
             candidate_junction_id=candidate_junction_id,
         )
     return dict(sorted((source, target) for source, target in edge_map.items() if source and target))
+
+
+def _refresh_final_target_edge_map(
+    edge_map: Mapping[str, str],
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    *,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> dict[str, str]:
+    refreshed = dict(edge_map)
+    refreshed.update(
+        _teacher_candidate_edge_map(
+            teacher_model,
+            candidate_model,
+            teacher_junction_id=teacher_junction_id,
+            candidate_junction_id=candidate_junction_id,
+            drop_endpoint_mismatches=False,
+            max_bearing_delta=45.0,
+        )
+    )
+    return dict(sorted(refreshed.items()))
 
 
 def _edge_map_from_approach_endpoint_rebuild_plan(
@@ -17083,7 +17507,68 @@ def _prune_teacher_absent_residual_corridor(
             if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
         }
         contraction_plan: dict[str, dict[str, object]] = {}
-        for node_id in sorted(expected_ids):
+        obsolete_edge_ids = {
+            edge.attrib["id"] for edge in incident_edges if edge.attrib["id"] not in teacher_candidate_edge_ids
+        }
+        grouped_aliases: dict[str, str] = {}
+        grouped_endpoints: dict[str, tuple[str, str]] = {}
+        outgoing: dict[str, list[ET.Element]] = {}
+        for edge in candidate_edges.values():
+            outgoing.setdefault(edge.attrib.get("from", ""), []).append(edge)
+        for teacher_edge_id, teacher_edge in teacher_edges.items():
+            anchor_id = edge_map.get(teacher_edge_id, teacher_edge_id)
+            anchor = candidate_edges.get(anchor_id)
+            if anchor is None or not ({anchor.attrib.get("from", ""), anchor.attrib.get("to", "")} & expected_ids):
+                continue
+            source, target = teacher_edge.attrib.get("from", ""), teacher_edge.attrib.get("to", "")
+            teacher_orig_ids = {
+                token
+                for lane in teacher_edge.findall("lane")
+                for param in lane.findall("param")
+                if param.attrib.get("key") == "origId"
+                for token in param.attrib.get("value", "").split()
+                if token
+            }
+            paths: list[list[ET.Element]] = []
+            stack: list[tuple[str, list[ET.Element]]] = [(source, [])]
+            while stack:
+                node_id, path = stack.pop()
+                if len(path) > len(expected_ids) + 1:
+                    continue
+                for edge in outgoing.get(node_id, []):
+                    if edge in path:
+                        continue
+                    next_id = edge.attrib.get("to", "")
+                    next_path = [*path, edge]
+                    if next_id == target:
+                        paths.append(next_path)
+                    elif next_id in expected_ids:
+                        stack.append((next_id, next_path))
+            matching_paths = []
+            for path in paths:
+                path_orig_ids = {
+                    token
+                    for edge in path
+                    for lane in edge.findall("lane")
+                    for param in lane.findall("param")
+                    if param.attrib.get("key") == "origId"
+                    for token in param.attrib.get("value", "").split()
+                    if token
+                }
+                if anchor in path and teacher_orig_ids and path_orig_ids <= teacher_orig_ids:
+                    matching_paths.append(path)
+            if len(matching_paths) != 1:
+                continue
+            for edge in matching_paths[0]:
+                if edge.attrib["id"] != anchor_id:
+                    grouped_aliases[edge.attrib["id"]] = anchor_id
+            grouped_endpoints[anchor_id] = (source, target)
+        if grouped_endpoints and set(grouped_aliases) <= obsolete_edge_ids:
+            contraction_plan["__group__"] = {
+                "aliases": grouped_aliases,
+                "desired_endpoints": grouped_endpoints,
+            }
+        for node_id in sorted(expected_ids) if not contraction_plan else []:
             node_edges = [
                 edge
                 for edge in candidate_edges.values()
@@ -17148,7 +17633,7 @@ def _prune_teacher_absent_residual_corridor(
                 for plan in contraction_plan.values()
                 for source, target in plan["aliases"].items()
             }
-            removed_external_edge_ids = set(edge_aliases)
+            removed_external_edge_ids = obsolete_edge_ids if "__group__" in contraction_plan else set(edge_aliases)
             removed_internal_edge_ids = {
                 edge.attrib["id"]
                 for edge in candidate_root.findall("edge")
@@ -17163,6 +17648,11 @@ def _prune_teacher_absent_residual_corridor(
                         for lane in candidate_edges[source].findall("lane")
                     }
                 )
+            removed_lane_ids = {
+                lane.attrib.get("id", "")
+                for edge_id in removed_external_edge_ids
+                for lane in candidate_edges[edge_id].findall("lane")
+            }
             for plan in contraction_plan.values():
                 for edge_id, (source, target) in plan["desired_endpoints"].items():
                     candidate_edges[edge_id].set("from", source)
@@ -17176,6 +17666,14 @@ def _prune_teacher_absent_residual_corridor(
                     removed_connection_count += 1
                     continue
                 if {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removed_external_edge_ids:
+                    if any(
+                        connection.attrib.get(field, "") in removed_external_edge_ids
+                        and connection.attrib.get(field, "") not in edge_aliases
+                        for field in ("from", "to")
+                    ):
+                        candidate_root.remove(connection)
+                        removed_connection_count += 1
+                        continue
                     invalid_lane = any(
                         connection.attrib.get(edge_field, "") in edge_aliases
                         and connection.attrib.get(lane_field, "")
@@ -17208,7 +17706,12 @@ def _prune_teacher_absent_residual_corridor(
                     lanes = []
                     for lane_id in junction.attrib.get(attribute, "").split():
                         mapped = lane_aliases.get(lane_id, lane_id)
-                        if mapped and not mapped.startswith(internal_prefixes) and mapped not in lanes:
+                        if (
+                            mapped
+                            and lane_id not in removed_lane_ids - set(lane_aliases)
+                            and not mapped.startswith(internal_prefixes)
+                            and mapped not in lanes
+                        ):
                             lanes.append(mapped)
                     if junction.attrib.get(attribute) is not None:
                         junction.set(attribute, " ".join(lanes))
@@ -17443,6 +17946,74 @@ def _invalid_internal_spatial_owner_ids(
                 break
     invalid_owner_ids.discard("")
     return invalid_owner_ids
+
+
+def _restore_off_target_connection_semantics(
+    *,
+    source_file: Path,
+    target_file: Path,
+    exclude_junction_ids: set[str],
+) -> dict[str, object]:
+    source_root = ET.parse(source_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+
+    def key(connection: ET.Element) -> tuple[str, str, str, str]:
+        return tuple(
+            connection.attrib.get(field, "")
+            for field in ("from", "to", "fromLane", "toLane")
+        )  # type: ignore[return-value]
+
+    target_by_key: dict[tuple[str, str, str, str], list[ET.Element]] = {}
+    for connection in target_root.findall("connection"):
+        target_by_key.setdefault(key(connection), []).append(connection)
+
+    semantic_attrs = (
+        "dir",
+        "state",
+        "tl",
+        "linkIndex",
+        "linkIndex2",
+        "pass",
+        "uncontrolled",
+        "allow",
+        "disallow",
+        "keepClear",
+        "contPos",
+    )
+    restored_count = 0
+    skipped_count = 0
+    for source_connection in source_root.findall("connection"):
+        source_edge = source_edges.get(source_connection.attrib.get("from", ""))
+        if source_edge is None or source_edge.attrib.get("to", "") in exclude_junction_ids:
+            continue
+        matches = target_by_key.get(key(source_connection), [])
+        if len(matches) != 1:
+            skipped_count += 1
+            continue
+        target_connection = matches[0]
+        before = {attr: target_connection.attrib.get(attr) for attr in semantic_attrs}
+        for attr in semantic_attrs:
+            if attr in source_connection.attrib:
+                target_connection.set(attr, source_connection.attrib[attr])
+            else:
+                target_connection.attrib.pop(attr, None)
+        if before != {attr: target_connection.attrib.get(attr) for attr in semantic_attrs}:
+            restored_count += 1
+    if restored_count:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "exclude_junction_ids": sorted(exclude_junction_ids),
+        "restored_connection_count": restored_count,
+        "skipped_connection_count": skipped_count,
+    }
 
 
 def restore_off_scope_netconvert_artifacts(

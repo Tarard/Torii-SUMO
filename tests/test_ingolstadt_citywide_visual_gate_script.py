@@ -30,6 +30,15 @@ def _module():
     return module
 
 
+def test_visual_capture_defaults_to_target_window_messages() -> None:
+    module = _module()
+
+    assert (
+        module.capture_tile_pair.__kwdefaults__["input_func"]
+        is module._perform_target_window_input
+    )
+
+
 def _write_net(path: Path, *, offset: str, junction_x: float, junction_y: float) -> None:
     path.write_text(
         "<net>"
@@ -248,6 +257,26 @@ def test_selection_score_prefers_visible_registered_targets() -> None:
     }
 
     assert module.selection_score(correct_lane) > module.selection_score(wrong_lane)
+
+
+def test_selection_capture_stops_after_one_registered_target_is_occluded() -> None:
+    module = _module()
+    selection = {
+        "status": "review_required",
+        "reasons": ["registered_target_lane_not_visible"],
+        "target_lane_group_count": 5,
+        "visible_target_lane_group_count": 4,
+        "occluded_target_lane_group_count": 1,
+    }
+
+    assert module.selection_capture_is_conclusive(selection) is True
+    assert module.selection_capture_is_conclusive(
+        {**selection, "reasons": ["registered_source_lane_not_selected"]}
+    ) is False
+    assert module.selection_capture_is_conclusive({
+        **selection,
+        "reasons": ["registered_source_lane_not_selected", "registered_target_lane_not_visible"],
+    }) is True
 
 
 def test_visual_tile_boundary_includes_registered_lane_geometry(tmp_path: Path) -> None:
@@ -893,7 +922,7 @@ def test_lane_evidence_binds_canvas_radius_and_native_selection(
     assert arguments["focus_radius"] == 24
 
 
-def test_lane_evidence_accepts_shared_missing_source_layer_when_native_selection_passes(
+def test_lane_evidence_accepts_missing_source_layer_when_only_one_target_is_occluded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -924,12 +953,24 @@ def test_lane_evidence_accepts_shared_missing_source_layer_when_native_selection
         teacher_capture={
             "screenshot_file": str(teacher_image),
             "junction_pixel": [120, 90],
-            "selection": {"status": "pass", "reasons": []},
+            "selection": {
+                "status": "review_required",
+                "reasons": ["registered_target_lane_not_visible"],
+                "target_lane_group_count": 2,
+                "visible_target_lane_group_count": 1,
+                "occluded_target_lane_group_count": 1,
+            },
         },
         candidate_capture={
             "screenshot_file": str(candidate_image),
             "junction_pixel": [120, 90],
-            "selection": {"status": "pass", "reasons": []},
+            "selection": {
+                "status": "review_required",
+                "reasons": ["registered_target_lane_not_visible"],
+                "target_lane_group_count": 2,
+                "visible_target_lane_group_count": 1,
+                "occluded_target_lane_group_count": 1,
+            },
         },
         lane_dir=tmp_path / "lane",
         failure_dir=tmp_path / "failures",
@@ -956,6 +997,49 @@ def test_one_occluded_target_resolves_only_with_matching_structure_and_pixels() 
         "reasons": [],
         "resolved_reasons": ["one_registered_target_lane_occluded"],
     }
+
+    source_sample_missed = {
+        **selection,
+        "reasons": ["registered_source_lane_not_selected", "registered_target_lane_not_visible"],
+        "target_lane_group_count": 5,
+        "visible_target_lane_group_count": 4,
+    }
+    assert module.resolve_one_occluded_target(
+        source_sample_missed,
+        structure_status="pass",
+        visual_status="pass",
+    ) == {
+        **source_sample_missed,
+        "status": "pass",
+        "reasons": [],
+        "resolved_reasons": [
+            "source_confirmed_by_registered_targets",
+            "one_registered_target_lane_occluded",
+        ],
+    }
+
+
+def test_saved_source_selection_is_reassessed_before_retry() -> None:
+    module = _module()
+    selection = {
+        "status": "review_required",
+        "reasons": ["registered_source_lane_not_selected", "registered_target_lane_not_visible"],
+        "target_lane_group_count": 5,
+        "visible_target_lane_group_count": 4,
+        "occluded_target_lane_group_count": 1,
+    }
+    report = {
+        "status": "review_required",
+        "visual": {"status": "review_required", "reasons": ["source_lane_not_selected"]},
+        "structure": {"status": "pass", "reasons": []},
+        "selection": {"teacher": selection, "candidate": selection},
+    }
+
+    refreshed = module.reassess_saved_lane_report(report)
+
+    assert refreshed["status"] == "pass"
+    assert refreshed["visual"]["resolved_reasons"] == ["source_lane_not_selected"]
+    assert all(value["status"] == "pass" for value in refreshed["selection"].values())
 
 
 def test_matching_registered_geometry_resolves_semantic_window_scale_clip() -> None:
@@ -1310,6 +1394,62 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     assert isolated_evidence["isolated_retry"]["initial_status"] == "review_required"
     assert isolated_evidence["isolated_retry"]["status"] == "pass"
 
+    interrupted_calls = 0
+
+    def interrupted_retry_capture(**kwargs):
+        nonlocal interrupted_calls
+        interrupted_calls += 1
+        session_dir = Path(kwargs["output_dir"])
+        session_dir.mkdir(parents=True, exist_ok=True)
+        if interrupted_calls == 2:
+            (session_dir / "teacher" / "warmup").mkdir(parents=True)
+            (session_dir / "teacher" / "warmup" / "working.net.xml").write_text("stale")
+            raise RuntimeError("interrupted retry")
+        rows = []
+        for role in ("teacher", "candidate"):
+            image_file = session_dir / f"{role}.png"
+            Image.new("RGB", (240, 180), "white").save(image_file)
+            rows.append([{"lane_id": "in_0", "screenshot_file": str(image_file), "junction_pixel": [120, 90]}])
+        return tuple(rows)
+
+    interrupted_out = tmp_path / "interrupted-out"
+    with pytest.raises(RuntimeError, match="interrupted retry"):
+        module.run_visual_phase(
+            manifest_file=manifest_file,
+            output_dir=interrupted_out,
+            seed_junction="seed",
+            zoom=2500.0,
+            window_size=(1400, 1000),
+            resume=True,
+            capture_tile_func=interrupted_retry_capture,
+        )
+
+    def resumed_retry_capture(**kwargs):
+        session_dir = Path(kwargs["output_dir"])
+        assert not session_dir.exists()
+        session_dir.mkdir(parents=True)
+        rows = []
+        for role in ("teacher", "candidate"):
+            image_file = session_dir / f"{role}.png"
+            image = Image.new("RGB", (240, 180), "white")
+            draw = ImageDraw.Draw(image)
+            draw.line((120, 110, 120, 165), fill=(0, 255, 255), width=4)
+            draw.line((130, 90, 210, 90), fill=(0, 255, 0), width=4)
+            image.save(image_file)
+            rows.append([{"lane_id": "in_0", "screenshot_file": str(image_file), "junction_pixel": [120, 90]}])
+        return tuple(rows)
+
+    resumed = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=interrupted_out,
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=True,
+        capture_tile_func=resumed_retry_capture,
+    )
+    assert resumed["status"] == "pass"
+
     def failed_capture(**kwargs):
         session_dir = Path(kwargs["output_dir"])
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -1335,6 +1475,16 @@ def test_visual_phase_persists_each_lane_and_resumes(tmp_path: Path) -> None:
     )
     assert failed["status"] == "fail"
     assert (tmp_path / "failed-out" / "tiles" / "0004_0008" / ".session").is_dir()
+    recovered = module.run_visual_phase(
+        manifest_file=manifest_file,
+        output_dir=tmp_path / "failed-out",
+        seed_junction="seed",
+        zoom=2500.0,
+        window_size=(1400, 1000),
+        resume=True,
+        capture_tile_func=fake_capture,
+    )
+    assert recovered["status"] == "pass"
 
     expanded_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     expanded_manifest["status"] = "blocked"
@@ -1513,7 +1663,7 @@ def test_target_window_capture_uses_one_process_per_role_and_junction(
                 "status": "pass",
                 "reasons": [],
             },
-                "input_method": "target_window_send_input",
+                "input_method": "target_window_messages",
                 "subnet_sha256": "d" * 64,
                 "render_source": "subnet",
                 "screenshot_file": str(image_file),
