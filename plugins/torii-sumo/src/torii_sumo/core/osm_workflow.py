@@ -4081,6 +4081,121 @@ def _workflow_reference_visual_detail_section(
     }
 
 
+_WORKFLOW_UNSET = object()
+
+
+def _workflow_reference_matched_gate_section(
+    *,
+    command_runner: Callable[..., Any],
+    net_file: Any,
+    network_plan: Any,
+    output_dir: Path,
+    prefix: str,
+    reference_net_file: Path | None,
+    reference_scope_audit_func: Callable[..., dict[str, Any]],
+    reference_visual_detail_net_file: Path | None,
+    run_reference_scope_audit_after_build: bool,
+    run_scope_pruning_after_build: bool,
+    scope_pruning_func: Callable[..., dict[str, Any]],
+    sumo_binary: str,
+    timeout_seconds: float,
+    reference_scope_audit_report: dict[str, Any] | None,
+    reference_scope_candidate_net_file: Path | None,
+    reference_scope_post_prune_audit_report: dict[str, Any] | None,
+    reference_scope_pruning_promotion_report: dict[str, Any],
+    reference_scope_pruning_report: dict[str, Any] | None,
+    reference_scope_pruning_sumo_load_report: dict[str, Any] | None,
+    reference_visual_detail_comparison_net_file: Path | None,
+) -> dict[str, Any]:
+    reference_scope_candidate_layer = _WORKFLOW_UNSET
+    reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
+    reference_scope_audit_report = _WORKFLOW_UNSET
+    reference_scope_candidate_net_file = _WORKFLOW_UNSET
+    reference_scope_post_prune_audit_report = _WORKFLOW_UNSET
+    reference_scope_pruning_promotion_report = _WORKFLOW_UNSET
+    reference_scope_pruning_report = _WORKFLOW_UNSET
+    reference_scope_pruning_sumo_load_report = _WORKFLOW_UNSET
+    scope_variant_file = _WORKFLOW_UNSET
+    scope_variant_value = _WORKFLOW_UNSET
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and run_reference_scope_audit_after_build
+    ):
+        reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
+        reference_scope_candidate_layer = (
+            "reference_visual_detail"
+            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
+            else "vehicle_core"
+        )
+        reference_scope_audit_report = reference_scope_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_scope_candidate_net_file,
+            output_dir=output_dir / "reference_scope_audit",
+            prefix=f"{prefix}_reference_scope_audit",
+        )
+        if run_scope_pruning_after_build and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
+            reference_scope_pruning_report = scope_pruning_func(
+                net_file=reference_scope_candidate_net_file,
+                reference_scope_report=reference_scope_audit_report,
+                output_dir=output_dir / "reference_scope_pruning",
+                prefix=f"{prefix}_reference_scope_pruning",
+                timeout_seconds=timeout_seconds,
+            )
+            scope_variant_value = str(
+                reference_scope_pruning_report.get("scope_pruning_variant_file", "")
+            )
+            scope_variant_file = Path(scope_variant_value) if scope_variant_value else None
+            if (
+                reference_scope_pruning_report.get("status") == "pass"
+                and scope_variant_file is not None
+                and scope_variant_file.exists()
+            ):
+                reference_scope_pruning_sumo_load_report = _sumo_load_net(
+                    scope_variant_file,
+                    output_dir=output_dir / "reference_scope_pruning_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                reference_scope_post_prune_audit_report = reference_scope_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=scope_variant_file,
+                    output_dir=output_dir / "reference_scope_post_prune_audit",
+                    prefix=f"{prefix}_reference_scope_post_prune_audit",
+                )
+                reference_scope_pruning_promotion_report = _scope_pruning_promotion_decision(
+                    pruning_report=reference_scope_pruning_report,
+                    post_scope_report=reference_scope_post_prune_audit_report,
+                    sumo_load_report=reference_scope_pruning_sumo_load_report,
+                    source_net_file=reference_scope_candidate_net_file,
+                    variant_net_file=scope_variant_file,
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
+                    reference_scope_pruning_promotion_report.get("status", "blocked")
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_checks"] = reference_scope_pruning_promotion_report.get(
+                    "checks", {}
+                )
+                if reference_scope_pruning_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = scope_variant_file
+                    reference_visual_detail_comparison_selection_reason = "reference_scope_pruning_promoted"
+                    reference_scope_candidate_net_file = scope_variant_file
+                    reference_scope_candidate_layer = "reference_visual_detail"
+                    reference_scope_audit_report = reference_scope_post_prune_audit_report
+    return {
+        'reference_scope_audit_report': reference_scope_audit_report,
+        'reference_scope_candidate_layer': reference_scope_candidate_layer,
+        'reference_scope_candidate_net_file': reference_scope_candidate_net_file,
+        'reference_scope_post_prune_audit_report': reference_scope_post_prune_audit_report,
+        'reference_scope_pruning_promotion_report': reference_scope_pruning_promotion_report,
+        'reference_scope_pruning_report': reference_scope_pruning_report,
+        'reference_scope_pruning_sumo_load_report': reference_scope_pruning_sumo_load_report,
+        'reference_visual_detail_comparison_net_file': reference_visual_detail_comparison_net_file,
+        'reference_visual_detail_comparison_selection_reason': reference_visual_detail_comparison_selection_reason,
+    }
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -4816,72 +4931,39 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_reference_hierarchy_audit",
             resolve_equivalent_fragmentation=True,
         )
-    if (
-        str(network_plan.get("network_profile", "")) == "reference_matched"
-        and reference_net_file is not None
-        and run_reference_scope_audit_after_build
-    ):
-        reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
-        reference_scope_candidate_layer = (
-            "reference_visual_detail"
-            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
-            else "vehicle_core"
-        )
-        reference_scope_audit_report = reference_scope_audit_func(
-            reference_net_file=reference_net_file,
-            candidate_net_file=reference_scope_candidate_net_file,
-            output_dir=output_dir / "reference_scope_audit",
-            prefix=f"{prefix}_reference_scope_audit",
-        )
-        if run_scope_pruning_after_build and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
-            reference_scope_pruning_report = scope_pruning_func(
-                net_file=reference_scope_candidate_net_file,
-                reference_scope_report=reference_scope_audit_report,
-                output_dir=output_dir / "reference_scope_pruning",
-                prefix=f"{prefix}_reference_scope_pruning",
-                timeout_seconds=timeout_seconds,
-            )
-            scope_variant_value = str(
-                reference_scope_pruning_report.get("scope_pruning_variant_file", "")
-            )
-            scope_variant_file = Path(scope_variant_value) if scope_variant_value else None
-            if (
-                reference_scope_pruning_report.get("status") == "pass"
-                and scope_variant_file is not None
-                and scope_variant_file.exists()
-            ):
-                reference_scope_pruning_sumo_load_report = _sumo_load_net(
-                    scope_variant_file,
-                    output_dir=output_dir / "reference_scope_pruning_sumo_load",
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                reference_scope_post_prune_audit_report = reference_scope_audit_func(
-                    reference_net_file=reference_net_file,
-                    candidate_net_file=scope_variant_file,
-                    output_dir=output_dir / "reference_scope_post_prune_audit",
-                    prefix=f"{prefix}_reference_scope_post_prune_audit",
-                )
-                reference_scope_pruning_promotion_report = _scope_pruning_promotion_decision(
-                    pruning_report=reference_scope_pruning_report,
-                    post_scope_report=reference_scope_post_prune_audit_report,
-                    sumo_load_report=reference_scope_pruning_sumo_load_report,
-                    source_net_file=reference_scope_candidate_net_file,
-                    variant_net_file=scope_variant_file,
-                )
-                reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
-                    reference_scope_pruning_promotion_report.get("status", "blocked")
-                )
-                reference_scope_pruning_report["scope_pruning_promotion_checks"] = reference_scope_pruning_promotion_report.get(
-                    "checks", {}
-                )
-                if reference_scope_pruning_promotion_report.get("status") == "pass":
-                    reference_visual_detail_comparison_net_file = scope_variant_file
-                    reference_visual_detail_comparison_selection_reason = "reference_scope_pruning_promoted"
-                    reference_scope_candidate_net_file = scope_variant_file
-                    reference_scope_candidate_layer = "reference_visual_detail"
-                    reference_scope_audit_report = reference_scope_post_prune_audit_report
+    _reference_matched_gate_section_result = _workflow_reference_matched_gate_section(
+        command_runner=command_runner,
+        net_file=net_file,
+        network_plan=network_plan,
+        output_dir=output_dir,
+        prefix=prefix,
+        reference_net_file=reference_net_file,
+        reference_scope_audit_func=reference_scope_audit_func,
+        reference_visual_detail_net_file=reference_visual_detail_net_file,
+        run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
+        run_scope_pruning_after_build=run_scope_pruning_after_build,
+        scope_pruning_func=scope_pruning_func,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        reference_scope_audit_report=reference_scope_audit_report,
+        reference_scope_candidate_net_file=reference_scope_candidate_net_file,
+        reference_scope_post_prune_audit_report=reference_scope_post_prune_audit_report,
+        reference_scope_pruning_promotion_report=reference_scope_pruning_promotion_report,
+        reference_scope_pruning_report=reference_scope_pruning_report,
+        reference_scope_pruning_sumo_load_report=reference_scope_pruning_sumo_load_report,
+        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
+    )
+    reference_scope_audit_report = _reference_matched_gate_section_result['reference_scope_audit_report']
+    reference_scope_candidate_net_file = _reference_matched_gate_section_result['reference_scope_candidate_net_file']
+    reference_scope_post_prune_audit_report = _reference_matched_gate_section_result['reference_scope_post_prune_audit_report']
+    reference_scope_pruning_promotion_report = _reference_matched_gate_section_result['reference_scope_pruning_promotion_report']
+    reference_scope_pruning_report = _reference_matched_gate_section_result['reference_scope_pruning_report']
+    reference_scope_pruning_sumo_load_report = _reference_matched_gate_section_result['reference_scope_pruning_sumo_load_report']
+    reference_visual_detail_comparison_net_file = _reference_matched_gate_section_result['reference_visual_detail_comparison_net_file']
+    if _reference_matched_gate_section_result['reference_scope_candidate_layer'] is not _WORKFLOW_UNSET:
+        reference_scope_candidate_layer = _reference_matched_gate_section_result['reference_scope_candidate_layer']
+    if _reference_matched_gate_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _reference_matched_gate_section_result['reference_visual_detail_comparison_selection_reason']
     _reference_matched_section_result = _workflow_reference_matched_section(
         command_runner=command_runner,
         net_file=net_file,
