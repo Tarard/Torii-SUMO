@@ -1127,6 +1127,133 @@ def run_scoped_teacher_tls_cell_batch(
     return report
 
 
+def run_final_direct_replay_candidates(
+    queue_report: Mapping[str, Any],
+    *,
+    source_net_file: Path,
+    baseline_delta_report: Mapping[str, Any],
+    iteration_label: str,
+    output_dir: Path,
+    prefix: str,
+    netconvert_binary: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+    teacher_guided_direct_replay_func: Callable[..., Any],
+    reference_join_audit_func: Callable[..., Any],
+    reference_join_audit_structural_only: bool,
+    reference_net_file: Path | None,
+    topology_cluster_radius_m: float,
+    topology_min_cluster_nodes: int,
+    teacher_guided_seed_report: Mapping[str, Any] | None,
+    teacher_guided_repair_requires_reference_promotion: bool,
+) -> tuple[Path | None, dict[str, Any] | None, dict[str, Any], dict[str, Any] | None]:
+    final_direct_candidates = [
+        candidate
+        for candidate in queue_report.get("repair_candidates", []) or []
+        if isinstance(candidate, Mapping)
+        and candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
+    ]
+    selected_variant_file: Path | None = None
+    selected_delta_report: dict[str, Any] | None = None
+    selected_replay_report: dict[str, Any] | None = None
+    selected_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "no_replay_candidates",
+    }
+    selected_rank: tuple[int, int, int, int, int] | None = None
+    for direct_index, candidate in enumerate(final_direct_candidates, start=1):
+        trial_queue_report = dict(queue_report)
+        trial_queue_report["repair_candidates"] = [dict(candidate)]
+        trial_queue_report["repair_candidate_count"] = 1
+        trial_queue_report["ready_candidate_count"] = 1
+        trial_queue_report["expanded_scope_candidate_count"] = 0
+        replay_output_dir = output_dir / "final_movement_direct_replay" / f"attempt_{direct_index:03d}"
+        delta_output_dir = (
+            output_dir / "final_movement_direct_replay_reference_delta" / f"attempt_{direct_index:03d}"
+        )
+        delta_prefix = f"{prefix}_final_movement_direct_replay_reference_delta_{direct_index:03d}"
+        if iteration_label != "iteration_001":
+            replay_output_dir = (
+                output_dir
+                / "final_movement_direct_replay"
+                / iteration_label
+                / f"attempt_{direct_index:03d}"
+            )
+            delta_output_dir = (
+                output_dir
+                / "final_movement_direct_replay_reference_delta"
+                / iteration_label
+                / f"attempt_{direct_index:03d}"
+            )
+            delta_prefix = (
+                f"{prefix}_final_movement_direct_replay_{iteration_label}_"
+                f"reference_delta_{direct_index:03d}"
+            )
+        replay_report = teacher_guided_direct_replay_func(
+            queue_report=trial_queue_report,
+            source_net_file=source_net_file,
+            output_dir=replay_output_dir,
+            prefix=f"{prefix}_final_movement_rebuild_direct_replay",
+            netconvert_binary=netconvert_binary,
+            sumo_binary=sumo_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        last_replay_report = replay_report
+        direct_variant_value = str(replay_report.get("variant_file", ""))
+        direct_variant_file = Path(direct_variant_value) if direct_variant_value else None
+        if direct_variant_file is None or not direct_variant_file.exists():
+            if selected_replay_report is None:
+                selected_replay_report = last_replay_report
+            continue
+        delta_report = reference_join_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=direct_variant_file,
+            output_dir=delta_output_dir,
+            prefix=delta_prefix,
+            candidate_cluster_radius_m=topology_cluster_radius_m,
+            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+            structural_only=_followup_reference_delta_structural_only(
+                baseline_delta_report,
+                default=reference_join_audit_structural_only,
+            ),
+        )
+        promotion_report = _movement_rebuild_reference_delta_promotion_decision(
+            candidate_delta_report=delta_report,
+            baseline_delta_report=baseline_delta_report,
+            structural_guard_delta_report=(
+                teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
+            ),
+            reason="final_direct_local_teacher_replay_promoted_by_reference_delta",
+        )
+        if promotion_report.get("status") != "pass":
+            if selected_rank is None:
+                selected_delta_report = delta_report
+                selected_promotion_report = promotion_report
+                selected_replay_report = last_replay_report
+            continue
+        candidate_rank = (
+            _movement_rebuild_mismatch_score(delta_report),
+            _int_field(delta_report, "junction_pattern_mismatch_count"),
+            _total_structural_delta_score(delta_report),
+            _tls_semantic_delta_score(delta_report),
+            direct_index,
+        )
+        if selected_rank is None or candidate_rank < selected_rank:
+            selected_rank = candidate_rank
+            selected_variant_file = direct_variant_file
+            selected_delta_report = delta_report
+            selected_promotion_report = promotion_report
+            selected_replay_report = last_replay_report
+    return (
+        selected_variant_file,
+        selected_delta_report,
+        selected_promotion_report,
+        selected_replay_report,
+    )
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -3611,117 +3738,6 @@ def run_osm_cleanup_workflow(
                     "status": "blocked",
                     "reason": "sumo_load_not_pass",
                 }
-        def run_final_direct_replay_candidates(
-            queue_report: Mapping[str, Any],
-            *,
-            source_net_file: Path,
-            baseline_delta_report: Mapping[str, Any],
-            iteration_label: str,
-        ) -> tuple[Path | None, dict[str, Any] | None, dict[str, Any], dict[str, Any] | None]:
-            final_direct_candidates = [
-                candidate
-                for candidate in queue_report.get("repair_candidates", []) or []
-                if isinstance(candidate, Mapping)
-                and candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
-            ]
-            selected_variant_file: Path | None = None
-            selected_delta_report: dict[str, Any] | None = None
-            selected_replay_report: dict[str, Any] | None = None
-            selected_promotion_report: dict[str, Any] = {
-                "status": "skipped",
-                "reason": "no_replay_candidates",
-            }
-            selected_rank: tuple[int, int, int, int, int] | None = None
-            for direct_index, candidate in enumerate(final_direct_candidates, start=1):
-                trial_queue_report = dict(queue_report)
-                trial_queue_report["repair_candidates"] = [dict(candidate)]
-                trial_queue_report["repair_candidate_count"] = 1
-                trial_queue_report["ready_candidate_count"] = 1
-                trial_queue_report["expanded_scope_candidate_count"] = 0
-                replay_output_dir = output_dir / "final_movement_direct_replay" / f"attempt_{direct_index:03d}"
-                delta_output_dir = (
-                    output_dir / "final_movement_direct_replay_reference_delta" / f"attempt_{direct_index:03d}"
-                )
-                delta_prefix = f"{prefix}_final_movement_direct_replay_reference_delta_{direct_index:03d}"
-                if iteration_label != "iteration_001":
-                    replay_output_dir = (
-                        output_dir
-                        / "final_movement_direct_replay"
-                        / iteration_label
-                        / f"attempt_{direct_index:03d}"
-                    )
-                    delta_output_dir = (
-                        output_dir
-                        / "final_movement_direct_replay_reference_delta"
-                        / iteration_label
-                        / f"attempt_{direct_index:03d}"
-                    )
-                    delta_prefix = (
-                        f"{prefix}_final_movement_direct_replay_{iteration_label}_"
-                        f"reference_delta_{direct_index:03d}"
-                    )
-                replay_report = teacher_guided_direct_replay_func(
-                    queue_report=trial_queue_report,
-                    source_net_file=source_net_file,
-                    output_dir=replay_output_dir,
-                    prefix=f"{prefix}_final_movement_rebuild_direct_replay",
-                    netconvert_binary=netconvert_binary,
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                last_replay_report = replay_report
-                direct_variant_value = str(replay_report.get("variant_file", ""))
-                direct_variant_file = Path(direct_variant_value) if direct_variant_value else None
-                if direct_variant_file is None or not direct_variant_file.exists():
-                    if selected_replay_report is None:
-                        selected_replay_report = last_replay_report
-                    continue
-                delta_report = reference_join_audit_func(
-                    reference_net_file=reference_net_file,
-                    candidate_net_file=direct_variant_file,
-                    output_dir=delta_output_dir,
-                    prefix=delta_prefix,
-                    candidate_cluster_radius_m=topology_cluster_radius_m,
-                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                    structural_only=_followup_reference_delta_structural_only(
-                        baseline_delta_report,
-                        default=reference_join_audit_structural_only,
-                    ),
-                )
-                promotion_report = _movement_rebuild_reference_delta_promotion_decision(
-                    candidate_delta_report=delta_report,
-                    baseline_delta_report=baseline_delta_report,
-                    structural_guard_delta_report=(
-                        teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
-                    ),
-                    reason="final_direct_local_teacher_replay_promoted_by_reference_delta",
-                )
-                if promotion_report.get("status") != "pass":
-                    if selected_rank is None:
-                        selected_delta_report = delta_report
-                        selected_promotion_report = promotion_report
-                        selected_replay_report = last_replay_report
-                    continue
-                candidate_rank = (
-                    _movement_rebuild_mismatch_score(delta_report),
-                    _int_field(delta_report, "junction_pattern_mismatch_count"),
-                    _total_structural_delta_score(delta_report),
-                    _tls_semantic_delta_score(delta_report),
-                    direct_index,
-                )
-                if selected_rank is None or candidate_rank < selected_rank:
-                    selected_rank = candidate_rank
-                    selected_variant_file = direct_variant_file
-                    selected_delta_report = delta_report
-                    selected_promotion_report = promotion_report
-                    selected_replay_report = last_replay_report
-            return (
-                selected_variant_file,
-                selected_delta_report,
-                selected_promotion_report,
-                selected_replay_report,
-            )
 
         if (
             final_movement_rebuild_reference_promotion_report.get("status") != "pass"
@@ -3746,6 +3762,20 @@ def run_osm_cleanup_workflow(
                     source_net_file=current_direct_source_net_file,
                     baseline_delta_report=current_direct_baseline_report,
                     iteration_label=iteration_label,
+                    output_dir=output_dir,
+                    prefix=prefix,
+                    netconvert_binary=netconvert_binary,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                    teacher_guided_direct_replay_func=teacher_guided_direct_replay_func,
+                    reference_join_audit_func=reference_join_audit_func,
+                    reference_join_audit_structural_only=reference_join_audit_structural_only,
+                    reference_net_file=reference_net_file,
+                    topology_cluster_radius_m=topology_cluster_radius_m,
+                    topology_min_cluster_nodes=topology_min_cluster_nodes,
+                    teacher_guided_seed_report=teacher_guided_seed_report,
+                    teacher_guided_repair_requires_reference_promotion=teacher_guided_repair_requires_reference_promotion,
                 )
                 if direct_replay_report is not None:
                     final_movement_direct_replay_report = direct_replay_report
