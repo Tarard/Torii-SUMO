@@ -1926,16 +1926,19 @@ def _workflow_reference_matched_section(
     non_controller_demotion_source_net_file = _WORKFLOW_UNSET
     non_controller_demotion_variant_file = _WORKFLOW_UNSET
     non_controller_demotion_variant_value = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file = _WORKFLOW_UNSET
     post_teacher_tls_connection_repair_movement_rebuild_queue_report = _WORKFLOW_UNSET
     post_teacher_tls_connection_repair_reference_delta_report = _WORKFLOW_UNSET
     post_teacher_tls_connection_repair_reference_promotion_report = _WORKFLOW_UNSET
     post_teacher_tls_connection_repair_report = _WORKFLOW_UNSET
     post_teacher_tls_connection_repair_sumo_load_report = _WORKFLOW_UNSET
+    post_teacher_tls_low_vehicle_control_reference_delta_report = _WORKFLOW_UNSET
     post_teacher_tls_low_vehicle_control_reference_promotion_report = _WORKFLOW_UNSET
     post_teacher_tls_non_controller_junction_demotion_reference_delta_report = _WORKFLOW_UNSET
     post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = _WORKFLOW_UNSET
     post_teacher_tls_non_controller_junction_demotion_report = _WORKFLOW_UNSET
     post_teacher_tls_non_controller_junction_demotion_sumo_load_report = _WORKFLOW_UNSET
+    post_teacher_tls_signal_grouping_reference_delta_report = _WORKFLOW_UNSET
     post_teacher_tls_signal_grouping_reference_promotion_report = _WORKFLOW_UNSET
     post_teacher_tls_signal_grouping_report = _WORKFLOW_UNSET
     post_teacher_tls_signal_grouping_sumo_load_report = _WORKFLOW_UNSET
@@ -1978,6 +1981,7 @@ def _workflow_reference_matched_section(
     teacher_guided_queue_needed = _WORKFLOW_UNSET
     teacher_guided_repair_best_variant_file = _WORKFLOW_UNSET
     teacher_guided_repair_queue_report = _WORKFLOW_UNSET
+    teacher_guided_repair_reference_promotion_report = _WORKFLOW_UNSET
     teacher_guided_repair_requires_reference_promotion = _WORKFLOW_UNSET
     teacher_guided_repair_run_report = _WORKFLOW_UNSET
     teacher_guided_replay_source_net_file = _WORKFLOW_UNSET
