@@ -8,6 +8,30 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 - The MCP server is the execution layer: run bounded checks and return structured observations.
 - MCP tool output is observation, not final interpretation.
 
+## Tool Profiles
+
+Plugin-launched MCP sessions default to the 10-tool `default` profile. The
+legacy tables below still use the historical tool names; use this mapping when
+the session exposes only the default tools:
+
+| Default tool | Legacy name in this reference |
+|---|---|
+| `torii.preflight` | `sumo_preflight` |
+| `torii.config.inspect` | `sumo_config_pair_preflight` |
+| `torii.run.compare` | `sumo_compare_outputs` |
+| `torii.place.resolve` | `sumo_osm_resolve_place` |
+| `torii.intersection.classify` | `sumo_intersection_archetype_classify` |
+| `torii.signal.classify` | `sumo_signal_device_profile_classify` |
+| `torii.network.audit` | `sumo_network_topology_audit` / `sumo_network_routeability_audit` |
+| `torii.network.compare` | `sumo_network_connection_mode_regression_audit` |
+| `torii.demand.audit` | `sumo_detector_count_audit` |
+| `torii.review.create` | `sumo_network_review_html` |
+| `torii.netedit.open/observe/act/close` | `sumo_netedit_session` operations |
+
+Long workflows, Hamburg-specific stages, candidate generation, and batch runs
+are not in the default MCP profile. Route them to the `torii` CLI, or use the
+`legacy` profile only when an interactive MCP diagnostic is justified.
+
 ## Tool Selection
 
 | Situation | Tool | Required interpretation |
