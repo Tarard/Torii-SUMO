@@ -9,3 +9,10 @@ outputs/
 docs/superpowers/
 .worktrees/
 *.pdf
+
+# Local test and dependency-manager scratch directories.
+pytest-*/
+acl-test-*/
+py-mkdir-mode700/
+.uv-cache/
+.uv-tools/
