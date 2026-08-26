@@ -5,6 +5,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
+
 
 TINY_SUMO_NET = """<?xml version="1.0" encoding="UTF-8"?>
 <net version="1.20">
@@ -25,6 +27,27 @@ TINY_SUMO_NET = """<?xml version="1.0" encoding="UTF-8"?>
     <junction id="n3" type="priority" x="100.0" y="20.0" incLanes="walk_0" intLanes=""/>
 </net>
 """
+
+
+def test_write_json_preserves_existing_file_when_atomic_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from torii_sumo.core import artifact_io, workflow_review_html
+
+    destination = tmp_path / "review.json"
+    original = '{"status": "old"}'
+    destination.write_text(original, encoding="utf-8")
+
+    def fail_replace(_source: Path, _destination: Path) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(artifact_io.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        workflow_review_html._write_json(destination, {"status": "new"})
+
+    assert destination.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.glob(".torii-*.tmp"))
 
 
 def test_artifact_hashes_cover_files_directories_and_missing_paths(tmp_path: Path) -> None:

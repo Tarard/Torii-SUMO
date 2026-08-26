@@ -1,9 +1,24 @@
 from pathlib import Path
 
-from torii_sumo.evidence.output_inspection import inspect_output_pair, inspect_run_outputs
+from torii_sumo.evidence.output_inspection import inspect_output_pair, inspect_run_outputs, inspect_summary
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "outputs"
+
+
+def test_summary_keeps_ended_separate_from_arrived_and_reports_discarded(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.xml"
+    summary_path.write_text(
+        '<summary><step time="10" loaded="2" inserted="2" ended="2" discarded="1"/></summary>',
+        encoding="utf-8",
+    )
+
+    summary = inspect_summary(summary_path)
+
+    assert summary.arrived is None
+    assert summary.discarded == 1
+    assert summary.completion_ratio is None
+    assert any("discarded" in warning for warning in summary.warnings)
 
 
 def test_inspect_run_outputs_reports_completion_and_trip_means() -> None:

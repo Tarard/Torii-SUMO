@@ -13,23 +13,11 @@ from torii_sumo.core.hamburg_official_intersection_plainxml import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-ASSET_DIR = (
-    REPO_ROOT
-    / "artifacts"
-    / "hamburg_sandtorkai_twin_20260719"
-    / "official_first_named_corridor_v1"
-    / "official"
-    / "signals"
-    / "assets"
-)
-
-
-def _inputs(node_id: str) -> dict[str, Path]:
+def _missing_inputs(tmp_path: Path, node_id: str) -> dict[str, Path]:
     return {
-        "map_xml_file": ASSET_DIR / f"{node_id}_map_xml.xml",
-        "map_kml_file": ASSET_DIR / f"{node_id}_map_kml.kml",
-        "ocit_c_file": ASSET_DIR / f"{node_id}_ocit_xml.xml",
+        "map_xml_file": tmp_path / f"missing-{node_id}-map.xml",
+        "map_kml_file": tmp_path / f"missing-{node_id}-map.kml",
+        "ocit_c_file": tmp_path / f"missing-{node_id}-ocit.xml",
     }
 
 
@@ -95,7 +83,7 @@ def test_real_2394_is_rejected_by_the_single_core_builder(tmp_path: Path) -> Non
         match="single-core classification gate failed",
     ):
         materialize_hamburg_official_intersection_plainxml(
-            **_inputs("2394"),
+            **_missing_inputs(tmp_path, "2394"),
             expected_node_id="2394",
             output_dir=output,
             classification_file=classification,
@@ -124,7 +112,7 @@ def test_compound_hamburg_nodes_cannot_enter_the_single_core_compiler(
 
     with pytest.raises(HamburgOfficialIntersectionPlainXmlError):
         materialize_hamburg_official_intersection_plainxml(
-            **_inputs(node_id),
+            **_missing_inputs(tmp_path, node_id),
             expected_node_id=node_id,
             output_dir=output,
             classification_file=classification,
@@ -138,9 +126,19 @@ def test_compound_hamburg_nodes_cannot_enter_the_single_core_compiler(
 def test_materializer_fails_before_writing_on_hash_mismatch(tmp_path: Path) -> None:
     output = tmp_path / "candidate"
     classification, classification_id, digest = _classification(tmp_path, "2394")
+    inputs = {
+        role: tmp_path / name
+        for role, name in (
+            ("map_xml_file", "map.xml"),
+            ("map_kml_file", "map.kml"),
+            ("ocit_c_file", "ocit.xml"),
+        )
+    }
+    for path in inputs.values():
+        path.write_text("placeholder", encoding="utf-8")
     with pytest.raises(HamburgOfficialIntersectionPlainXmlError, match="SHA-256"):
         materialize_hamburg_official_intersection_plainxml(
-            **_inputs("2394"),
+            **inputs,
             expected_node_id="2394",
             expected_sha256={"map_xml": "0" * 64},
             output_dir=output,
@@ -161,7 +159,7 @@ def test_materializer_never_overwrites_existing_candidate_directory(tmp_path: Pa
 
     with pytest.raises(HamburgOfficialIntersectionPlainXmlError, match="must not already exist"):
         materialize_hamburg_official_intersection_plainxml(
-            **_inputs("2349"),
+            **_missing_inputs(tmp_path, "2349"),
             expected_node_id="2349",
             output_dir=output,
             classification_file=classification,
@@ -183,13 +181,39 @@ def test_materializer_requires_a_hash_bound_single_core_classification(
         match="requires classification_file",
     ):
         materialize_hamburg_official_intersection_plainxml(
-            **_inputs("2349"),
+            **_missing_inputs(tmp_path, "2349"),
             expected_node_id="2349",
             output_dir=output,
             compile_net=False,
         )
 
     assert not output.exists()
+
+
+def test_compound_classification_fails_before_sources_without_expected_node_id(
+    tmp_path: Path,
+) -> None:
+    classification, classification_id, digest = _classification(
+        tmp_path,
+        "2394",
+        physical_arrangement="compound",
+        control_domain="multi_owner_single_controller",
+        core_count=2,
+        owner_count=5,
+    )
+
+    with pytest.raises(
+        HamburgOfficialIntersectionPlainXmlError,
+        match="single-core classification gate failed",
+    ):
+        materialize_hamburg_official_intersection_plainxml(
+            **_missing_inputs(tmp_path, "2394"),
+            output_dir=tmp_path / "candidate",
+            classification_file=classification,
+            accepted_classification_id=classification_id,
+            expected_classification_sha256=digest,
+            compile_net=False,
+        )
 
 
 def test_single_core_profile_validator_accepts_only_confirmed_one_by_one_layout(

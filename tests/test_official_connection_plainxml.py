@@ -35,6 +35,12 @@ def _real_inputs() -> dict[str, Path]:
     }
 
 
+pytestmark = pytest.mark.skipif(
+    not all(path.is_file() for path in _real_inputs().values()),
+    reason="requires untracked Hamburg official transition workflow artifacts",
+)
+
+
 def test_real_authorized_transition_writes_only_official_lane_pairs(tmp_path: Path) -> None:
     result = materialize_hamburg_official_connection_plainxml(
         **_real_inputs(),

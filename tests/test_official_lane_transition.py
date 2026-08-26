@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -154,7 +155,34 @@ def test_graph_is_deterministic_when_report_order_is_reversed() -> None:
     reversed_result = build_hamburg_official_lane_transition_graph(**inputs)
 
     assert repeated == reversed_result
-    assert repeated["graph_id"] == "official-lane-transition-959b437fd5a487690fbfa0b5"
+    assert repeated["graph_id"] == "official-lane-transition-45ed08a1de702080597cd9ec"
+
+
+def test_graph_identity_does_not_depend_on_checkout_path(tmp_path: Path) -> None:
+    source_inputs = _real_inputs()
+    source_result = build_hamburg_official_lane_transition_graph(**source_inputs)
+    copy_dir = tmp_path / "copy"
+    copy_dir.mkdir()
+    copied_reports = [
+        Path(shutil.copy2(path, copy_dir / Path(path).name))
+        for path in source_inputs["map_binding_reports"]
+    ]
+    copied_inputs = {
+        "map_binding_reports": copied_reports,
+        **{
+            role: Path(shutil.copy2(path, copy_dir / Path(path).name))
+            for role, path in source_inputs.items()
+            if role != "map_binding_reports"
+        },
+    }
+
+    copied_result = build_hamburg_official_lane_transition_graph(**copied_inputs)
+
+    assert source_result["graph_id"] == copied_result["graph_id"]
+    assert source_result["inputs"]["nodes"]["path"] != copied_result["inputs"]["nodes"]["path"]
+    assert source_result["inputs"]["lane_axis_stitch_plan"]["path"] != (
+        copied_result["inputs"]["lane_axis_stitch_plan"]["path"]
+    )
 
 
 def test_tight_uniqueness_gate_abstains_instead_of_selecting_best_guess() -> None:

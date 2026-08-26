@@ -256,7 +256,7 @@ def plan_hamburg_official_map_lane_axis_stitch(
     result["plan_id"] = "official-lane-axis-stitch-" + _stable_digest(
         {
             "schema": OFFICIAL_LANE_AXIS_STITCH_SCHEMA,
-            "inputs": input_identity,
+            "inputs": _without_runtime_paths(input_identity),
             "thresholds": result["thresholds"],
             "lanes": lane_results,
             "approaches": approaches,
@@ -265,6 +265,28 @@ def plan_hamburg_official_map_lane_axis_stitch(
         }
     )[:24]
     return result
+
+
+def lane_axis_stitch_identity_payload(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Return plan evidence without machine-local input locations."""
+
+    payload = json.loads(json.dumps(dict(plan), ensure_ascii=False))
+    inputs = payload.get("inputs")
+    if isinstance(inputs, Mapping):
+        payload["inputs"] = _without_runtime_paths(inputs)
+    return payload
+
+
+def _without_runtime_paths(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _without_runtime_paths(item)
+            for key, item in value.items()
+            if key != "path"
+        }
+    if isinstance(value, list):
+        return [_without_runtime_paths(item) for item in value]
+    return value
 
 
 def _load_map_binding_report(
@@ -1298,5 +1320,6 @@ __all__ = [
     "OFFICIAL_LANE_AXIS_STITCH_SCHEMA",
     "OfficialLaneAxisStitchError",
     "OfficialLaneAxisStitchThresholds",
+    "lane_axis_stitch_identity_payload",
     "plan_hamburg_official_map_lane_axis_stitch",
 ]

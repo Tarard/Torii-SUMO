@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import shutil
 from pathlib import Path
 
 from torii_sumo.road_network.official_lane_stitch import (
@@ -108,6 +109,42 @@ def test_edited_stitch_plan_is_rejected(tmp_path: Path) -> None:
         assert "does not exactly match" in str(exc)
     else:
         raise AssertionError("edited stitch plan was accepted")
+
+
+def test_splice_identity_does_not_depend_on_checkout_path(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source = _write_official_inputs(source_dir)
+    stitch_path = source_dir / "stitch.json"
+    stitch_path.write_text(json.dumps(_build_plan(source)), encoding="utf-8")
+    source_result = build_hamburg_official_splice_plan(
+        map_binding_reports=[source["report"]],
+        lane_axis_stitch_plan=stitch_path,
+        nodes_file=source["nodes"],
+        edges_file=source["edges"],
+        plainxml_manifest_file=source["manifest"],
+    )
+
+    copy_dir = tmp_path / "copy"
+    copy_dir.mkdir()
+    copied = {
+        role: Path(shutil.copy2(path, copy_dir / path.name))
+        for role, path in source.items()
+    }
+    copied_stitch_path = Path(shutil.copy2(stitch_path, copy_dir / stitch_path.name))
+    copied_result = build_hamburg_official_splice_plan(
+        map_binding_reports=[copied["report"]],
+        lane_axis_stitch_plan=copied_stitch_path,
+        nodes_file=copied["nodes"],
+        edges_file=copied["edges"],
+        plainxml_manifest_file=copied["manifest"],
+    )
+
+    assert source_result["plan_id"] == copied_result["plan_id"]
+    assert source_result["inputs"]["nodes"]["path"] != copied_result["inputs"]["nodes"]["path"]
+    assert source_result["inputs"]["lane_axis_stitch_plan"]["path"] != (
+        copied_result["inputs"]["lane_axis_stitch_plan"]["path"]
+    )
 
 
 def test_merge_planner_proves_added_lane_from_destination_group() -> None:

@@ -118,8 +118,8 @@ def run_tls_detector_replay(
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_file = output_dir / f"{prefix}_summary.xml"
     tripinfo_file = output_dir / f"{prefix}_tripinfo.xml"
-    e1_output = output_dir / "e1_15min.xml"
-    e2_output = output_dir / "e2_15min.xml"
+    e1_output = output_dir / f"{prefix}_e1_15min.xml"
+    e2_output = output_dir / f"{prefix}_e2_15min.xml"
     prepared_e1 = output_dir / f"{prefix}_e1.add.xml"
     prepared_e2 = output_dir / f"{prefix}_e2.add.xml"
     _prepare_detector_additional(
@@ -248,11 +248,7 @@ def run_tls_detector_replay(
     missing_measurements = sum(row["measurement_status"] == "missing" for row in comparison_rows)
     summary_metrics = inspect_summary(summary_file).model_dump(mode="json")
     tripinfo_metrics = inspect_tripinfo(tripinfo_file).model_dump(mode="json")
-    completed = (
-        summary_metrics.get("valid_xml")
-        and summary_metrics.get("running") == 0
-        and summary_metrics.get("waiting") == 0
-    )
+    completed = _summary_is_complete(summary_metrics)
     status = "pass" if missing_measurements == 0 and completed else "partial"
     report = {
         "status": status,
@@ -280,6 +276,19 @@ def run_tls_detector_replay(
     report["report_file"] = str(report_file)
     report["report_sha256"] = sha256_file(report_file)
     return report
+
+
+def _summary_is_complete(summary_metrics: Mapping[str, Any]) -> bool:
+    loaded = summary_metrics.get("loaded")
+    return (
+        summary_metrics.get("valid_xml") is True
+        and loaded is not None
+        and loaded == summary_metrics.get("inserted") == summary_metrics.get("arrived")
+        and all(
+            summary_metrics.get(field) == 0
+            for field in ("running", "waiting", "teleports", "collisions", "discarded")
+        )
+    )
 
 
 def _resolve_comparison_window(

@@ -16,6 +16,7 @@ from torii_sumo.core.hamburg_named_replay import (
     _load_detector_binding_manifest,
     _load_signal_observation_manifest,
     _read_sumo_quality,
+    _run_dynamic_sumo,
     _summarize_e1,
     _validate_binding_network,
     _validate_count_scope_manifest,
@@ -261,6 +262,45 @@ def test_sumo_quality_gate_passes_only_clean_summary(tmp_path: Path) -> None:
     assert report["quality_gate"] == "pass"
     assert report["teleport_count"] == 0
     assert report["collision_count"] == 0
+
+
+def test_dynamic_replay_does_not_promote_partial_inner_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    route_file = tmp_path / "demand.rou.xml"
+    route_file.write_text("<routes/>", encoding="utf-8")
+    summary = tmp_path / "summary.xml"
+    summary.write_text(
+        '<summary><step time="1" teleports="0" collisions="0"/></summary>',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "torii_sumo.core.hamburg_named_replay.run_tls_detector_replay",
+        lambda **_kwargs: {
+            "status": "partial",
+            "claim_status": "validation-incomplete",
+            "artifacts": {"summary_file": str(summary)},
+        },
+    )
+
+    report = _run_dynamic_sumo(
+        net_path=tmp_path / "network.net.xml",
+        route_file=route_file,
+        e1_file=tmp_path / "e1.add.xml",
+        e2_file=tmp_path / "e2.add.xml",
+        tls_events_csv=tmp_path / "events.csv",
+        expected_counts_csv=tmp_path / "counts.csv",
+        output_dir=tmp_path / "output",
+        begin=0,
+        end=900,
+        comparison_begin=0,
+        comparison_end=900,
+        sumo_binary="sumo",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["quality_gate"] == "blocked"
 
 
 def test_e1_summary_exposes_missing_bins() -> None:

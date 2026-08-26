@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -156,6 +157,18 @@ def test_unique_directional_axis_match_stays_at_approach_level(tmp_path: Path) -
     assert egress["individual_lane_allocation"]["decision"] == "automatic_abstention"
     assert sum(item["compatible"] for item in ingress["alternatives"]) == 1
     assert result["gates"]["individual_lane_index_allocation"] == "review_required"
+
+
+def test_plan_identity_does_not_depend_on_checkout_path(tmp_path: Path) -> None:
+    source = _write_official_inputs(tmp_path)
+    copy_dir = tmp_path / "copy"
+    copy_dir.mkdir()
+    copied = {
+        role: Path(shutil.copy2(path, copy_dir / path.name))
+        for role, path in source.items()
+    }
+
+    assert _plan(source)["plan_id"] == _plan(copied)["plan_id"]
 
 
 def test_equal_geometry_official_axes_abstain_by_score_margin(tmp_path: Path) -> None:

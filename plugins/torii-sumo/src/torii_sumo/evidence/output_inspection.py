@@ -18,6 +18,7 @@ class SummaryMetrics(BaseModel):
     waiting: int | None
     teleports: int | None
     collisions: int | None
+    discarded: int | None
     completion_ratio: float | None
     warnings: list[str]
 
@@ -137,6 +138,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             waiting=None,
             teleports=None,
             collisions=None,
+            discarded=None,
             completion_ratio=None,
             warnings=[f"summary file does not exist: {path}"],
         )
@@ -156,6 +158,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             waiting=None,
             teleports=None,
             collisions=None,
+            discarded=None,
             completion_ratio=None,
             warnings=[f"invalid summary XML: {exc}"],
         )
@@ -172,6 +175,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             waiting=None,
             teleports=None,
             collisions=None,
+            discarded=None,
             completion_ratio=None,
             warnings=[f"could not read summary XML: {exc}"],
         )
@@ -190,6 +194,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             waiting=None,
             teleports=None,
             collisions=None,
+            discarded=None,
             completion_ratio=None,
             warnings=["summary has no step elements"],
         )
@@ -197,8 +202,6 @@ def inspect_summary(path: Path) -> SummaryMetrics:
     last = steps[-1]
     loaded = _int_attr(last, "loaded")
     arrived = _int_attr(last, "arrived")
-    if arrived is None:
-        arrived = _int_attr(last, "ended")
     completion_ratio = None
     if loaded is not None and loaded > 0 and arrived is not None:
         completion_ratio = arrived / loaded
@@ -208,6 +211,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
     waiting = _int_attr(last, "waiting")
     teleports = _int_attr(last, "teleports")
     collisions = _int_attr(last, "collisions")
+    discarded = _int_attr(last, "discarded")
     if running and running > 0:
         warnings.append(f"{running} vehicles still running at final summary step")
     if waiting and waiting > 0:
@@ -216,6 +220,8 @@ def inspect_summary(path: Path) -> SummaryMetrics:
         warnings.append(f"{teleports} teleports reported at final summary step")
     if collisions and collisions > 0:
         warnings.append(f"{collisions} collisions reported at final summary step")
+    if discarded and discarded > 0:
+        warnings.append(f"{discarded} vehicles discarded at final summary step")
 
     return SummaryMetrics(
         path=str(path),
@@ -229,6 +235,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
         waiting=waiting,
         teleports=teleports,
         collisions=collisions,
+        discarded=discarded,
         completion_ratio=completion_ratio,
         warnings=warnings,
     )

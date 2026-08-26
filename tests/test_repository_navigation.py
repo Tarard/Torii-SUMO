@@ -7,6 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_hash_bound_repository_text_uses_lf() -> None:
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    benchmark = ROOT / "benchmarks" / "corridor_human_modeling_v1" / "benchmark.v1.json"
+
+    assert "* text=auto eol=lf" in attributes.splitlines()
+    assert b"\r\n" not in benchmark.read_bytes()
+
+
 def _registered_tool_names() -> set[str]:
     server_path = ROOT / "plugins" / "torii-sumo" / "src" / "torii_sumo" / "server.py"
     tree = ast.parse(server_path.read_text(encoding="utf-8"))
@@ -36,15 +44,18 @@ def test_readme_exposes_stable_navigation() -> None:
     for link in expected_links:
         assert link in readme
 
-    original_section_order = (
-        "## Evidence-Aware OSM-to-SUMO Construction",
-        "## Example",
+    section_order = (
+        "## How Torii Works",
+        "## Hamburg Corridor Digital Twin",
+        "## Design",
+        "## What You Can Do",
+        "## Installation",
         "## Quick Start",
-        "## What You Can Ask Me",
-        "## Boundaries",
-        "## License and Notices",
+        "## Repository Structure",
+        "## More",
+        "## License",
     )
-    positions = [readme.index(heading) for heading in original_section_order]
+    positions = [readme.index(heading) for heading in section_order]
     assert positions == sorted(positions)
 
 

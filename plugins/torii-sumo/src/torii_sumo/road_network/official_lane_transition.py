@@ -34,6 +34,7 @@ from torii_sumo.core.candidate_contracts import file_sha256
 from .official_lane_stitch import (
     HAMBURG_MAP_BINDING_SCHEMA,
     OFFICIAL_LANE_AXIS_STITCH_SCHEMA,
+    lane_axis_stitch_identity_payload,
     plan_hamburg_official_map_lane_axis_stitch,
 )
 
@@ -182,6 +183,9 @@ def build_hamburg_official_lane_transition_graph(
     supplied_plan, supplied_plan_identity = _load_json_like(
         lane_axis_stitch_plan, "lane-axis stitch plan"
     )
+    supplied_plan_identity["canonical_sha256"] = _stable_digest(
+        lane_axis_stitch_identity_payload(supplied_plan)
+    )
     recomputed_plan = plan_hamburg_official_map_lane_axis_stitch(
         map_binding_reports=[
             identity["path"] if identity.get("identity_method") == "file_bytes_sha256" else report
@@ -191,7 +195,9 @@ def build_hamburg_official_lane_transition_graph(
         edges_file=edge_path,
         plainxml_manifest_file=manifest_path,
     )
-    if supplied_plan != recomputed_plan:
+    if lane_axis_stitch_identity_payload(
+        supplied_plan
+    ) != lane_axis_stitch_identity_payload(recomputed_plan):
         raise OfficialLaneTransitionGraphError(
             "lane-axis stitch plan does not exactly match the recomputed official-input plan"
         )
@@ -1286,7 +1292,7 @@ def _load_json_like(
 def _promotion_input_hashes(identity: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "map_binding_reports": [item["sha256"] for item in identity["map_binding_reports"]],
-        "lane_axis_stitch_plan": identity["lane_axis_stitch_plan"]["sha256"],
+        "lane_axis_stitch_plan": identity["lane_axis_stitch_plan"]["canonical_sha256"],
         "plainxml_manifest": identity["plainxml_manifest"]["sha256"],
         "nodes": identity["nodes"]["sha256"],
         "edges": identity["edges"]["sha256"],

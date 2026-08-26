@@ -552,16 +552,16 @@
     "hh_sib_source_sha256": "cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16",
     "map_binding_reports": [
       {
-        "bytes": 39762,
+        "bytes": 37736,
         "identity_method": "file_bytes_sha256",
         "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\2349_map_kml_mapem_binding.json",
-        "sha256": "0cf96434b450114ca6f97800f6f19618953af5e7042c6cec1436acdd02b5d591"
+        "sha256": "e623520031bc904a005c679d428211a02f3a39dda1681841db52350ef89ba934"
       },
       {
-        "bytes": 31426,
+        "bytes": 29814,
         "identity_method": "file_bytes_sha256",
         "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\2394_map_kml_mapem_binding.json",
-        "sha256": "993034817835750014044bd257fdd7081b8740110b323bdca2d648b5ca8b523d"
+        "sha256": "8df883f6ace998e46b4cc5201acd74b52934cd0e154949c8581a7bf302cd08c2"
       }
     ],
     "nodes": {
@@ -9234,7 +9234,7 @@
     "score": "endpoint_distance/max_endpoint_distance + heading_delta/max_heading_delta"
   },
   "materialization_performed": false,
-  "plan_id": "official-lane-axis-stitch-51685be3a1b72326d3104487",
+  "plan_id": "official-lane-axis-stitch-320462acc64bb4468cbd18e2",
   "projection": {
     "crs": "EPSG:32632",
     "source_crs": "EPSG:4326"

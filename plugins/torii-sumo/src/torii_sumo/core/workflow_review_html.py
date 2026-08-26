@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
+from .artifact_io import write_json_atomic
 from .network_visualization import build_network_review_visuals
 from .claim_tiers import evaluate_claim_tiers
 
@@ -37,7 +38,7 @@ def _json_script(value: Any) -> str:
 
 
 def _write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(_jsonable(value), indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    write_json_atomic(path, _jsonable(value), sort_keys=True)
 
 
 def _as_path(value: str | Path | None) -> Path | None:

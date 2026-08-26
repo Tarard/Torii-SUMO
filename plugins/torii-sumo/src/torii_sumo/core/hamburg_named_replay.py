@@ -790,9 +790,10 @@ def _run_dynamic_sumo(
     summary_path = Path(str(report.get("artifacts", {}).get("summary_file", "")))
     quality = _read_sumo_quality(summary_path)
     artifacts = report.get("artifacts", {}) if isinstance(report.get("artifacts"), dict) else {}
+    replay_passed = report.get("status") == "pass"
     return {
-        "status": "pass" if report.get("status") in {"pass", "partial"} else "blocked",
-        "quality_gate": quality.get("quality_gate", "blocked"),
+        "status": "pass" if replay_passed else "blocked",
+        "quality_gate": quality.get("quality_gate", "blocked") if replay_passed else "blocked",
         "teleport_count": quality.get("teleport_count"),
         "collision_count": quality.get("collision_count"),
         "summary_final": quality.get("summary_final"),

@@ -92,11 +92,6 @@ def materialize_hamburg_official_intersection_plainxml(
     manifest rather than being mistaken for a usable network.
     """
 
-    sources = {
-        "map_xml": Path(map_xml_file).expanduser().resolve(strict=True),
-        "map_kml": Path(map_kml_file).expanduser().resolve(strict=True),
-        "ocit_c": Path(ocit_c_file).expanduser().resolve(strict=True),
-    }
     if (
         classification_file is None
         or not accepted_classification_id
@@ -106,20 +101,41 @@ def materialize_hamburg_official_intersection_plainxml(
             "single-core materialization requires classification_file, "
             "accepted_classification_id, and expected_classification_sha256"
         )
-    classification_path = Path(classification_file).expanduser().resolve(strict=True)
     classification_digest = str(expected_classification_sha256).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", classification_digest):
         raise HamburgOfficialIntersectionPlainXmlError(
             "expected_classification_sha256 must be a SHA-256 digest"
         )
-    sources["classification"] = classification_path
-    _validate_distinct_sources(sources)
     expected = _validate_expected_hashes(expected_sha256)
-    source_hashes = {role: file_sha256(path) for role, path in sources.items()}
-    if source_hashes["classification"].lower() != classification_digest:
+
+    sources = {
+        "map_xml": Path(map_xml_file).expanduser().resolve(),
+        "map_kml": Path(map_kml_file).expanduser().resolve(),
+        "ocit_c": Path(ocit_c_file).expanduser().resolve(),
+    }
+    classification_path = Path(classification_file).expanduser().resolve()
+    sources["classification"] = classification_path
+    destination = Path(output_dir).expanduser().resolve()
+    _validate_destination(destination, sources)
+
+    classification_payload, classification_hash = _load_single_core_layout_profile(
+        classification_path
+    )
+    if classification_hash.lower() != classification_digest:
         raise HamburgOfficialIntersectionPlainXmlError(
             "classification SHA-256 does not match expected_classification_sha256"
         )
+    classification = _validate_single_core_layout_profile_payload(
+        classification_payload,
+        node_id=expected_node_id,
+        accepted_classification_id=accepted_classification_id,
+    )
+
+    _validate_distinct_sources(sources)
+    source_hashes = {
+        role: classification_hash if role == "classification" else file_sha256(path)
+        for role, path in sources.items()
+    }
     for role, digest in expected.items():
         if source_hashes[role].lower() != digest:
             raise HamburgOfficialIntersectionPlainXmlError(
@@ -163,8 +179,8 @@ def materialize_hamburg_official_intersection_plainxml(
         raise HamburgOfficialIntersectionPlainXmlError(
             "MAP and OCIT-C node identifiers do not match"
         )
-    classification = _validate_single_core_layout_profile(
-        classification_path,
+    classification = _validate_single_core_layout_profile_payload(
+        classification,
         node_id=str(binding["node_id"]),
         accepted_classification_id=accepted_classification_id,
     )
@@ -185,8 +201,6 @@ def materialize_hamburg_official_intersection_plainxml(
             "prefix must be a safe 1-96 character artifact stem"
         )
 
-    destination = Path(output_dir).expanduser().resolve()
-    _validate_destination(destination, sources)
     plan = _build_plan(
         binding=binding,
         map_lanes=map_lanes,
@@ -1337,12 +1351,22 @@ def _validate_expected_hashes(value: Mapping[str, str] | None) -> dict[str, str]
 def _validate_single_core_layout_profile(
     path: Path,
     *,
-    node_id: str,
+    node_id: str | None,
     accepted_classification_id: str,
 ) -> Mapping[str, Any]:
+    payload, _digest = _load_single_core_layout_profile(path)
+    return _validate_single_core_layout_profile_payload(
+        payload,
+        node_id=node_id,
+        accepted_classification_id=accepted_classification_id,
+    )
+
+
+def _load_single_core_layout_profile(path: Path) -> tuple[Mapping[str, Any], str]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+        raw = path.read_bytes()
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, OSError) as exc:
         raise HamburgOfficialIntersectionPlainXmlError(
             f"invalid single-core classification file: {exc}"
         ) from exc
@@ -1350,6 +1374,15 @@ def _validate_single_core_layout_profile(
         raise HamburgOfficialIntersectionPlainXmlError(
             "single-core classification must be a JSON object"
         )
+    return payload, hashlib.sha256(raw).hexdigest()
+
+
+def _validate_single_core_layout_profile_payload(
+    payload: Mapping[str, Any],
+    *,
+    node_id: str | None,
+    accepted_classification_id: str,
+) -> Mapping[str, Any]:
     classification = payload.get("classification")
     counts = payload.get("counts")
     execution_hint = payload.get("execution_hint")
@@ -1416,14 +1449,26 @@ def _validate_single_core_layout_profile(
             and all(isinstance(value, (str, int)) and not isinstance(value, bool) for value in controller_ids)
             else set()
         )
-        if normalized_controllers != {_normalize_node_id(node_id)}:
+        expected_controllers = (
+            {_normalize_node_id(node_id)} if node_id is not None else normalized_controllers
+        )
+        if len(normalized_controllers) != 1 or normalized_controllers != expected_controllers:
             mismatches["controller_domain_ids"] = {
-                "expected": [_normalize_node_id(node_id)],
+                "expected": (
+                    [_normalize_node_id(node_id)]
+                    if node_id is not None
+                    else "one controller domain id"
+                ),
                 "observed": sorted(normalized_controllers),
             }
-    if _normalize_node_id(str(payload.get("junction_id", ""))) != _normalize_node_id(node_id):
+    observed_node_id = _normalize_node_id(str(payload.get("junction_id", "")))
+    if not observed_node_id or (
+        node_id is not None and observed_node_id != _normalize_node_id(node_id)
+    ):
         mismatches["junction_id"] = {
-            "expected": _normalize_node_id(node_id),
+            "expected": (
+                _normalize_node_id(node_id) if node_id is not None else "non-empty node id"
+            ),
             "observed": payload.get("junction_id"),
         }
     if payload.get("classification_id") != accepted_classification_id:

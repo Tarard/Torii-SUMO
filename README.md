@@ -158,6 +158,7 @@ tests/                    Unit, contract, integration, and regression tests
 ## More
 
 - [Architecture](ARCHITECTURE.md) — router, planner, executor, reviewer, promotion rules
+- [Repository Guide](docs/repository-guide.md) — code, documentation, and evidence boundaries
 - [MCP Tool Catalog](docs/mcp-tool-catalog.md) — all 74 registered tools
 - [Stage 1-M Evidence](docs/stage1-machine-review-ready-plan.md) — 30-corridor blind review, 102,398 atomic witnesses
 - [Research Status](docs/torii-corridor-human-modeling-implementation-status.md)

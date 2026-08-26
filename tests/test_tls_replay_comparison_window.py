@@ -196,6 +196,31 @@ class _Inspection:
         return self.payload
 
 
+def test_replay_completion_gate_requires_complete_clean_vehicle_accounting() -> None:
+    complete = {
+        "valid_xml": True,
+        "loaded": 2,
+        "inserted": 2,
+        "arrived": 2,
+        "running": 0,
+        "waiting": 0,
+        "teleports": 0,
+        "collisions": 0,
+        "discarded": 0,
+    }
+
+    assert tls_replay._summary_is_complete(complete) is True
+    for field in complete:
+        incomplete = dict(complete)
+        incomplete.pop(field)
+        assert tls_replay._summary_is_complete(incomplete) is False
+    for field in ("running", "waiting", "teleports", "collisions", "discarded"):
+        incomplete = {**complete, field: 1}
+        assert tls_replay._summary_is_complete(incomplete) is False
+    assert tls_replay._summary_is_complete({**complete, "inserted": 1}) is False
+    assert tls_replay._summary_is_complete({**complete, "arrived": 1}) is False
+
+
 def test_replay_audits_only_selected_bins_and_records_window_in_manifests(
     monkeypatch,
     tmp_path: Path,
@@ -260,7 +285,19 @@ def test_replay_audits_only_selected_bins_and_records_window_in_manifests(
     monkeypatch.setattr(
         tls_replay,
         "inspect_summary",
-        lambda _path: _Inspection({"valid_xml": True, "running": 0, "waiting": 0}),
+        lambda _path: _Inspection(
+            {
+                "valid_xml": True,
+                "loaded": 0,
+                "inserted": 0,
+                "arrived": 0,
+                "running": 0,
+                "waiting": 0,
+                "teleports": 0,
+                "collisions": 0,
+                "discarded": 0,
+            }
+        ),
     )
     monkeypatch.setattr(tls_replay, "inspect_tripinfo", lambda _path: _Inspection({"valid_xml": True}))
 
@@ -272,6 +309,7 @@ def test_replay_audits_only_selected_bins_and_records_window_in_manifests(
         tls_events_csv=events_file,
         expected_counts_csv=expected_file,
         output_dir=tmp_path / "output",
+        prefix="comparison_window",
         replay_end=9,
         completion_end=10,
         comparison_begin=1,
@@ -286,6 +324,9 @@ def test_replay_audits_only_selected_bins_and_records_window_in_manifests(
         "source_expected_row_count": 3,
         "selected_expected_row_count": 2,
     }
+    assert report["status"] == "pass"
+    assert Path(report["artifacts"]["e1_output"]).name == "comparison_window_e1_15min.xml"
+    assert Path(report["artifacts"]["e2_output"]).name == "comparison_window_e2_15min.xml"
     command_manifest = json.loads(Path(report["artifacts"]["command_manifest"]).read_text(encoding="utf-8"))
     assert command_manifest["comparison_window"] == report["comparison_window"]
     validation_manifest = json.loads(Path(report["report_file"]).read_text(encoding="utf-8"))

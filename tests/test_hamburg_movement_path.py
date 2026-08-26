@@ -36,6 +36,10 @@ COMPACT_NET = (
 OFFICIAL_SIGNAL_ASSETS = SANDTORKAI_ROOT / "twin" / "official" / "signals" / "assets"
 
 
+@pytest.mark.skipif(
+    not COMPACT_NET.is_file() or not OFFICIAL_SIGNAL_ASSETS.is_dir(),
+    reason="requires untracked Hamburg official signal and corridor artifacts",
+)
 def test_real_sandtorkai_inventory_resolves_exactly_once() -> None:
     map_lanes = []
     map_connections = []

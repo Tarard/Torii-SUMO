@@ -7,12 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_readme_links_plugin_install_doc() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "Codex Plugin Installation" in readme
     assert "docs/codex-plugin-install.md" in readme
+    assert "docs/README.md" in readme
+    assert "docs/repository-guide.md" in readme
     assert "ARCHITECTURE.md" in readme
-    assert "evidence-aware" in readme
-    assert "reference-comparable" in readme
-    assert "skills and MCP tools" in readme
+    assert "## Installation" in readme
+    assert "## Quick Start" in readme
+    assert "## More" in readme
     assert "docs/superpowers/specs/2026-06-20-torii-sumo-design.md" not in readme
     assert "docs/superpowers/plans/2026-06-20-torii-sumo.md" not in readme
 
