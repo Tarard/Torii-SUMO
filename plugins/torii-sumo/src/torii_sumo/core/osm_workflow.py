@@ -3750,6 +3750,337 @@ def _workflow_reference_comparison_section(
     }
 
 
+_WORKFLOW_UNSET = object()
+
+
+def _workflow_scope_pruning_section(
+    *,
+    command_runner: Callable[..., Any],
+    network_plan: Any,
+    osm_file: Any,
+    output_dir: Path,
+    prefix: str,
+    reference_hierarchy_audit_func: Callable[..., dict[str, Any]],
+    reference_net_file: Path | None,
+    reference_scope_audit_func: Callable[..., dict[str, Any]],
+    run_scope_pruning_after_build: bool,
+    run_topology_audit_after_build: bool,
+    scope_pruning_func: Callable[..., dict[str, Any]],
+    sumo_binary: str,
+    timeout_seconds: float,
+    topology_audit_func: Callable[..., dict[str, Any]],
+    topology_cluster_radius_m: float,
+    topology_min_cluster_nodes: int,
+    reference_scope_candidate_net_file: Path | None,
+    reference_scope_final_audit_report: dict[str, Any] | None,
+    reference_scope_final_post_prune_audit_report: dict[str, Any] | None,
+    reference_scope_final_promotion_report: dict[str, Any],
+    reference_scope_final_pruning_report: dict[str, Any] | None,
+    reference_scope_final_sumo_load_report: dict[str, Any] | None,
+    reference_scope_pruning_report: dict[str, Any] | None,
+    reference_visual_detail_comparison_net_file: Path | None,
+) -> dict[str, Any]:
+    reference_hierarchy_audit_candidate_net_file = _WORKFLOW_UNSET
+    reference_hierarchy_audit_report = _WORKFLOW_UNSET
+    reference_scope_audit_report = _WORKFLOW_UNSET
+    reference_scope_candidate_layer = _WORKFLOW_UNSET
+    reference_scope_pruning_promotion_report = _WORKFLOW_UNSET
+    reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
+    topology_audit_report = _WORKFLOW_UNSET
+    final_hierarchy_report = _WORKFLOW_UNSET
+    final_scope_variant_file = _WORKFLOW_UNSET
+    final_scope_variant_value = _WORKFLOW_UNSET
+    reference_scope_final_audit_report = _WORKFLOW_UNSET
+    reference_scope_final_post_prune_audit_report = _WORKFLOW_UNSET
+    reference_scope_final_promotion_report = _WORKFLOW_UNSET
+    reference_scope_final_pruning_report = _WORKFLOW_UNSET
+    reference_scope_final_sumo_load_report = _WORKFLOW_UNSET
+    reference_scope_pruning_report = _WORKFLOW_UNSET
+    if (
+        run_scope_pruning_after_build
+        and str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and reference_visual_detail_comparison_net_file is not None
+        and reference_visual_detail_comparison_net_file.exists()
+    ):
+        reference_scope_final_audit_report = reference_scope_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_visual_detail_comparison_net_file,
+            output_dir=output_dir / "final_reference_scope_audit",
+            prefix=f"{prefix}_final_reference_scope_audit",
+        )
+        if _int_field(reference_scope_final_audit_report, "prune_candidate_count") > 0:
+            reference_scope_final_pruning_report = scope_pruning_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                reference_scope_report=reference_scope_final_audit_report,
+                output_dir=output_dir / "final_reference_scope_pruning",
+                prefix=f"{prefix}_final_reference_scope_pruning",
+                timeout_seconds=timeout_seconds,
+            )
+            final_scope_variant_value = str(
+                reference_scope_final_pruning_report.get("scope_pruning_variant_file", "")
+            )
+            final_scope_variant_file = Path(final_scope_variant_value) if final_scope_variant_value else None
+            if final_scope_variant_file is not None and final_scope_variant_file.exists():
+                reference_scope_final_sumo_load_report = _sumo_load_net(
+                    final_scope_variant_file,
+                    output_dir=output_dir / "final_reference_scope_pruning_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                reference_scope_final_post_prune_audit_report = reference_scope_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=final_scope_variant_file,
+                    output_dir=output_dir / "final_reference_scope_post_prune_audit",
+                    prefix=f"{prefix}_final_reference_scope_post_prune_audit",
+                )
+                reference_scope_final_promotion_report = _scope_pruning_promotion_decision(
+                    pruning_report=reference_scope_final_pruning_report,
+                    post_scope_report=reference_scope_final_post_prune_audit_report,
+                    sumo_load_report=reference_scope_final_sumo_load_report,
+                    source_net_file=reference_scope_candidate_net_file,
+                    variant_net_file=final_scope_variant_file,
+                )
+                if reference_scope_final_promotion_report.get("status") == "pass":
+                    final_hierarchy_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=final_scope_variant_file,
+                        output_dir=output_dir / "final_reference_scope_hierarchy_audit",
+                        prefix=f"{prefix}_final_reference_scope_hierarchy_audit",
+                        resolve_equivalent_fragmentation=True,
+                    )
+                    if _gate_value(final_hierarchy_report) == "pass":
+                        reference_visual_detail_comparison_net_file = final_scope_variant_file
+                        reference_visual_detail_comparison_selection_reason = (
+                            "reference_scope_pruning_promoted_final"
+                        )
+                        reference_scope_audit_report = reference_scope_final_post_prune_audit_report
+                        reference_scope_candidate_net_file = final_scope_variant_file
+                        reference_scope_candidate_layer = "reference_visual_detail"
+                        reference_scope_pruning_report = reference_scope_final_pruning_report
+                        reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
+                            reference_scope_final_promotion_report.get("status", "blocked")
+                        )
+                        reference_scope_pruning_report["scope_pruning_promotion_checks"] = (
+                            reference_scope_final_promotion_report.get("checks", {})
+                        )
+                        reference_scope_pruning_promotion_report = reference_scope_final_promotion_report
+                        reference_hierarchy_audit_report = final_hierarchy_report
+                        reference_hierarchy_audit_candidate_net_file = final_scope_variant_file
+                        if run_topology_audit_after_build:
+                            topology_audit_report = topology_audit_func(
+                                net_file=final_scope_variant_file,
+                                output_dir=output_dir / "final_reference_scope_topology_audit",
+                                prefix=f"{prefix}_final_reference_scope_topology_audit",
+                                cluster_radius_m=topology_cluster_radius_m,
+                                min_cluster_nodes=topology_min_cluster_nodes,
+                                osm_file=osm_file,
+                            )
+                    else:
+                        reference_scope_final_promotion_report = {
+                            **reference_scope_final_promotion_report,
+                            "status": "blocked",
+                            "reason": "final_scope_hierarchy_audit_not_pass",
+                            "checks": {
+                                **dict(reference_scope_final_promotion_report.get("checks", {})),
+                                "final_hierarchy_audit": _gate_value(final_hierarchy_report),
+                            },
+                        }
+    return {
+        'reference_hierarchy_audit_candidate_net_file': reference_hierarchy_audit_candidate_net_file,
+        'reference_hierarchy_audit_report': reference_hierarchy_audit_report,
+        'reference_scope_audit_report': reference_scope_audit_report,
+        'reference_scope_candidate_layer': reference_scope_candidate_layer,
+        'reference_scope_candidate_net_file': reference_scope_candidate_net_file,
+        'reference_scope_final_audit_report': reference_scope_final_audit_report,
+        'reference_scope_final_post_prune_audit_report': reference_scope_final_post_prune_audit_report,
+        'reference_scope_final_promotion_report': reference_scope_final_promotion_report,
+        'reference_scope_final_pruning_report': reference_scope_final_pruning_report,
+        'reference_scope_final_sumo_load_report': reference_scope_final_sumo_load_report,
+        'reference_scope_pruning_promotion_report': reference_scope_pruning_promotion_report,
+        'reference_scope_pruning_report': reference_scope_pruning_report,
+        'reference_visual_detail_comparison_net_file': reference_visual_detail_comparison_net_file,
+        'reference_visual_detail_comparison_selection_reason': reference_visual_detail_comparison_selection_reason,
+        'topology_audit_report': topology_audit_report,
+    }
+
+
+_WORKFLOW_UNSET = object()
+
+
+def _workflow_reference_visual_detail_section(
+    *,
+    area_status: Any,
+    bbox: str | None,
+    build_func: Callable[..., dict[str, Any]],
+    build_report: Any,
+    cleaned_place_name: Any,
+    clip_source_ways_to_bbox: bool,
+    historical_date: str | None,
+    max_retries: int,
+    max_tile_area_km2: float,
+    netconvert_binary: str,
+    network_plan: Any,
+    output_dir: Path,
+    overpass_url: str,
+    place_report: Any,
+    prefix: str,
+    reference_source_way_scope: Any,
+    reference_visual_detail_highway_classes: Any,
+    reference_visual_detail_modal_way_tags: Any,
+    retry_pause_seconds: float,
+    service_permission_func: Callable[..., dict[str, Any]],
+    service_permission_report: Any,
+    should_build_reference_visual_detail: Any,
+    source_osm_path: Path | None,
+    timeout_seconds: float,
+    vehicle_core_highway_classes: Any,
+    reference_visual_detail_build_report: dict[str, Any],
+    reference_visual_detail_net_file: Path | None,
+    reference_visual_detail_service_permission_report: dict[str, Any],
+) -> dict[str, Any]:
+    reference_visual_detail_comparison_net_file = _WORKFLOW_UNSET
+    reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
+    reference_visual_detail_status = _WORKFLOW_UNSET
+    reference_visual_detail_build_report = _WORKFLOW_UNSET
+    reference_visual_detail_net_file = _WORKFLOW_UNSET
+    reference_visual_detail_service_permission_report = _WORKFLOW_UNSET
+    visual_build_kwargs = _WORKFLOW_UNSET
+    visual_source_osm_path = _WORKFLOW_UNSET
+    visual_source_osm_value = _WORKFLOW_UNSET
+    if should_build_reference_visual_detail:
+        visual_source_osm_path = _reference_visual_source_osm_path(
+            build_report,
+            source_osm_path,
+            reference_visual_detail_highway_classes,
+            reference_visual_detail_modal_way_tags,
+        )
+        visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
+        if not visual_source_osm_value:
+            visual_source_osm_value = None
+        visual_build_kwargs: dict[str, Any] = {
+            "bbox": bbox,
+            "output_dir": output_dir,
+            "prefix": f"{prefix}_reference_visual_detail",
+            "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
+            "allowed_highways": reference_visual_detail_highway_classes,
+            "allowed_way_ids": reference_source_way_scope,
+            "historical_date": historical_date,
+            "overpass_url": overpass_url,
+            "timeout_seconds": timeout_seconds,
+            "max_tile_area_km2": max_tile_area_km2,
+            "max_retries": max_retries,
+            "retry_pause_seconds": retry_pause_seconds,
+            "netconvert_profile": "reference_visual_detail",
+        }
+        if _supports_keyword(build_func, "include_railway"):
+            visual_build_kwargs["include_railway"] = bool(
+                reference_visual_detail_modal_way_tags.get("railway")
+            )
+        if _supports_keyword(build_func, "allowed_railways"):
+            visual_build_kwargs["allowed_railways"] = set(
+                reference_visual_detail_modal_way_tags.get("railway", set())
+            ) or None
+        if _supports_keyword(build_func, "netconvert_binary"):
+            visual_build_kwargs["netconvert_binary"] = netconvert_binary
+        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
+        reference_visual_detail_build_report = build_func(
+            **visual_build_kwargs,
+        )
+        if reference_visual_detail_build_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": _gate_value(reference_visual_detail_build_report),
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", [])),
+            }
+        reference_visual_detail_net_file = Path(str(reference_visual_detail_build_report["net_file"]))
+        reference_visual_detail_service_permission_report = service_permission_func(
+            reference_visual_detail_net_file,
+            policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+        )
+        if reference_visual_detail_service_permission_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": "fail",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", []))
+                + list(reference_visual_detail_service_permission_report.get("warnings", [])),
+            }
+        reference_visual_detail_status = "built"
+        reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
+        reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
+    return {
+        'reference_visual_detail_build_report': reference_visual_detail_build_report,
+        'reference_visual_detail_comparison_net_file': reference_visual_detail_comparison_net_file,
+        'reference_visual_detail_comparison_selection_reason': reference_visual_detail_comparison_selection_reason,
+        'reference_visual_detail_net_file': reference_visual_detail_net_file,
+        'reference_visual_detail_service_permission_report': reference_visual_detail_service_permission_report,
+        'reference_visual_detail_status': reference_visual_detail_status,
+    }
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -4289,128 +4620,45 @@ def run_osm_cleanup_workflow(
     )
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         reference_visual_detail_status = "same_as_vehicle_core"
-    if should_build_reference_visual_detail:
-        visual_source_osm_path = _reference_visual_source_osm_path(
-            build_report,
-            source_osm_path,
-            reference_visual_detail_highway_classes,
-            reference_visual_detail_modal_way_tags,
-        )
-        visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
-        if not visual_source_osm_value:
-            visual_source_osm_value = None
-        visual_build_kwargs: dict[str, Any] = {
-            "bbox": bbox,
-            "output_dir": output_dir,
-            "prefix": f"{prefix}_reference_visual_detail",
-            "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
-            "allowed_highways": reference_visual_detail_highway_classes,
-            "allowed_way_ids": reference_source_way_scope,
-            "historical_date": historical_date,
-            "overpass_url": overpass_url,
-            "timeout_seconds": timeout_seconds,
-            "max_tile_area_km2": max_tile_area_km2,
-            "max_retries": max_retries,
-            "retry_pause_seconds": retry_pause_seconds,
-            "netconvert_profile": "reference_visual_detail",
-        }
-        if _supports_keyword(build_func, "include_railway"):
-            visual_build_kwargs["include_railway"] = bool(
-                reference_visual_detail_modal_way_tags.get("railway")
-            )
-        if _supports_keyword(build_func, "allowed_railways"):
-            visual_build_kwargs["allowed_railways"] = set(
-                reference_visual_detail_modal_way_tags.get("railway", set())
-            ) or None
-        if _supports_keyword(build_func, "netconvert_binary"):
-            visual_build_kwargs["netconvert_binary"] = netconvert_binary
-        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
-            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
-        reference_visual_detail_build_report = build_func(
-            **visual_build_kwargs,
-        )
-        if reference_visual_detail_build_report.get("status") != "pass":
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name or bbox,
-                "area_resolution_status": area_status,
-                **_candidate_fields(place_report),
-                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-                "network_profile": network_plan.get("network_profile", ""),
-                "reference_target": network_plan.get("reference_target", ""),
-                "reference_net_file": network_plan.get("reference_net_file", ""),
-                "network_detail_target": network_plan.get("network_detail_target", ""),
-                "selected_highway_classes": network_plan.get("highway_classes", []),
-                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
-                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
-                "reference_visual_detail_status": "failed",
-                "network_plan": network_plan,
-                "reference_policy": network_plan.get("reference_policy", {}),
-                "build": build_report,
-                "reference_visual_detail_build": reference_visual_detail_build_report,
-                "service_passenger_permissions": service_permission_report,
-                "gate_status": {
-                    "area_confirmation": "pass",
-                    "road_level_scope": "pass",
-                    "network_build": _gate_value(build_report),
-                    "reference_visual_detail": _gate_value(reference_visual_detail_build_report),
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(build_report.get("warnings", []))
-                + list(reference_visual_detail_build_report.get("warnings", [])),
-            }
-        reference_visual_detail_net_file = Path(str(reference_visual_detail_build_report["net_file"]))
-        reference_visual_detail_service_permission_report = service_permission_func(
-            reference_visual_detail_net_file,
-            policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
-        )
-        if reference_visual_detail_service_permission_report.get("status") != "pass":
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name or bbox,
-                "area_resolution_status": area_status,
-                **_candidate_fields(place_report),
-                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-                "network_profile": network_plan.get("network_profile", ""),
-                "reference_target": network_plan.get("reference_target", ""),
-                "reference_net_file": network_plan.get("reference_net_file", ""),
-                "network_detail_target": network_plan.get("network_detail_target", ""),
-                "selected_highway_classes": network_plan.get("highway_classes", []),
-                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
-                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
-                "reference_visual_detail_status": "failed",
-                "network_plan": network_plan,
-                "reference_policy": network_plan.get("reference_policy", {}),
-                "build": build_report,
-                "reference_visual_detail_build": reference_visual_detail_build_report,
-                "service_passenger_permissions": service_permission_report,
-                "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
-                "gate_status": {
-                    "area_confirmation": "pass",
-                    "road_level_scope": "pass",
-                    "network_build": _gate_value(build_report),
-                    "reference_visual_detail": "fail",
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(build_report.get("warnings", []))
-                + list(reference_visual_detail_build_report.get("warnings", []))
-                + list(reference_visual_detail_service_permission_report.get("warnings", [])),
-            }
-        reference_visual_detail_status = "built"
-        reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
-        reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
+    _reference_visual_detail_section_result = _workflow_reference_visual_detail_section(
+        area_status=area_status,
+        bbox=bbox,
+        build_func=build_func,
+        build_report=build_report,
+        cleaned_place_name=cleaned_place_name,
+        clip_source_ways_to_bbox=clip_source_ways_to_bbox,
+        historical_date=historical_date,
+        max_retries=max_retries,
+        max_tile_area_km2=max_tile_area_km2,
+        netconvert_binary=netconvert_binary,
+        network_plan=network_plan,
+        output_dir=output_dir,
+        overpass_url=overpass_url,
+        place_report=place_report,
+        prefix=prefix,
+        reference_source_way_scope=reference_source_way_scope,
+        reference_visual_detail_highway_classes=reference_visual_detail_highway_classes,
+        reference_visual_detail_modal_way_tags=reference_visual_detail_modal_way_tags,
+        retry_pause_seconds=retry_pause_seconds,
+        service_permission_func=service_permission_func,
+        service_permission_report=service_permission_report,
+        should_build_reference_visual_detail=should_build_reference_visual_detail,
+        source_osm_path=source_osm_path,
+        timeout_seconds=timeout_seconds,
+        vehicle_core_highway_classes=vehicle_core_highway_classes,
+        reference_visual_detail_build_report=reference_visual_detail_build_report,
+        reference_visual_detail_net_file=reference_visual_detail_net_file,
+        reference_visual_detail_service_permission_report=reference_visual_detail_service_permission_report,
+    )
+    reference_visual_detail_build_report = _reference_visual_detail_section_result['reference_visual_detail_build_report']
+    reference_visual_detail_net_file = _reference_visual_detail_section_result['reference_visual_detail_net_file']
+    reference_visual_detail_service_permission_report = _reference_visual_detail_section_result['reference_visual_detail_service_permission_report']
+    if _reference_visual_detail_section_result['reference_visual_detail_comparison_net_file'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_net_file = _reference_visual_detail_section_result['reference_visual_detail_comparison_net_file']
+    if _reference_visual_detail_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _reference_visual_detail_section_result['reference_visual_detail_comparison_selection_reason']
+    if _reference_visual_detail_section_result['reference_visual_detail_status'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_status = _reference_visual_detail_section_result['reference_visual_detail_status']
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = tls_audit_func(
@@ -4901,97 +5149,54 @@ def run_osm_cleanup_workflow(
         reference_topology_audit_report = _reference_comparison_section_result['reference_topology_audit_report']
     if _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
         reference_visual_detail_comparison_selection_reason = _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason']
-    if (
-        run_scope_pruning_after_build
-        and str(network_plan.get("network_profile", "")) == "reference_matched"
-        and reference_net_file is not None
-        and reference_visual_detail_comparison_net_file is not None
-        and reference_visual_detail_comparison_net_file.exists()
-    ):
-        reference_scope_final_audit_report = reference_scope_audit_func(
-            reference_net_file=reference_net_file,
-            candidate_net_file=reference_visual_detail_comparison_net_file,
-            output_dir=output_dir / "final_reference_scope_audit",
-            prefix=f"{prefix}_final_reference_scope_audit",
-        )
-        if _int_field(reference_scope_final_audit_report, "prune_candidate_count") > 0:
-            reference_scope_final_pruning_report = scope_pruning_func(
-                net_file=reference_visual_detail_comparison_net_file,
-                reference_scope_report=reference_scope_final_audit_report,
-                output_dir=output_dir / "final_reference_scope_pruning",
-                prefix=f"{prefix}_final_reference_scope_pruning",
-                timeout_seconds=timeout_seconds,
-            )
-            final_scope_variant_value = str(
-                reference_scope_final_pruning_report.get("scope_pruning_variant_file", "")
-            )
-            final_scope_variant_file = Path(final_scope_variant_value) if final_scope_variant_value else None
-            if final_scope_variant_file is not None and final_scope_variant_file.exists():
-                reference_scope_final_sumo_load_report = _sumo_load_net(
-                    final_scope_variant_file,
-                    output_dir=output_dir / "final_reference_scope_pruning_sumo_load",
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                reference_scope_final_post_prune_audit_report = reference_scope_audit_func(
-                    reference_net_file=reference_net_file,
-                    candidate_net_file=final_scope_variant_file,
-                    output_dir=output_dir / "final_reference_scope_post_prune_audit",
-                    prefix=f"{prefix}_final_reference_scope_post_prune_audit",
-                )
-                reference_scope_final_promotion_report = _scope_pruning_promotion_decision(
-                    pruning_report=reference_scope_final_pruning_report,
-                    post_scope_report=reference_scope_final_post_prune_audit_report,
-                    sumo_load_report=reference_scope_final_sumo_load_report,
-                    source_net_file=reference_scope_candidate_net_file,
-                    variant_net_file=final_scope_variant_file,
-                )
-                if reference_scope_final_promotion_report.get("status") == "pass":
-                    final_hierarchy_report = reference_hierarchy_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=final_scope_variant_file,
-                        output_dir=output_dir / "final_reference_scope_hierarchy_audit",
-                        prefix=f"{prefix}_final_reference_scope_hierarchy_audit",
-                        resolve_equivalent_fragmentation=True,
-                    )
-                    if _gate_value(final_hierarchy_report) == "pass":
-                        reference_visual_detail_comparison_net_file = final_scope_variant_file
-                        reference_visual_detail_comparison_selection_reason = (
-                            "reference_scope_pruning_promoted_final"
-                        )
-                        reference_scope_audit_report = reference_scope_final_post_prune_audit_report
-                        reference_scope_candidate_net_file = final_scope_variant_file
-                        reference_scope_candidate_layer = "reference_visual_detail"
-                        reference_scope_pruning_report = reference_scope_final_pruning_report
-                        reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
-                            reference_scope_final_promotion_report.get("status", "blocked")
-                        )
-                        reference_scope_pruning_report["scope_pruning_promotion_checks"] = (
-                            reference_scope_final_promotion_report.get("checks", {})
-                        )
-                        reference_scope_pruning_promotion_report = reference_scope_final_promotion_report
-                        reference_hierarchy_audit_report = final_hierarchy_report
-                        reference_hierarchy_audit_candidate_net_file = final_scope_variant_file
-                        if run_topology_audit_after_build:
-                            topology_audit_report = topology_audit_func(
-                                net_file=final_scope_variant_file,
-                                output_dir=output_dir / "final_reference_scope_topology_audit",
-                                prefix=f"{prefix}_final_reference_scope_topology_audit",
-                                cluster_radius_m=topology_cluster_radius_m,
-                                min_cluster_nodes=topology_min_cluster_nodes,
-                                osm_file=osm_file,
-                            )
-                    else:
-                        reference_scope_final_promotion_report = {
-                            **reference_scope_final_promotion_report,
-                            "status": "blocked",
-                            "reason": "final_scope_hierarchy_audit_not_pass",
-                            "checks": {
-                                **dict(reference_scope_final_promotion_report.get("checks", {})),
-                                "final_hierarchy_audit": _gate_value(final_hierarchy_report),
-                            },
-                        }
+    _scope_pruning_section_result = _workflow_scope_pruning_section(
+        command_runner=command_runner,
+        network_plan=network_plan,
+        osm_file=osm_file,
+        output_dir=output_dir,
+        prefix=prefix,
+        reference_hierarchy_audit_func=reference_hierarchy_audit_func,
+        reference_net_file=reference_net_file,
+        reference_scope_audit_func=reference_scope_audit_func,
+        run_scope_pruning_after_build=run_scope_pruning_after_build,
+        run_topology_audit_after_build=run_topology_audit_after_build,
+        scope_pruning_func=scope_pruning_func,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        topology_audit_func=topology_audit_func,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
+        reference_scope_candidate_net_file=reference_scope_candidate_net_file,
+        reference_scope_final_audit_report=reference_scope_final_audit_report,
+        reference_scope_final_post_prune_audit_report=reference_scope_final_post_prune_audit_report,
+        reference_scope_final_promotion_report=reference_scope_final_promotion_report,
+        reference_scope_final_pruning_report=reference_scope_final_pruning_report,
+        reference_scope_final_sumo_load_report=reference_scope_final_sumo_load_report,
+        reference_scope_pruning_report=reference_scope_pruning_report,
+        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
+    )
+    reference_scope_candidate_net_file = _scope_pruning_section_result['reference_scope_candidate_net_file']
+    reference_scope_final_audit_report = _scope_pruning_section_result['reference_scope_final_audit_report']
+    reference_scope_final_post_prune_audit_report = _scope_pruning_section_result['reference_scope_final_post_prune_audit_report']
+    reference_scope_final_promotion_report = _scope_pruning_section_result['reference_scope_final_promotion_report']
+    reference_scope_final_pruning_report = _scope_pruning_section_result['reference_scope_final_pruning_report']
+    reference_scope_final_sumo_load_report = _scope_pruning_section_result['reference_scope_final_sumo_load_report']
+    reference_scope_pruning_report = _scope_pruning_section_result['reference_scope_pruning_report']
+    reference_visual_detail_comparison_net_file = _scope_pruning_section_result['reference_visual_detail_comparison_net_file']
+    if _scope_pruning_section_result['reference_hierarchy_audit_candidate_net_file'] is not _WORKFLOW_UNSET:
+        reference_hierarchy_audit_candidate_net_file = _scope_pruning_section_result['reference_hierarchy_audit_candidate_net_file']
+    if _scope_pruning_section_result['reference_hierarchy_audit_report'] is not _WORKFLOW_UNSET:
+        reference_hierarchy_audit_report = _scope_pruning_section_result['reference_hierarchy_audit_report']
+    if _scope_pruning_section_result['reference_scope_audit_report'] is not _WORKFLOW_UNSET:
+        reference_scope_audit_report = _scope_pruning_section_result['reference_scope_audit_report']
+    if _scope_pruning_section_result['reference_scope_candidate_layer'] is not _WORKFLOW_UNSET:
+        reference_scope_candidate_layer = _scope_pruning_section_result['reference_scope_candidate_layer']
+    if _scope_pruning_section_result['reference_scope_pruning_promotion_report'] is not _WORKFLOW_UNSET:
+        reference_scope_pruning_promotion_report = _scope_pruning_section_result['reference_scope_pruning_promotion_report']
+    if _scope_pruning_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _scope_pruning_section_result['reference_visual_detail_comparison_selection_reason']
+    if _scope_pruning_section_result['topology_audit_report'] is not _WORKFLOW_UNSET:
+        topology_audit_report = _scope_pruning_section_result['topology_audit_report']
     if (
         run_road_connectivity_parity_audit_after_build
         and str(network_plan.get("network_profile", "")) == "reference_matched"
