@@ -1775,930 +1775,222 @@ def _workflow_tls_aggregation_section(
     }
 
 
-def run_osm_cleanup_workflow(
+_WORKFLOW_UNSET = object()
+
+
+def _workflow_reference_matched_section(
     *,
+    command_runner: Callable[..., Any],
+    net_file: Any,
+    netconvert_binary: str,
+    network_plan: Any,
     output_dir: Path,
-    bbox: str | None = None,
-    place_name: str | None = None,
-    confirmed_area: bool = False,
-    prefix: str = "sumo_osm_cleanup",
-    source_osm_path: Path | None = None,
-    clip_source_ways_to_bbox: bool = True,
-    highway_classes: set[str] | None = None,
-    traffic_layers: str | set[str] | None = None,
-    network_profile: str | None = None,
-    reference_net_file: Path | None = None,
-    reference_policy_report: str | Path | Mapping[str, Any] | None = None,
-    service_passenger_policy: str | None = None,
-    historical_date: str | None = None,
-    overpass_url: str = "https://overpass-api.de/api/interpreter",
-    timeout_seconds: float = 240.0,
-    netconvert_binary: str = "netconvert",
-    sumo_binary: str = "sumo",
-    max_tile_area_km2: float = 2500.0,
-    max_retries: int = 2,
-    retry_pause_seconds: float = 5.0,
-    map_temporal_scope: str = "current",
-    map_target_date: str | None = None,
-    review_decisions_file: Path | None = None,
-    launch_netedit_after_build: bool = True,
-    launch_netedit_review_after_build: bool | None = None,
-    launch_sumo_gui_after_build: bool = True,
-    run_topology_audit_after_build: bool = True,
-    topology_cluster_radius_m: float = 30.0,
-    topology_min_cluster_nodes: int = 3,
-    run_routeability_audit_after_build: bool = True,
-    run_connection_mode_audit_after_build: bool = True,
-    run_standard_nema_scan_after_build: bool = True,
-    routeability_vehicle_count: int | None = None,
-    routeability_initial_end: int | None = None,
-    routeability_max_end: int | None = None,
-    run_tls_aggregation_after_build: bool = True,
-    run_junction_aggregation_after_build: bool = True,
-    run_reference_join_audit_after_build: bool = True,
-    reference_join_audit_structural_only: bool = True,
-    run_reference_join_aggregation_after_build: bool = True,
-    run_reference_hierarchy_audit_after_build: bool = True,
-    run_reference_scope_audit_after_build: bool = True,
-    run_reference_bbox_scope_after_build: bool = True,
-    run_road_connectivity_parity_audit_after_build: bool = True,
-    run_scope_pruning_after_build: bool = False,
-    run_corridor_geometry_simplification_after_build: bool = False,
-    run_corridor_edit_ledger_after_build: bool = False,
-    teacher_guided_repair_max_ready_candidates: int | None = 80,
-    run_teacher_guided_repair_after_build: bool = True,
-    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
-    road_connectivity_replay_max_owners: int | None = 4,
-    road_connectivity_probe_edge_ids: list[str] | None = None,
-    key_edge_queries: list[Mapping[str, Any]] | None = None,
-    build_func: Callable[..., dict[str, Any]] = build_osm_network,
-    tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
-    connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
-    connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
-    routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
-    topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
-    routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
-    connection_mode_audit_func: Callable[..., dict[str, Any]] = build_network_connection_mode_audit,
-    standard_nema_binding_func: Callable[..., dict[str, Any]] = build_standard_nema_phase_binding,
-    tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
-    tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
-    tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
-    tls_non_controller_junction_demotion_func: Callable[
-        ..., dict[str, Any]
-    ] = build_tls_non_controller_junction_demotion_variant,
-    tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
-    junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
-    reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
-    reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]] = build_reference_hierarchy_type_repair_variant,
-    reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
-    reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
-    teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
-    teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
-    teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
-    teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_matrix,
-    teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
-    road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
-    road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
-    road_connection_topology_replay_func: Callable[..., dict[str, Any]] = _run_road_connection_topology_replay,
-    road_connectivity_parity_func: Callable[..., dict[str, Any]] = audit_road_connectivity_parity,
-    reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
-    scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
-    corridor_geometry_simplification_func: Callable[..., dict[str, Any]] = build_corridor_geometry_simplification_variant,
-    corridor_edit_ledger_func: Callable[..., dict[str, Any]] = build_corridor_edit_ledger,
-    netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
-    netedit_review_func: Callable[[Path], dict[str, Any]] | None = None,
-    sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
-    place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
-    reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
-    reference_bbox_scope_func: Callable[..., dict[str, Any]] = build_reference_bbox_variant,
-    service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
-    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
-    command_runner: Callable[..., Any] = run_command,
+    post_teacher_tls_low_vehicle_control_candidates: list[dict[str, Any]],
+    prefix: str,
+    reference_join_aggregation_func: Callable[..., dict[str, Any]],
+    reference_join_audit_func: Callable[..., dict[str, Any]],
+    reference_join_audit_structural_only: bool,
+    reference_net_file: Path | None,
+    reference_visual_detail_net_file: Path | None,
+    reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None,
+    reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None,
+    reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None,
+    reference_visual_detail_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None,
+    reference_visual_detail_tls_signal_grouping_reference_delta_report: dict[str, Any] | None,
+    road_connection_topology_replay_func: Callable[..., dict[str, Any]],
+    road_connectivity_probe_edge_ids: list[str] | None,
+    road_connectivity_replay_func: Callable[..., dict[str, Any]],
+    road_connectivity_replay_max_owners: int | None,
+    road_connectivity_seed_probe_func: Callable[..., dict[str, Any]],
+    run_reference_join_aggregation_after_build: bool,
+    run_reference_join_audit_after_build: bool,
+    run_teacher_guided_repair_after_build: bool,
+    run_tls_aggregation_after_build: bool,
+    sumo_binary: str,
+    teacher_guided_direct_replay_func: Callable[..., dict[str, Any]],
+    teacher_guided_plain_export_func: Callable[..., dict[str, Any]],
+    teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]],
+    teacher_guided_probe_matrix_junction_ids: list[str] | None,
+    teacher_guided_repair_max_ready_candidates: int | None,
+    teacher_guided_repair_queue_func: Callable[..., dict[str, Any]],
+    teacher_guided_repair_run_func: Callable[..., dict[str, Any]],
+    timeout_seconds: float,
+    tls_connection_repair_func: Callable[..., dict[str, Any]],
+    tls_low_vehicle_control_func: Callable[..., dict[str, Any]],
+    tls_non_controller_junction_demotion_func: Callable[..., dict[str, Any]],
+    tls_signal_grouping_func: Callable[..., dict[str, Any]],
+    topology_audit_report: Any,
+    topology_cluster_radius_m: float,
+    topology_min_cluster_nodes: int,
+    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file: Path | None,
+    post_teacher_tls_connection_repair_movement_rebuild_queue_report: dict[str, Any] | None,
+    post_teacher_tls_connection_repair_movement_rebuild_run_report: dict[str, Any] | None,
+    post_teacher_tls_connection_repair_reference_delta_report: dict[str, Any] | None,
+    post_teacher_tls_connection_repair_reference_promotion_report: dict[str, Any],
+    post_teacher_tls_connection_repair_report: dict[str, Any] | None,
+    post_teacher_tls_connection_repair_sumo_load_report: dict[str, Any] | None,
+    post_teacher_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None,
+    post_teacher_tls_low_vehicle_control_reference_promotion_report: dict[str, Any],
+    post_teacher_tls_non_controller_junction_demotion_reference_delta_report: dict[str, Any] | None,
+    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report: dict[str, Any],
+    post_teacher_tls_non_controller_junction_demotion_report: dict[str, Any] | None,
+    post_teacher_tls_non_controller_junction_demotion_sumo_load_report: dict[str, Any] | None,
+    post_teacher_tls_signal_grouping_reference_delta_report: dict[str, Any] | None,
+    post_teacher_tls_signal_grouping_reference_promotion_report: dict[str, Any],
+    post_teacher_tls_signal_grouping_report: dict[str, Any] | None,
+    post_teacher_tls_signal_grouping_sumo_load_report: dict[str, Any] | None,
+    reference_join_aggregation_report: dict[str, Any] | None,
+    reference_join_audit_candidate_net_file: Path | None,
+    reference_join_audit_report: dict[str, Any] | None,
+    reference_join_post_teacher_audit_report: dict[str, Any] | None,
+    reference_visual_detail_comparison_net_file: Path | None,
+    road_connection_topology_replay_report: dict[str, Any] | None,
+    road_connectivity_replay_report: dict[str, Any] | None,
+    road_connectivity_seed_probe_report: dict[str, Any] | None,
+    road_connectivity_split_root_alias_repair_report: dict[str, Any] | None,
+    teacher_guided_direct_replay_reference_delta_report: dict[str, Any] | None,
+    teacher_guided_direct_replay_reference_promotion_report: dict[str, Any],
+    teacher_guided_direct_replay_report: dict[str, Any] | None,
+    teacher_guided_plain_export_report: dict[str, Any] | None,
+    teacher_guided_repair_best_variant_file: Path | None,
+    teacher_guided_repair_queue_report: dict[str, Any] | None,
+    teacher_guided_repair_reference_promotion_report: dict[str, Any],
+    teacher_guided_repair_requires_reference_promotion: Any,
+    teacher_guided_repair_run_report: dict[str, Any] | None,
+    teacher_guided_scoped_tls_cell_batch_report: dict[str, Any] | None,
+    teacher_guided_seed_report: dict[str, Any] | None,
+    tls_gap_destination_mapping_report: dict[str, Any] | None,
+    tls_repair_variant_reference_audit_report: dict[str, Any] | None,
+    tls_repair_variant_report: dict[str, Any] | None,
+    tls_repair_variant_semantic_report: dict[str, Any] | None,
+    tls_repair_variant_sumo_load_report: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    cleaned_place_name = (place_name or "").strip()
-    bbox_input = (bbox or "").strip()
-    bbox_from_url = osm_map_url_bbox(bbox_input)
-    if bbox_from_url:
-        cleaned_place_name = bbox_input
-        bbox = bbox_from_url
-    else:
-        bbox_from_url = osm_map_url_bbox(cleaned_place_name)
-        if bbox_from_url:
-            bbox = bbox_from_url
-
-    place_report = None
-    reference_bbox_report: dict[str, Any] | None = None
-    if not bbox and source_osm_path is None and reference_net_file is not None:
-        reference_bbox_report = reference_bbox_func(reference_net_file)
-        derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
-        if reference_bbox_report.get("status") == "pass" and derived_bbox:
-            bbox = derived_bbox
-    if cleaned_place_name and not bbox and source_osm_path is None:
-        place_report = place_resolver(cleaned_place_name)
-        if not confirmed_area:
-            return _blocked_place_report(cleaned_place_name, output_dir, place_report)
-        resolved_bbox = str(place_report.get("candidate_bbox", ""))
-        if place_report.get("status") != "pass" or not resolved_bbox:
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name,
-                "area_resolution_status": str(place_report.get("area_resolution_status", "blocked")),
-                **_candidate_fields(place_report),
-                "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))),
-                "user_confirmed_area": "yes",
-                "gate_status": {
-                    "area_confirmation": "fail",
-                    "road_level_scope": "not_started",
-                    "network_build": "not_started",
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(place_report.get("warnings", [])) + ["confirmed place_name could not be resolved to a bbox"],
-            }
-        bbox = resolved_bbox
-    if not bbox:
-        reference_bbox_status = (
-            str(reference_bbox_report.get("reference_bbox_status", "blocked"))
-            if reference_bbox_report is not None
-            else "blocked"
-        )
-        reference_bbox_warnings = list(reference_bbox_report.get("warnings", [])) if reference_bbox_report else []
-        return {
-            "status": "fail",
-            "claim_status": "construction-invalid",
-            "area_input": cleaned_place_name,
-            "area_resolution_status": reference_bbox_status,
-            **_candidate_fields(place_report),
-            **_reference_bbox_fields(reference_bbox_report),
-            "gate_status": {
-                "area_confirmation": "fail",
-                "road_level_scope": "not_started",
-                "network_build": "not_started",
-                "tls_reality_audit": "not_started",
-                "connectivity": "not_started",
-                "routeability_audit": "not_started",
-                "netedit": "not_started",
-                "sumo_gui": "not_started",
-            },
-            "warnings": reference_bbox_warnings + ["bbox is required for OSM network construction"],
-        }
-
-    area_status = "confirmed_by_user" if cleaned_place_name and confirmed_area else "confirmed_by_input"
-    network_plan = derive_network_plan(
-        highway_classes=highway_classes,
-        traffic_layers=traffic_layers,
-        network_profile=network_profile,
-        reference_net_file=reference_net_file,
-        reference_policy_report=reference_policy_report,
-        service_passenger_policy=service_passenger_policy,
-    )
-    if network_plan.get("status") == "blocked":
-        return _blocked_road_level_scope_report(
-            area_input=cleaned_place_name or bbox,
-            area_status=area_status,
-            place_report=place_report,
-            cleaned_place_name=cleaned_place_name,
-            bbox=bbox,
-            network_plan=network_plan,
-        )
-    if network_plan.get("status") != "pass":
-        return {
-            "status": "fail",
-            "claim_status": "construction-invalid",
-            "area_input": cleaned_place_name or bbox,
-            "area_resolution_status": area_status,
-            **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
-            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-            "network_plan_status": network_plan.get("network_plan_status", "failed"),
-            "network_profile": network_plan.get("network_profile", ""),
-            "reference_target": network_plan.get("reference_target", ""),
-            "reference_net_file": network_plan.get("reference_net_file", ""),
-            "network_detail_target": network_plan.get("network_detail_target", ""),
-            "movement_layers": network_plan.get("movement_layers", []),
-            "selected_highway_classes": network_plan.get("highway_classes", []),
-            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
-            "network_plan": network_plan,
-            "gate_status": {
-                "area_confirmation": "pass",
-                "road_level_scope": "fail",
-                "network_build": "not_started",
-                "tls_reality_audit": "not_started",
-                "connectivity": "not_started",
-                "routeability_audit": "not_started",
-                "netedit": "not_started",
-                "sumo_gui": "not_started",
-            },
-            "warnings": list(network_plan.get("warnings", [])),
-        }
-
-    reference_source_net_file = reference_net_file
-    reference_bbox_scope_report: dict[str, Any] | None = None
-    if (
-        run_reference_bbox_scope_after_build
-        and str(network_plan.get("network_profile", "")) == "reference_matched"
-        and reference_net_file is not None
-    ):
-        reference_bbox_scope_report = reference_bbox_scope_func(
-            reference_net_file=reference_net_file,
-            bbox=bbox,
-            output_dir=output_dir / "reference_bbox_scope",
-            prefix=f"{prefix}_reference_bbox_scope",
-            netconvert_binary=netconvert_binary,
-            timeout_seconds=timeout_seconds,
-            command_runner=command_runner,
-        )
-        scoped_reference_value = reference_bbox_scope_report.get("variant_file", "")
-        scoped_reference_file = Path(str(scoped_reference_value)) if scoped_reference_value else None
-        if (
-            reference_bbox_scope_report.get("status") == "pass"
-            and scoped_reference_file is not None
-            and scoped_reference_file.exists()
-        ):
-            # From this point on, all teacher-guided parity and replay stages
-            # use the same geographic scope as the candidate OSM build.  Keep
-            # the original teacher path separately for provenance and source
-            # way-scope planning.
-            reference_net_file = scoped_reference_file
-    selected_highway_classes = set(network_plan.get("highway_classes", []))
-    reference_source_way_ids = {
-        str(item)
-        for item in network_plan.get("reference_source_way_ids", [])
-        if str(item).strip()
-    }
-    reference_source_way_scope = reference_source_way_ids or None
-    build_kwargs: dict[str, Any] = {
-        "bbox": bbox,
-        "output_dir": output_dir,
-        "prefix": prefix,
-        "source_osm_path": source_osm_path,
-        "allowed_highways": selected_highway_classes,
-        "allowed_way_ids": reference_source_way_scope,
-        "historical_date": historical_date,
-        "overpass_url": overpass_url,
-        "timeout_seconds": timeout_seconds,
-        "max_tile_area_km2": max_tile_area_km2,
-        "max_retries": max_retries,
-        "retry_pause_seconds": retry_pause_seconds,
-        "netconvert_profile": "vehicle_core",
-    }
-    if _supports_keyword(build_func, "netconvert_binary"):
-        build_kwargs["netconvert_binary"] = netconvert_binary
-    if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
-        build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
-    build_report = build_func(**build_kwargs)
-    if build_report.get("status") != "pass":
-        return {
-            "status": "fail",
-            "claim_status": "construction-invalid",
-            "area_input": cleaned_place_name or bbox,
-            "area_resolution_status": area_status,
-            **_candidate_fields(place_report),
-            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-            "network_profile": network_plan.get("network_profile", ""),
-            "reference_target": network_plan.get("reference_target", ""),
-            "reference_net_file": network_plan.get("reference_net_file", ""),
-            "network_detail_target": network_plan.get("network_detail_target", ""),
-            "primary_network_layer": network_plan.get("primary_network_layer", ""),
-            "auxiliary_modal_layers": network_plan.get("auxiliary_modal_layers", []),
-            "movement_layers": network_plan.get("movement_layers", []),
-            "selected_highway_classes": network_plan.get("highway_classes", []),
-            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
-            "reference_policy": network_plan.get("reference_policy", {}),
-            "build": build_report,
-            "gate_status": {
-                "area_confirmation": "pass",
-                "road_level_scope": "pass",
-                "network_build": _gate_value(build_report),
-                "tls_reality_audit": "not_started",
-                "connectivity": "not_started",
-                "routeability_audit": "not_started",
-                "netedit": "not_started",
-                "sumo_gui": "not_started",
-            },
-            "warnings": list(build_report.get("warnings", [])),
-        }
-
-    raw_net_file = Path(str(build_report["net_file"]))
-    service_permission_report = service_permission_func(
-        raw_net_file,
-        policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
-    )
-    if service_permission_report.get("status") != "pass":
-        return {
-            "status": "fail",
-            "claim_status": "construction-invalid",
-            "area_input": cleaned_place_name or bbox,
-            "area_resolution_status": area_status,
-            **_candidate_fields(place_report),
-            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-            "network_profile": network_plan.get("network_profile", ""),
-            "reference_target": network_plan.get("reference_target", ""),
-            "reference_net_file": network_plan.get("reference_net_file", ""),
-            "network_detail_target": network_plan.get("network_detail_target", ""),
-            "primary_network_layer": network_plan.get("primary_network_layer", ""),
-            "auxiliary_modal_layers": network_plan.get("auxiliary_modal_layers", []),
-            "movement_layers": network_plan.get("movement_layers", []),
-            "selected_highway_classes": network_plan.get("highway_classes", []),
-            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
-            "reference_policy": network_plan.get("reference_policy", {}),
-            "build": build_report,
-            "service_passenger_permissions": service_permission_report,
-            "gate_status": {
-                "area_confirmation": "pass",
-                "road_level_scope": "pass",
-                "network_build": _gate_value(build_report),
-                "tls_reality_audit": "not_started",
-                "connectivity": "not_started",
-                "routeability_audit": "not_started",
-                "netedit": "not_started",
-                "sumo_gui": "not_started",
-            },
-            "warnings": list(build_report.get("warnings", [])) + list(service_permission_report.get("warnings", [])),
-        }
-    net_file = raw_net_file
-    reference_visual_detail_status = "not_applicable"
-    reference_visual_detail_net_file: Path | None = None
-    reference_visual_detail_comparison_net_file: Path | None = None
-    reference_visual_detail_comparison_selection_reason = "not_applicable"
-    reference_visual_detail_build_report: dict[str, Any] = {}
-    reference_visual_detail_service_permission_report: dict[str, Any] = {}
-    reference_visual_detail_netedit_report: dict[str, Any] = {}
-    reference_visual_detail_tls_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_aggregation_candidates: list[dict[str, Any]] = []
-    reference_visual_detail_tls_signal_grouping_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_low_vehicle_control_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
-    reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
-    reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_aggregation_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    reference_visual_detail_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    reference_visual_detail_tls_low_vehicle_control_sumo_load_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_low_vehicle_control_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    reference_visual_detail_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
-    reference_visual_detail_tls_connection_repair_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    junction_aggregation_report: dict[str, Any] | None = None
-    reference_join_audit_report: dict[str, Any] | None = None
-    tls_gap_destination_mapping_report: dict[str, Any] | None = None
-    tls_repair_variant_report: dict[str, Any] | None = None
-    tls_repair_variant_sumo_load_report: dict[str, Any] | None = None
-    tls_repair_variant_semantic_report: dict[str, Any] | None = None
-    tls_repair_variant_reference_audit_report: dict[str, Any] | None = None
-    tls_repair_decision_report: dict[str, Any] | None = None
-    reference_join_post_teacher_audit_report: dict[str, Any] | None = None
-    post_teacher_tls_low_vehicle_control_report: dict[str, Any] | None = None
-    post_teacher_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
-    post_teacher_tls_low_vehicle_control_sumo_load_report: dict[str, Any] | None = None
-    post_teacher_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None = None
-    post_teacher_tls_low_vehicle_control_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    post_teacher_tls_signal_grouping_report: dict[str, Any] | None = None
-    post_teacher_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
-    post_teacher_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
-    post_teacher_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    post_teacher_tls_non_controller_junction_demotion_report: dict[str, Any] | None = None
-    post_teacher_tls_non_controller_junction_demotion_sumo_load_report: dict[str, Any] | None = None
-    post_teacher_tls_non_controller_junction_demotion_reference_delta_report: dict[str, Any] | None = None
-    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    post_teacher_tls_connection_repair_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    post_teacher_tls_connection_repair_movement_rebuild_queue_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_movement_rebuild_run_report: dict[str, Any] | None = None
-    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file: Path | None = None
-    final_movement_rebuild_queue_report: dict[str, Any] | None = None
-    final_movement_rebuild_plain_export_report: dict[str, Any] | None = None
-    final_movement_rebuild_run_report: dict[str, Any] | None = None
-    final_movement_rebuild_best_variant_file: Path | None = None
-    final_movement_rebuild_sumo_load_report: dict[str, Any] | None = None
-    final_movement_rebuild_reference_delta_report: dict[str, Any] | None = None
-    final_movement_rebuild_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    final_movement_direct_replay_report: dict[str, Any] | None = None
-    final_movement_direct_replay_reference_delta_report: dict[str, Any] | None = None
-    final_movement_direct_replay_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    final_movement_direct_replay_best_variant_file: Path | None = None
-    final_movement_direct_replay_last_queue_report: dict[str, Any] | None = None
-    final_movement_rebuild_internal_regression_restore_report: dict[str, Any] | None = None
-    final_movement_rebuild_internal_regression_restore_sumo_load_report: dict[str, Any] | None = None
-    final_movement_rebuild_internal_regression_restore_reference_delta_report: dict[str, Any] | None = None
-    final_movement_rebuild_internal_regression_restore_promotion_report: dict[str, Any] | None = None
-    reference_join_aggregation_report: dict[str, Any] | None = None
-    teacher_guided_repair_queue_report: dict[str, Any] | None = None
-    teacher_guided_scoped_tls_cell_batch_report: dict[str, Any] | None = None
-    teacher_guided_scoped_tls_batch_pass_candidate_ids: set[str] = set()
-    teacher_guided_plain_export_report: dict[str, Any] | None = None
-    teacher_guided_repair_run_report: dict[str, Any] | None = None
-    teacher_guided_probe_matrix_report: dict[str, Any] | None = None
-    road_connectivity_replay_report: dict[str, Any] | None = None
-    road_connectivity_parity_audit_report: dict[str, Any] | None = None
-    road_connectivity_seed_probe_report: dict[str, Any] | None = None
-    road_connectivity_split_root_alias_repair_report: dict[str, Any] | None = None
-    road_connection_topology_replay_report: dict[str, Any] | None = None
-    teacher_guided_repair_best_variant_file: Path | None = None
-    teacher_guided_replay_source_net_file: Path | None = None
-    teacher_guided_direct_replay_report: dict[str, Any] | None = None
-    teacher_guided_direct_replay_reference_delta_report: dict[str, Any] | None = None
-    teacher_guided_direct_replay_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    teacher_guided_direct_replay_best_variant_file: Path | None = None
-    teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
-    teacher_guided_seed_report: dict[str, Any] | None = None
-    teacher_guided_repair_seed_source = "skipped"
-    teacher_guided_repair_requires_reference_promotion = False
-    teacher_guided_repair_reference_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    reference_hierarchy_audit_report: dict[str, Any] | None = None
-    reference_hierarchy_audit_candidate_layer = "not_applicable"
-    reference_hierarchy_audit_candidate_net_file: Path | None = None
-    reference_hierarchy_type_repair_report: dict[str, Any] | None = None
-    reference_hierarchy_type_repair_sumo_load_report: dict[str, Any] | None = None
-    reference_hierarchy_type_repair_audit_report: dict[str, Any] | None = None
-    reference_hierarchy_type_repair_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    corridor_geometry_simplification_report: dict[str, Any] | None = None
-    corridor_geometry_simplification_sumo_load_report: dict[str, Any] | None = None
-    corridor_geometry_simplification_reference_delta_report: dict[str, Any] | None = None
-    corridor_geometry_simplification_topology_report: dict[str, Any] | None = None
-    corridor_geometry_simplification_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    corridor_edit_ledger_report: dict[str, Any] | None = None
-    reference_scope_audit_report: dict[str, Any] | None = None
-    reference_scope_pruning_report: dict[str, Any] | None = None
-    reference_scope_post_prune_audit_report: dict[str, Any] | None = None
-    reference_scope_pruning_sumo_load_report: dict[str, Any] | None = None
-    reference_scope_pruning_promotion_report: dict[str, Any] = {}
-    reference_scope_final_audit_report: dict[str, Any] | None = None
-    reference_scope_final_pruning_report: dict[str, Any] | None = None
-    reference_scope_final_post_prune_audit_report: dict[str, Any] | None = None
-    reference_scope_final_sumo_load_report: dict[str, Any] | None = None
-    reference_scope_final_promotion_report: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "not_run",
-    }
-    reference_scope_candidate_layer = "not_applicable"
-    reference_scope_candidate_net_file: Path | None = None
-    reference_join_audit_candidate_layer = "not_applicable"
-    reference_join_audit_candidate_net_file: Path | None = None
-    supplied_review_decisions: dict[str, Any] | None = None
-    review_decisions_source_status = "not_supplied"
-    review_decisions_source_error = ""
-    tls_aggregation_report: dict[str, Any] | None = None
-    vehicle_core_highway_classes = _class_set(
-        network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
-    )
-    reference_visual_detail_highway_classes = _class_set(
-        network_plan.get("reference_visual_detail_highway_classes", [])
-    )
-    reference_visual_detail_modal_way_tags = {
-        str(key): {
-            str(value)
-            for value in values
-            if str(value).strip()
-        }
-        for key, values in dict(
-            network_plan.get("reference_visual_detail_modal_way_tags", {})
-        ).items()
-        if isinstance(values, (list, tuple, set, frozenset)) and values
-    }
-    should_build_reference_visual_detail = (
-        str(network_plan.get("network_profile", "")) == "reference_matched"
-        and (
-            bool(reference_visual_detail_highway_classes)
-            and reference_visual_detail_highway_classes != vehicle_core_highway_classes
-            or bool(reference_visual_detail_modal_way_tags)
-        )
-    )
-    if str(network_plan.get("network_profile", "")) == "reference_matched":
-        reference_visual_detail_status = "same_as_vehicle_core"
-    if should_build_reference_visual_detail:
-        visual_source_osm_path = _reference_visual_source_osm_path(
-            build_report,
-            source_osm_path,
-            reference_visual_detail_highway_classes,
-            reference_visual_detail_modal_way_tags,
-        )
-        visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
-        if not visual_source_osm_value:
-            visual_source_osm_value = None
-        visual_build_kwargs: dict[str, Any] = {
-            "bbox": bbox,
-            "output_dir": output_dir,
-            "prefix": f"{prefix}_reference_visual_detail",
-            "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
-            "allowed_highways": reference_visual_detail_highway_classes,
-            "allowed_way_ids": reference_source_way_scope,
-            "historical_date": historical_date,
-            "overpass_url": overpass_url,
-            "timeout_seconds": timeout_seconds,
-            "max_tile_area_km2": max_tile_area_km2,
-            "max_retries": max_retries,
-            "retry_pause_seconds": retry_pause_seconds,
-            "netconvert_profile": "reference_visual_detail",
-        }
-        if _supports_keyword(build_func, "include_railway"):
-            visual_build_kwargs["include_railway"] = bool(
-                reference_visual_detail_modal_way_tags.get("railway")
-            )
-        if _supports_keyword(build_func, "allowed_railways"):
-            visual_build_kwargs["allowed_railways"] = set(
-                reference_visual_detail_modal_way_tags.get("railway", set())
-            ) or None
-        if _supports_keyword(build_func, "netconvert_binary"):
-            visual_build_kwargs["netconvert_binary"] = netconvert_binary
-        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
-            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
-        reference_visual_detail_build_report = build_func(
-            **visual_build_kwargs,
-        )
-        if reference_visual_detail_build_report.get("status") != "pass":
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name or bbox,
-                "area_resolution_status": area_status,
-                **_candidate_fields(place_report),
-                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-                "network_profile": network_plan.get("network_profile", ""),
-                "reference_target": network_plan.get("reference_target", ""),
-                "reference_net_file": network_plan.get("reference_net_file", ""),
-                "network_detail_target": network_plan.get("network_detail_target", ""),
-                "selected_highway_classes": network_plan.get("highway_classes", []),
-                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
-                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
-                "reference_visual_detail_status": "failed",
-                "network_plan": network_plan,
-                "reference_policy": network_plan.get("reference_policy", {}),
-                "build": build_report,
-                "reference_visual_detail_build": reference_visual_detail_build_report,
-                "service_passenger_permissions": service_permission_report,
-                "gate_status": {
-                    "area_confirmation": "pass",
-                    "road_level_scope": "pass",
-                    "network_build": _gate_value(build_report),
-                    "reference_visual_detail": _gate_value(reference_visual_detail_build_report),
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(build_report.get("warnings", []))
-                + list(reference_visual_detail_build_report.get("warnings", [])),
-            }
-        reference_visual_detail_net_file = Path(str(reference_visual_detail_build_report["net_file"]))
-        reference_visual_detail_service_permission_report = service_permission_func(
-            reference_visual_detail_net_file,
-            policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
-        )
-        if reference_visual_detail_service_permission_report.get("status") != "pass":
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name or bbox,
-                "area_resolution_status": area_status,
-                **_candidate_fields(place_report),
-                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-                "network_profile": network_plan.get("network_profile", ""),
-                "reference_target": network_plan.get("reference_target", ""),
-                "reference_net_file": network_plan.get("reference_net_file", ""),
-                "network_detail_target": network_plan.get("network_detail_target", ""),
-                "selected_highway_classes": network_plan.get("highway_classes", []),
-                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
-                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
-                "reference_visual_detail_status": "failed",
-                "network_plan": network_plan,
-                "reference_policy": network_plan.get("reference_policy", {}),
-                "build": build_report,
-                "reference_visual_detail_build": reference_visual_detail_build_report,
-                "service_passenger_permissions": service_permission_report,
-                "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
-                "gate_status": {
-                    "area_confirmation": "pass",
-                    "road_level_scope": "pass",
-                    "network_build": _gate_value(build_report),
-                    "reference_visual_detail": "fail",
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(build_report.get("warnings", []))
-                + list(reference_visual_detail_build_report.get("warnings", []))
-                + list(reference_visual_detail_service_permission_report.get("warnings", [])),
-            }
-        reference_visual_detail_status = "built"
-        reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
-        reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
-    filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
-    osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
-    tls_report = tls_audit_func(
-        net_file=raw_net_file,
-        output_dir=output_dir / "tls_audit",
-        prefix=f"{prefix}_tls_audit",
-        osm_file=osm_file,
-        google_maps_temporal_scope=map_temporal_scope,
-        google_maps_target_date=map_target_date,
-    )
-    if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, tls_aggregation_func):
-        tls_aggregation_report = tls_aggregation_func(
-            net_file=raw_net_file,
-            tls_audit_report=tls_report,
-            output_dir=output_dir / "tls_aggregation",
-            prefix=f"{prefix}_tls_aggregation",
-            timeout_seconds=timeout_seconds,
-        )
-        tls_variant_value = tls_aggregation_report.get("tls_aggregation_variant_file", "") if tls_aggregation_report else ""
-        if (
-            tls_aggregation_report.get("status") == "pass"
-            and tls_variant_value
-            and _tls_aggregation_preserves_controlled_connections(tls_aggregation_report)
-        ):
-            candidate_tls_net_file = Path(str(tls_variant_value))
-            if candidate_tls_net_file.exists():
-                net_file = candidate_tls_net_file
-    _tls_section_result = _workflow_tls_aggregation_section(
-        command_runner=command_runner,
-        map_target_date=map_target_date,
-        map_temporal_scope=map_temporal_scope,
-        network_plan=network_plan,
-        osm_file=osm_file,
-        output_dir=output_dir,
-        prefix=prefix,
-        reference_join_audit_func=reference_join_audit_func,
-        reference_net_file=reference_net_file,
-        reference_visual_detail_net_file=reference_visual_detail_net_file,
-        reference_visual_detail_tls_aggregation_candidates=reference_visual_detail_tls_aggregation_candidates,
-        reference_visual_detail_tls_low_vehicle_control_candidates=reference_visual_detail_tls_low_vehicle_control_candidates,
-        run_tls_aggregation_after_build=run_tls_aggregation_after_build,
-        sumo_binary=sumo_binary,
-        timeout_seconds=timeout_seconds,
-        tls_aggregation_func=tls_aggregation_func,
-        tls_audit_func=tls_audit_func,
-        tls_connection_repair_func=tls_connection_repair_func,
-        tls_low_vehicle_control_func=tls_low_vehicle_control_func,
-        tls_signal_grouping_func=tls_signal_grouping_func,
-        topology_cluster_radius_m=topology_cluster_radius_m,
-        topology_min_cluster_nodes=topology_min_cluster_nodes,
-        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
-        reference_visual_detail_raw_reference_delta_report=reference_visual_detail_raw_reference_delta_report,
-        reference_visual_detail_tls_aggregation_reference_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
-        reference_visual_detail_tls_aggregation_reference_promotion_report=reference_visual_detail_tls_aggregation_reference_promotion_report,
-        reference_visual_detail_tls_aggregation_report=reference_visual_detail_tls_aggregation_report,
-        reference_visual_detail_tls_connection_repair_promotion_report=reference_visual_detail_tls_connection_repair_promotion_report,
-        reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
-        reference_visual_detail_tls_connection_repair_report=reference_visual_detail_tls_connection_repair_report,
-        reference_visual_detail_tls_connection_repair_sumo_load_report=reference_visual_detail_tls_connection_repair_sumo_load_report,
-        reference_visual_detail_tls_low_vehicle_control_reference_promotion_report=reference_visual_detail_tls_low_vehicle_control_reference_promotion_report,
-        reference_visual_detail_tls_report=reference_visual_detail_tls_report,
-        reference_visual_detail_tls_signal_grouping_reference_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
-        reference_visual_detail_tls_signal_grouping_reference_promotion_report=reference_visual_detail_tls_signal_grouping_reference_promotion_report,
-        reference_visual_detail_tls_signal_grouping_report=reference_visual_detail_tls_signal_grouping_report,
-        reference_visual_detail_tls_signal_grouping_sumo_load_report=reference_visual_detail_tls_signal_grouping_sumo_load_report,
-        tls_aggregation_report=tls_aggregation_report,
-    )
-    reference_visual_detail_comparison_net_file = _tls_section_result['reference_visual_detail_comparison_net_file']
-    reference_visual_detail_raw_reference_delta_report = _tls_section_result['reference_visual_detail_raw_reference_delta_report']
-    reference_visual_detail_tls_aggregation_reference_delta_report = _tls_section_result['reference_visual_detail_tls_aggregation_reference_delta_report']
-    reference_visual_detail_tls_aggregation_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_aggregation_reference_promotion_report']
-    reference_visual_detail_tls_aggregation_report = _tls_section_result['reference_visual_detail_tls_aggregation_report']
-    reference_visual_detail_tls_connection_repair_promotion_report = _tls_section_result['reference_visual_detail_tls_connection_repair_promotion_report']
-    reference_visual_detail_tls_connection_repair_reference_delta_report = _tls_section_result['reference_visual_detail_tls_connection_repair_reference_delta_report']
-    reference_visual_detail_tls_connection_repair_report = _tls_section_result['reference_visual_detail_tls_connection_repair_report']
-    reference_visual_detail_tls_connection_repair_sumo_load_report = _tls_section_result['reference_visual_detail_tls_connection_repair_sumo_load_report']
-    reference_visual_detail_tls_low_vehicle_control_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_promotion_report']
-    reference_visual_detail_tls_report = _tls_section_result['reference_visual_detail_tls_report']
-    reference_visual_detail_tls_signal_grouping_reference_delta_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_reference_delta_report']
-    reference_visual_detail_tls_signal_grouping_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_reference_promotion_report']
-    reference_visual_detail_tls_signal_grouping_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_report']
-    reference_visual_detail_tls_signal_grouping_sumo_load_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_sumo_load_report']
-    tls_aggregation_report = _tls_section_result['tls_aggregation_report']
-    if _tls_section_result['low_vehicle_candidate_record'] is not _WORKFLOW_UNSET:
-        low_vehicle_candidate_record = _tls_section_result['low_vehicle_candidate_record']
-    if _tls_section_result['low_vehicle_delta_report'] is not _WORKFLOW_UNSET:
-        low_vehicle_delta_report = _tls_section_result['low_vehicle_delta_report']
-    if _tls_section_result['low_vehicle_label'] is not _WORKFLOW_UNSET:
-        low_vehicle_label = _tls_section_result['low_vehicle_label']
-    if _tls_section_result['low_vehicle_limit'] is not _WORKFLOW_UNSET:
-        low_vehicle_limit = _tls_section_result['low_vehicle_limit']
-    if _tls_section_result['low_vehicle_output_dir'] is not _WORKFLOW_UNSET:
-        low_vehicle_output_dir = _tls_section_result['low_vehicle_output_dir']
-    if _tls_section_result['low_vehicle_promotion_report'] is not _WORKFLOW_UNSET:
-        low_vehicle_promotion_report = _tls_section_result['low_vehicle_promotion_report']
-    if _tls_section_result['low_vehicle_report'] is not _WORKFLOW_UNSET:
-        low_vehicle_report = _tls_section_result['low_vehicle_report']
-    if _tls_section_result['low_vehicle_score'] is not _WORKFLOW_UNSET:
-        low_vehicle_score = _tls_section_result['low_vehicle_score']
-    if _tls_section_result['low_vehicle_sumo_load_report'] is not _WORKFLOW_UNSET:
-        low_vehicle_sumo_load_report = _tls_section_result['low_vehicle_sumo_load_report']
-    if _tls_section_result['low_vehicle_variant_file'] is not _WORKFLOW_UNSET:
-        low_vehicle_variant_file = _tls_section_result['low_vehicle_variant_file']
-    if _tls_section_result['low_vehicle_variant_value'] is not _WORKFLOW_UNSET:
-        low_vehicle_variant_value = _tls_section_result['low_vehicle_variant_value']
-    if _tls_section_result['missing_shared_groups'] is not _WORKFLOW_UNSET:
-        missing_shared_groups = _tls_section_result['missing_shared_groups']
-    if _tls_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
-        reference_visual_detail_comparison_selection_reason = _tls_section_result['reference_visual_detail_comparison_selection_reason']
-    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_delta_report'] is not _WORKFLOW_UNSET:
-        reference_visual_detail_tls_low_vehicle_control_reference_delta_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_delta_report']
-    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_report'] is not _WORKFLOW_UNSET:
-        reference_visual_detail_tls_low_vehicle_control_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_report']
-    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report'] is not _WORKFLOW_UNSET:
-        reference_visual_detail_tls_low_vehicle_control_sumo_load_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report']
-    if _tls_section_result['repair_variant_file'] is not _WORKFLOW_UNSET:
-        repair_variant_file = _tls_section_result['repair_variant_file']
-    if _tls_section_result['repair_variant_value'] is not _WORKFLOW_UNSET:
-        repair_variant_value = _tls_section_result['repair_variant_value']
-    if _tls_section_result['selected_low_vehicle_candidate'] is not _WORKFLOW_UNSET:
-        selected_low_vehicle_candidate = _tls_section_result['selected_low_vehicle_candidate']
-    if _tls_section_result['signal_grouping_variant_file'] is not _WORKFLOW_UNSET:
-        signal_grouping_variant_file = _tls_section_result['signal_grouping_variant_file']
-    if _tls_section_result['signal_grouping_variant_value'] is not _WORKFLOW_UNSET:
-        signal_grouping_variant_value = _tls_section_result['signal_grouping_variant_value']
-    raw_connectivity_report = connectivity_func(net_file)
-    connectivity_report = raw_connectivity_report
-    connectivity_quality = _connectivity_quality(connectivity_report)
-    connected_core_report = None
-    connected_core_connectivity_report = None
-    if connectivity_quality["strict_connectivity_status"] != "pass":
-        connected_core_report = connected_core_func(
-            net_file,
-            output_dir=output_dir / "connected_core",
-            prefix=prefix,
-            timeout_seconds=timeout_seconds,
-        )
-        core_file_value = connected_core_report.get("connected_core_file", "") if connected_core_report else ""
-        if connected_core_report.get("status") == "pass" and core_file_value:
-            candidate_core_file = Path(str(core_file_value))
-            connected_core_connectivity_report = connectivity_func(candidate_core_file)
-            connected_core_quality = _connectivity_quality(connected_core_connectivity_report)
-            if connected_core_quality["strict_connectivity_status"] == "pass":
-                net_file = candidate_core_file
-                connectivity_report = connected_core_connectivity_report
-                connectivity_quality = dict(connected_core_quality)
-                connectivity_quality["network_quality"] = "connected-core"
-    topology_audit_report = None
-    reference_topology_audit_report: dict[str, Any] | None = None
-    if run_topology_audit_after_build:
-        topology_audit_report = topology_audit_func(
-            net_file=net_file,
-            output_dir=output_dir / "topology_audit",
-            prefix=f"{prefix}_topology_audit",
-            cluster_radius_m=topology_cluster_radius_m,
-            min_cluster_nodes=topology_min_cluster_nodes,
-            osm_file=osm_file,
-        )
-    if (
-        topology_audit_report is not None
-        and run_junction_aggregation_after_build
-        and str(network_plan.get("network_profile", "")) != "reference_matched"
-        and _junction_aggregation_summary(topology_audit_report)["junction_aggregation_candidate_count"] > 0
-    ):
-        junction_aggregation_report = junction_aggregation_func(
-            net_file=net_file,
-            output_dir=output_dir / "junction_aggregation",
-            prefix=f"{prefix}_junction_aggregation",
-            topology_audit_report=topology_audit_report,
-            reference_join_audit_report=None,
-            join_dist_m=topology_cluster_radius_m,
-            timeout_seconds=timeout_seconds,
-        )
-    if (
-        str(network_plan.get("network_profile", "")) == "reference_matched"
-        and reference_net_file is not None
-        and run_reference_hierarchy_audit_after_build
-    ):
-        reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
-        reference_hierarchy_audit_candidate_layer = (
-            "reference_visual_detail"
-            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
-            else "vehicle_core"
-        )
-        reference_hierarchy_audit_report = reference_hierarchy_audit_func(
-            reference_net_file=reference_net_file,
-            candidate_net_file=reference_hierarchy_audit_candidate_net_file,
-            output_dir=output_dir / "reference_hierarchy_audit",
-            prefix=f"{prefix}_reference_hierarchy_audit",
-            resolve_equivalent_fragmentation=True,
-        )
-    if (
-        str(network_plan.get("network_profile", "")) == "reference_matched"
-        and reference_net_file is not None
-        and run_reference_scope_audit_after_build
-    ):
-        reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
-        reference_scope_candidate_layer = (
-            "reference_visual_detail"
-            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
-            else "vehicle_core"
-        )
-        reference_scope_audit_report = reference_scope_audit_func(
-            reference_net_file=reference_net_file,
-            candidate_net_file=reference_scope_candidate_net_file,
-            output_dir=output_dir / "reference_scope_audit",
-            prefix=f"{prefix}_reference_scope_audit",
-        )
-        if run_scope_pruning_after_build and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
-            reference_scope_pruning_report = scope_pruning_func(
-                net_file=reference_scope_candidate_net_file,
-                reference_scope_report=reference_scope_audit_report,
-                output_dir=output_dir / "reference_scope_pruning",
-                prefix=f"{prefix}_reference_scope_pruning",
-                timeout_seconds=timeout_seconds,
-            )
-            scope_variant_value = str(
-                reference_scope_pruning_report.get("scope_pruning_variant_file", "")
-            )
-            scope_variant_file = Path(scope_variant_value) if scope_variant_value else None
-            if (
-                reference_scope_pruning_report.get("status") == "pass"
-                and scope_variant_file is not None
-                and scope_variant_file.exists()
-            ):
-                reference_scope_pruning_sumo_load_report = _sumo_load_net(
-                    scope_variant_file,
-                    output_dir=output_dir / "reference_scope_pruning_sumo_load",
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                reference_scope_post_prune_audit_report = reference_scope_audit_func(
-                    reference_net_file=reference_net_file,
-                    candidate_net_file=scope_variant_file,
-                    output_dir=output_dir / "reference_scope_post_prune_audit",
-                    prefix=f"{prefix}_reference_scope_post_prune_audit",
-                )
-                reference_scope_pruning_promotion_report = _scope_pruning_promotion_decision(
-                    pruning_report=reference_scope_pruning_report,
-                    post_scope_report=reference_scope_post_prune_audit_report,
-                    sumo_load_report=reference_scope_pruning_sumo_load_report,
-                    source_net_file=reference_scope_candidate_net_file,
-                    variant_net_file=scope_variant_file,
-                )
-                reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
-                    reference_scope_pruning_promotion_report.get("status", "blocked")
-                )
-                reference_scope_pruning_report["scope_pruning_promotion_checks"] = reference_scope_pruning_promotion_report.get(
-                    "checks", {}
-                )
-                if reference_scope_pruning_promotion_report.get("status") == "pass":
-                    reference_visual_detail_comparison_net_file = scope_variant_file
-                    reference_visual_detail_comparison_selection_reason = "reference_scope_pruning_promoted"
-                    reference_scope_candidate_net_file = scope_variant_file
-                    reference_scope_candidate_layer = "reference_visual_detail"
-                    reference_scope_audit_report = reference_scope_post_prune_audit_report
+    direct_variant_file = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report = _WORKFLOW_UNSET
+    post_teacher_tls_low_vehicle_control_report = _WORKFLOW_UNSET
+    post_teacher_tls_low_vehicle_control_sumo_load_report = _WORKFLOW_UNSET
+    reference_join_audit_candidate_layer = _WORKFLOW_UNSET
+    reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
+    teacher_guided_direct_replay_best_variant_file = _WORKFLOW_UNSET
+    teacher_guided_probe_matrix_report = _WORKFLOW_UNSET
+    teacher_guided_repair_best_expanded_scope_net_file = _WORKFLOW_UNSET
+    teacher_guided_repair_seed_source = _WORKFLOW_UNSET
+    tls_repair_decision_report = _WORKFLOW_UNSET
+    candidate = _WORKFLOW_UNSET
+    candidate_joined_net_file = _WORKFLOW_UNSET
+    candidate_teacher_guided_best_variant_file = _WORKFLOW_UNSET
+    connection_repair_baseline_report = _WORKFLOW_UNSET
+    connection_repair_missing_counts = _WORKFLOW_UNSET
+    connection_repair_output_dir = _WORKFLOW_UNSET
+    connection_repair_source_net_file = _WORKFLOW_UNSET
+    connection_repair_variant_file = _WORKFLOW_UNSET
+    connection_repair_variant_value = _WORKFLOW_UNSET
+    direct_index = _WORKFLOW_UNSET
+    direct_replay_candidates = _WORKFLOW_UNSET
+    direct_replay_source_net_file = _WORKFLOW_UNSET
+    direct_variant_value = _WORKFLOW_UNSET
+    expanded_scope_file = _WORKFLOW_UNSET
+    expanded_scope_value = _WORKFLOW_UNSET
+    extra_traffic_light_junctions = _WORKFLOW_UNSET
+    followup_best_variant_file = _WORKFLOW_UNSET
+    followup_delta_report = _WORKFLOW_UNSET
+    followup_demotion_file = _WORKFLOW_UNSET
+    followup_demotion_report = _WORKFLOW_UNSET
+    followup_demotion_value = _WORKFLOW_UNSET
+    followup_edge_map = _WORKFLOW_UNSET
+    followup_promotion_report = _WORKFLOW_UNSET
+    followup_queue_report = _WORKFLOW_UNSET
+    followup_run_report = _WORKFLOW_UNSET
+    followup_sumo_load_report = _WORKFLOW_UNSET
+    internal_regression_restore_report = _WORKFLOW_UNSET
+    join_output_status = _WORKFLOW_UNSET
+    joined_value = _WORKFLOW_UNSET
+    low_vehicle_candidate_record = _WORKFLOW_UNSET
+    low_vehicle_delta_report = _WORKFLOW_UNSET
+    low_vehicle_label = _WORKFLOW_UNSET
+    low_vehicle_limit = _WORKFLOW_UNSET
+    low_vehicle_output_dir = _WORKFLOW_UNSET
+    low_vehicle_promotion_report = _WORKFLOW_UNSET
+    low_vehicle_report = _WORKFLOW_UNSET
+    low_vehicle_score = _WORKFLOW_UNSET
+    low_vehicle_sumo_load_report = _WORKFLOW_UNSET
+    low_vehicle_variant_file = _WORKFLOW_UNSET
+    low_vehicle_variant_value = _WORKFLOW_UNSET
+    missing_controlled_connections = _WORKFLOW_UNSET
+    missing_shared_groups = _WORKFLOW_UNSET
+    missing_sparse_tllogics = _WORKFLOW_UNSET
+    non_controller_base_edge_map = _WORKFLOW_UNSET
+    non_controller_demotion_baseline_report = _WORKFLOW_UNSET
+    non_controller_demotion_extra_counts = _WORKFLOW_UNSET
+    non_controller_demotion_output_dir = _WORKFLOW_UNSET
+    non_controller_demotion_source_net_file = _WORKFLOW_UNSET
+    non_controller_demotion_variant_file = _WORKFLOW_UNSET
+    non_controller_demotion_variant_value = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_movement_rebuild_queue_report = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_reference_delta_report = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_reference_promotion_report = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_report = _WORKFLOW_UNSET
+    post_teacher_tls_connection_repair_sumo_load_report = _WORKFLOW_UNSET
+    post_teacher_tls_low_vehicle_control_reference_promotion_report = _WORKFLOW_UNSET
+    post_teacher_tls_non_controller_junction_demotion_reference_delta_report = _WORKFLOW_UNSET
+    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = _WORKFLOW_UNSET
+    post_teacher_tls_non_controller_junction_demotion_report = _WORKFLOW_UNSET
+    post_teacher_tls_non_controller_junction_demotion_sumo_load_report = _WORKFLOW_UNSET
+    post_teacher_tls_signal_grouping_reference_promotion_report = _WORKFLOW_UNSET
+    post_teacher_tls_signal_grouping_report = _WORKFLOW_UNSET
+    post_teacher_tls_signal_grouping_sumo_load_report = _WORKFLOW_UNSET
+    preservation_status = _WORKFLOW_UNSET
+    probe_matrix_junction_ids = _WORKFLOW_UNSET
+    queue_file_value = _WORKFLOW_UNSET
+    raw_tllogic_value = _WORKFLOW_UNSET
+    raw_type_value = _WORKFLOW_UNSET
+    reference_join_aggregation_report = _WORKFLOW_UNSET
+    reference_join_audit_candidate_net_file = _WORKFLOW_UNSET
+    reference_join_audit_is_structural_only = _WORKFLOW_UNSET
+    reference_join_audit_report = _WORKFLOW_UNSET
+    reference_join_post_teacher_audit_report = _WORKFLOW_UNSET
+    repair_variant_file = _WORKFLOW_UNSET
+    repair_variant_value = _WORKFLOW_UNSET
+    restore_promotion_report = _WORKFLOW_UNSET
+    restored_delta_report = _WORKFLOW_UNSET
+    restored_followup_file = _WORKFLOW_UNSET
+    restored_sumo_load_report = _WORKFLOW_UNSET
+    road_connection_topology_replay_report = _WORKFLOW_UNSET
+    road_connection_topology_variant_file = _WORKFLOW_UNSET
+    road_connectivity_replay_report = _WORKFLOW_UNSET
+    road_connectivity_seed_edge_ids = _WORKFLOW_UNSET
+    road_connectivity_seed_probe_report = _WORKFLOW_UNSET
+    road_connectivity_split_alias_variant_file = _WORKFLOW_UNSET
+    road_connectivity_split_root_alias_repair_report = _WORKFLOW_UNSET
+    selected_low_vehicle_candidate = _WORKFLOW_UNSET
+    shared_candidate_value = _WORKFLOW_UNSET
+    shared_controller_candidate_net_file = _WORKFLOW_UNSET
+    signal_grouping_baseline_report = _WORKFLOW_UNSET
+    signal_grouping_missing_counts = _WORKFLOW_UNSET
+    signal_grouping_output_dir = _WORKFLOW_UNSET
+    signal_grouping_source_net_file = _WORKFLOW_UNSET
+    signal_grouping_variant_file = _WORKFLOW_UNSET
+    signal_grouping_variant_value = _WORKFLOW_UNSET
+    teacher_guided_direct_replay_reference_delta_report = _WORKFLOW_UNSET
+    teacher_guided_direct_replay_reference_promotion_report = _WORKFLOW_UNSET
+    teacher_guided_direct_replay_report = _WORKFLOW_UNSET
+    teacher_guided_plain_export_report = _WORKFLOW_UNSET
+    teacher_guided_queue_needed = _WORKFLOW_UNSET
+    teacher_guided_repair_best_variant_file = _WORKFLOW_UNSET
+    teacher_guided_repair_queue_report = _WORKFLOW_UNSET
+    teacher_guided_repair_requires_reference_promotion = _WORKFLOW_UNSET
+    teacher_guided_repair_run_report = _WORKFLOW_UNSET
+    teacher_guided_replay_source_net_file = _WORKFLOW_UNSET
+    teacher_guided_scoped_tls_batch_pass_candidate_ids = _WORKFLOW_UNSET
+    teacher_guided_scoped_tls_cell_batch_report = _WORKFLOW_UNSET
+    teacher_guided_seed_report = _WORKFLOW_UNSET
+    teacher_guided_seed_structural_only = _WORKFLOW_UNSET
+    tls_gap_destination_mapping_report = _WORKFLOW_UNSET
+    tls_repair_variant_reference_audit_report = _WORKFLOW_UNSET
+    tls_repair_variant_report = _WORKFLOW_UNSET
+    tls_repair_variant_semantic_report = _WORKFLOW_UNSET
+    tls_repair_variant_sumo_load_report = _WORKFLOW_UNSET
+    trial_queue_report = _WORKFLOW_UNSET
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
@@ -3799,6 +3091,1097 @@ def run_osm_cleanup_workflow(
                 road_connectivity_seed_probe_func=road_connectivity_seed_probe_func,
                 road_connection_topology_replay_func=road_connection_topology_replay_func,
             )
+    return {
+        'direct_variant_file': direct_variant_file,
+        'post_teacher_tls_connection_repair_movement_rebuild_best_variant_file': post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
+        'post_teacher_tls_connection_repair_movement_rebuild_plain_export_report': post_teacher_tls_connection_repair_movement_rebuild_plain_export_report,
+        'post_teacher_tls_connection_repair_movement_rebuild_queue_report': post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+        'post_teacher_tls_connection_repair_movement_rebuild_run_report': post_teacher_tls_connection_repair_movement_rebuild_run_report,
+        'post_teacher_tls_connection_repair_reference_delta_report': post_teacher_tls_connection_repair_reference_delta_report,
+        'post_teacher_tls_connection_repair_reference_promotion_report': post_teacher_tls_connection_repair_reference_promotion_report,
+        'post_teacher_tls_connection_repair_report': post_teacher_tls_connection_repair_report,
+        'post_teacher_tls_connection_repair_sumo_load_report': post_teacher_tls_connection_repair_sumo_load_report,
+        'post_teacher_tls_low_vehicle_control_reference_delta_report': post_teacher_tls_low_vehicle_control_reference_delta_report,
+        'post_teacher_tls_low_vehicle_control_reference_promotion_report': post_teacher_tls_low_vehicle_control_reference_promotion_report,
+        'post_teacher_tls_low_vehicle_control_report': post_teacher_tls_low_vehicle_control_report,
+        'post_teacher_tls_low_vehicle_control_sumo_load_report': post_teacher_tls_low_vehicle_control_sumo_load_report,
+        'post_teacher_tls_non_controller_junction_demotion_reference_delta_report': post_teacher_tls_non_controller_junction_demotion_reference_delta_report,
+        'post_teacher_tls_non_controller_junction_demotion_reference_promotion_report': post_teacher_tls_non_controller_junction_demotion_reference_promotion_report,
+        'post_teacher_tls_non_controller_junction_demotion_report': post_teacher_tls_non_controller_junction_demotion_report,
+        'post_teacher_tls_non_controller_junction_demotion_sumo_load_report': post_teacher_tls_non_controller_junction_demotion_sumo_load_report,
+        'post_teacher_tls_signal_grouping_reference_delta_report': post_teacher_tls_signal_grouping_reference_delta_report,
+        'post_teacher_tls_signal_grouping_reference_promotion_report': post_teacher_tls_signal_grouping_reference_promotion_report,
+        'post_teacher_tls_signal_grouping_report': post_teacher_tls_signal_grouping_report,
+        'post_teacher_tls_signal_grouping_sumo_load_report': post_teacher_tls_signal_grouping_sumo_load_report,
+        'reference_join_aggregation_report': reference_join_aggregation_report,
+        'reference_join_audit_candidate_layer': reference_join_audit_candidate_layer,
+        'reference_join_audit_candidate_net_file': reference_join_audit_candidate_net_file,
+        'reference_join_audit_report': reference_join_audit_report,
+        'reference_join_post_teacher_audit_report': reference_join_post_teacher_audit_report,
+        'reference_visual_detail_comparison_net_file': reference_visual_detail_comparison_net_file,
+        'reference_visual_detail_comparison_selection_reason': reference_visual_detail_comparison_selection_reason,
+        'road_connection_topology_replay_report': road_connection_topology_replay_report,
+        'road_connectivity_replay_report': road_connectivity_replay_report,
+        'road_connectivity_seed_probe_report': road_connectivity_seed_probe_report,
+        'road_connectivity_split_root_alias_repair_report': road_connectivity_split_root_alias_repair_report,
+        'teacher_guided_direct_replay_best_variant_file': teacher_guided_direct_replay_best_variant_file,
+        'teacher_guided_direct_replay_reference_delta_report': teacher_guided_direct_replay_reference_delta_report,
+        'teacher_guided_direct_replay_reference_promotion_report': teacher_guided_direct_replay_reference_promotion_report,
+        'teacher_guided_direct_replay_report': teacher_guided_direct_replay_report,
+        'teacher_guided_plain_export_report': teacher_guided_plain_export_report,
+        'teacher_guided_probe_matrix_report': teacher_guided_probe_matrix_report,
+        'teacher_guided_repair_best_expanded_scope_net_file': teacher_guided_repair_best_expanded_scope_net_file,
+        'teacher_guided_repair_best_variant_file': teacher_guided_repair_best_variant_file,
+        'teacher_guided_repair_queue_report': teacher_guided_repair_queue_report,
+        'teacher_guided_repair_reference_promotion_report': teacher_guided_repair_reference_promotion_report,
+        'teacher_guided_repair_requires_reference_promotion': teacher_guided_repair_requires_reference_promotion,
+        'teacher_guided_repair_run_report': teacher_guided_repair_run_report,
+        'teacher_guided_repair_seed_source': teacher_guided_repair_seed_source,
+        'teacher_guided_scoped_tls_cell_batch_report': teacher_guided_scoped_tls_cell_batch_report,
+        'teacher_guided_seed_report': teacher_guided_seed_report,
+        'tls_gap_destination_mapping_report': tls_gap_destination_mapping_report,
+        'tls_repair_decision_report': tls_repair_decision_report,
+        'tls_repair_variant_reference_audit_report': tls_repair_variant_reference_audit_report,
+        'tls_repair_variant_report': tls_repair_variant_report,
+        'tls_repair_variant_semantic_report': tls_repair_variant_semantic_report,
+        'tls_repair_variant_sumo_load_report': tls_repair_variant_sumo_load_report,
+    }
+
+
+def run_osm_cleanup_workflow(
+    *,
+    output_dir: Path,
+    bbox: str | None = None,
+    place_name: str | None = None,
+    confirmed_area: bool = False,
+    prefix: str = "sumo_osm_cleanup",
+    source_osm_path: Path | None = None,
+    clip_source_ways_to_bbox: bool = True,
+    highway_classes: set[str] | None = None,
+    traffic_layers: str | set[str] | None = None,
+    network_profile: str | None = None,
+    reference_net_file: Path | None = None,
+    reference_policy_report: str | Path | Mapping[str, Any] | None = None,
+    service_passenger_policy: str | None = None,
+    historical_date: str | None = None,
+    overpass_url: str = "https://overpass-api.de/api/interpreter",
+    timeout_seconds: float = 240.0,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    max_tile_area_km2: float = 2500.0,
+    max_retries: int = 2,
+    retry_pause_seconds: float = 5.0,
+    map_temporal_scope: str = "current",
+    map_target_date: str | None = None,
+    review_decisions_file: Path | None = None,
+    launch_netedit_after_build: bool = True,
+    launch_netedit_review_after_build: bool | None = None,
+    launch_sumo_gui_after_build: bool = True,
+    run_topology_audit_after_build: bool = True,
+    topology_cluster_radius_m: float = 30.0,
+    topology_min_cluster_nodes: int = 3,
+    run_routeability_audit_after_build: bool = True,
+    run_connection_mode_audit_after_build: bool = True,
+    run_standard_nema_scan_after_build: bool = True,
+    routeability_vehicle_count: int | None = None,
+    routeability_initial_end: int | None = None,
+    routeability_max_end: int | None = None,
+    run_tls_aggregation_after_build: bool = True,
+    run_junction_aggregation_after_build: bool = True,
+    run_reference_join_audit_after_build: bool = True,
+    reference_join_audit_structural_only: bool = True,
+    run_reference_join_aggregation_after_build: bool = True,
+    run_reference_hierarchy_audit_after_build: bool = True,
+    run_reference_scope_audit_after_build: bool = True,
+    run_reference_bbox_scope_after_build: bool = True,
+    run_road_connectivity_parity_audit_after_build: bool = True,
+    run_scope_pruning_after_build: bool = False,
+    run_corridor_geometry_simplification_after_build: bool = False,
+    run_corridor_edit_ledger_after_build: bool = False,
+    teacher_guided_repair_max_ready_candidates: int | None = 80,
+    run_teacher_guided_repair_after_build: bool = True,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
+    road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
+    key_edge_queries: list[Mapping[str, Any]] | None = None,
+    build_func: Callable[..., dict[str, Any]] = build_osm_network,
+    tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
+    connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
+    connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
+    routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
+    topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
+    routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
+    connection_mode_audit_func: Callable[..., dict[str, Any]] = build_network_connection_mode_audit,
+    standard_nema_binding_func: Callable[..., dict[str, Any]] = build_standard_nema_phase_binding,
+    tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
+    tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
+    tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
+    tls_non_controller_junction_demotion_func: Callable[
+        ..., dict[str, Any]
+    ] = build_tls_non_controller_junction_demotion_variant,
+    tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
+    junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
+    reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
+    reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]] = build_reference_hierarchy_type_repair_variant,
+    reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
+    reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
+    teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
+    teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
+    teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
+    teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_matrix,
+    teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
+    road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
+    road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
+    road_connection_topology_replay_func: Callable[..., dict[str, Any]] = _run_road_connection_topology_replay,
+    road_connectivity_parity_func: Callable[..., dict[str, Any]] = audit_road_connectivity_parity,
+    reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
+    scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
+    corridor_geometry_simplification_func: Callable[..., dict[str, Any]] = build_corridor_geometry_simplification_variant,
+    corridor_edit_ledger_func: Callable[..., dict[str, Any]] = build_corridor_edit_ledger,
+    netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
+    netedit_review_func: Callable[[Path], dict[str, Any]] | None = None,
+    sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
+    place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
+    reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
+    reference_bbox_scope_func: Callable[..., dict[str, Any]] = build_reference_bbox_variant,
+    service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
+    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
+    command_runner: Callable[..., Any] = run_command,
+) -> dict[str, Any]:
+    cleaned_place_name = (place_name or "").strip()
+    bbox_input = (bbox or "").strip()
+    bbox_from_url = osm_map_url_bbox(bbox_input)
+    if bbox_from_url:
+        cleaned_place_name = bbox_input
+        bbox = bbox_from_url
+    else:
+        bbox_from_url = osm_map_url_bbox(cleaned_place_name)
+        if bbox_from_url:
+            bbox = bbox_from_url
+    place_report = None
+    reference_bbox_report: dict[str, Any] | None = None
+    if not bbox and source_osm_path is None and reference_net_file is not None:
+        reference_bbox_report = reference_bbox_func(reference_net_file)
+        derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
+        if reference_bbox_report.get("status") == "pass" and derived_bbox:
+            bbox = derived_bbox
+    if cleaned_place_name and not bbox and source_osm_path is None:
+        place_report = place_resolver(cleaned_place_name)
+        if not confirmed_area:
+            return _blocked_place_report(cleaned_place_name, output_dir, place_report)
+        resolved_bbox = str(place_report.get("candidate_bbox", ""))
+        if place_report.get("status") != "pass" or not resolved_bbox:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name,
+                "area_resolution_status": str(place_report.get("area_resolution_status", "blocked")),
+                **_candidate_fields(place_report),
+                "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))),
+                "user_confirmed_area": "yes",
+                "gate_status": {
+                    "area_confirmation": "fail",
+                    "road_level_scope": "not_started",
+                    "network_build": "not_started",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(place_report.get("warnings", [])) + ["confirmed place_name could not be resolved to a bbox"],
+            }
+        bbox = resolved_bbox
+    if not bbox:
+        reference_bbox_status = (
+            str(reference_bbox_report.get("reference_bbox_status", "blocked"))
+            if reference_bbox_report is not None
+            else "blocked"
+        )
+        reference_bbox_warnings = list(reference_bbox_report.get("warnings", [])) if reference_bbox_report else []
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "area_input": cleaned_place_name,
+            "area_resolution_status": reference_bbox_status,
+            **_candidate_fields(place_report),
+            **_reference_bbox_fields(reference_bbox_report),
+            "gate_status": {
+                "area_confirmation": "fail",
+                "road_level_scope": "not_started",
+                "network_build": "not_started",
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
+            "warnings": reference_bbox_warnings + ["bbox is required for OSM network construction"],
+        }
+    area_status = "confirmed_by_user" if cleaned_place_name and confirmed_area else "confirmed_by_input"
+    network_plan = derive_network_plan(
+        highway_classes=highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        reference_net_file=reference_net_file,
+        reference_policy_report=reference_policy_report,
+        service_passenger_policy=service_passenger_policy,
+    )
+    if network_plan.get("status") == "blocked":
+        return _blocked_road_level_scope_report(
+            area_input=cleaned_place_name or bbox,
+            area_status=area_status,
+            place_report=place_report,
+            cleaned_place_name=cleaned_place_name,
+            bbox=bbox,
+            network_plan=network_plan,
+        )
+    if network_plan.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "area_input": cleaned_place_name or bbox,
+            "area_resolution_status": area_status,
+            **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
+            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+            "network_plan_status": network_plan.get("network_plan_status", "failed"),
+            "network_profile": network_plan.get("network_profile", ""),
+            "reference_target": network_plan.get("reference_target", ""),
+            "reference_net_file": network_plan.get("reference_net_file", ""),
+            "network_detail_target": network_plan.get("network_detail_target", ""),
+            "movement_layers": network_plan.get("movement_layers", []),
+            "selected_highway_classes": network_plan.get("highway_classes", []),
+            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
+            "network_plan": network_plan,
+            "gate_status": {
+                "area_confirmation": "pass",
+                "road_level_scope": "fail",
+                "network_build": "not_started",
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
+            "warnings": list(network_plan.get("warnings", [])),
+        }
+    reference_source_net_file = reference_net_file
+    reference_bbox_scope_report: dict[str, Any] | None = None
+    if (
+        run_reference_bbox_scope_after_build
+        and str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+    ):
+        reference_bbox_scope_report = reference_bbox_scope_func(
+            reference_net_file=reference_net_file,
+            bbox=bbox,
+            output_dir=output_dir / "reference_bbox_scope",
+            prefix=f"{prefix}_reference_bbox_scope",
+            netconvert_binary=netconvert_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        scoped_reference_value = reference_bbox_scope_report.get("variant_file", "")
+        scoped_reference_file = Path(str(scoped_reference_value)) if scoped_reference_value else None
+        if (
+            reference_bbox_scope_report.get("status") == "pass"
+            and scoped_reference_file is not None
+            and scoped_reference_file.exists()
+        ):
+            # From this point on, all teacher-guided parity and replay stages
+            # use the same geographic scope as the candidate OSM build.  Keep
+            # the original teacher path separately for provenance and source
+            # way-scope planning.
+            reference_net_file = scoped_reference_file
+    selected_highway_classes = set(network_plan.get("highway_classes", []))
+    reference_source_way_ids = {
+        str(item)
+        for item in network_plan.get("reference_source_way_ids", [])
+        if str(item).strip()
+    }
+    reference_source_way_scope = reference_source_way_ids or None
+    build_kwargs: dict[str, Any] = {
+        "bbox": bbox,
+        "output_dir": output_dir,
+        "prefix": prefix,
+        "source_osm_path": source_osm_path,
+        "allowed_highways": selected_highway_classes,
+        "allowed_way_ids": reference_source_way_scope,
+        "historical_date": historical_date,
+        "overpass_url": overpass_url,
+        "timeout_seconds": timeout_seconds,
+        "max_tile_area_km2": max_tile_area_km2,
+        "max_retries": max_retries,
+        "retry_pause_seconds": retry_pause_seconds,
+        "netconvert_profile": "vehicle_core",
+    }
+    if _supports_keyword(build_func, "netconvert_binary"):
+        build_kwargs["netconvert_binary"] = netconvert_binary
+    if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+        build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
+    build_report = build_func(**build_kwargs)
+    if build_report.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "area_input": cleaned_place_name or bbox,
+            "area_resolution_status": area_status,
+            **_candidate_fields(place_report),
+            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+            "network_profile": network_plan.get("network_profile", ""),
+            "reference_target": network_plan.get("reference_target", ""),
+            "reference_net_file": network_plan.get("reference_net_file", ""),
+            "network_detail_target": network_plan.get("network_detail_target", ""),
+            "primary_network_layer": network_plan.get("primary_network_layer", ""),
+            "auxiliary_modal_layers": network_plan.get("auxiliary_modal_layers", []),
+            "movement_layers": network_plan.get("movement_layers", []),
+            "selected_highway_classes": network_plan.get("highway_classes", []),
+            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
+            "reference_policy": network_plan.get("reference_policy", {}),
+            "build": build_report,
+            "gate_status": {
+                "area_confirmation": "pass",
+                "road_level_scope": "pass",
+                "network_build": _gate_value(build_report),
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
+            "warnings": list(build_report.get("warnings", [])),
+        }
+    raw_net_file = Path(str(build_report["net_file"]))
+    service_permission_report = service_permission_func(
+        raw_net_file,
+        policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+    )
+    if service_permission_report.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "area_input": cleaned_place_name or bbox,
+            "area_resolution_status": area_status,
+            **_candidate_fields(place_report),
+            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+            "network_profile": network_plan.get("network_profile", ""),
+            "reference_target": network_plan.get("reference_target", ""),
+            "reference_net_file": network_plan.get("reference_net_file", ""),
+            "network_detail_target": network_plan.get("network_detail_target", ""),
+            "primary_network_layer": network_plan.get("primary_network_layer", ""),
+            "auxiliary_modal_layers": network_plan.get("auxiliary_modal_layers", []),
+            "movement_layers": network_plan.get("movement_layers", []),
+            "selected_highway_classes": network_plan.get("highway_classes", []),
+            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
+            "reference_policy": network_plan.get("reference_policy", {}),
+            "build": build_report,
+            "service_passenger_permissions": service_permission_report,
+            "gate_status": {
+                "area_confirmation": "pass",
+                "road_level_scope": "pass",
+                "network_build": _gate_value(build_report),
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
+            "warnings": list(build_report.get("warnings", [])) + list(service_permission_report.get("warnings", [])),
+        }
+    net_file = raw_net_file
+    reference_visual_detail_status = "not_applicable"
+    reference_visual_detail_net_file: Path | None = None
+    reference_visual_detail_comparison_net_file: Path | None = None
+    reference_visual_detail_comparison_selection_reason = "not_applicable"
+    reference_visual_detail_build_report: dict[str, Any] = {}
+    reference_visual_detail_service_permission_report: dict[str, Any] = {}
+    reference_visual_detail_netedit_report: dict[str, Any] = {}
+    reference_visual_detail_tls_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_candidates: list[dict[str, Any]] = []
+    reference_visual_detail_tls_signal_grouping_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
+    reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
+    reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_visual_detail_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_visual_detail_tls_low_vehicle_control_sumo_load_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_visual_detail_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    junction_aggregation_report: dict[str, Any] | None = None
+    reference_join_audit_report: dict[str, Any] | None = None
+    tls_gap_destination_mapping_report: dict[str, Any] | None = None
+    tls_repair_variant_report: dict[str, Any] | None = None
+    tls_repair_variant_sumo_load_report: dict[str, Any] | None = None
+    tls_repair_variant_semantic_report: dict[str, Any] | None = None
+    tls_repair_variant_reference_audit_report: dict[str, Any] | None = None
+    tls_repair_decision_report: dict[str, Any] | None = None
+    reference_join_post_teacher_audit_report: dict[str, Any] | None = None
+    post_teacher_tls_low_vehicle_control_report: dict[str, Any] | None = None
+    post_teacher_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
+    post_teacher_tls_low_vehicle_control_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_low_vehicle_control_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    post_teacher_tls_signal_grouping_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    post_teacher_tls_non_controller_junction_demotion_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    post_teacher_tls_connection_repair_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    post_teacher_tls_connection_repair_movement_rebuild_queue_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_run_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file: Path | None = None
+    final_movement_rebuild_queue_report: dict[str, Any] | None = None
+    final_movement_rebuild_plain_export_report: dict[str, Any] | None = None
+    final_movement_rebuild_run_report: dict[str, Any] | None = None
+    final_movement_rebuild_best_variant_file: Path | None = None
+    final_movement_rebuild_sumo_load_report: dict[str, Any] | None = None
+    final_movement_rebuild_reference_delta_report: dict[str, Any] | None = None
+    final_movement_rebuild_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    final_movement_direct_replay_report: dict[str, Any] | None = None
+    final_movement_direct_replay_reference_delta_report: dict[str, Any] | None = None
+    final_movement_direct_replay_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    final_movement_direct_replay_best_variant_file: Path | None = None
+    final_movement_direct_replay_last_queue_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_sumo_load_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_reference_delta_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_promotion_report: dict[str, Any] | None = None
+    reference_join_aggregation_report: dict[str, Any] | None = None
+    teacher_guided_repair_queue_report: dict[str, Any] | None = None
+    teacher_guided_scoped_tls_cell_batch_report: dict[str, Any] | None = None
+    teacher_guided_plain_export_report: dict[str, Any] | None = None
+    teacher_guided_repair_run_report: dict[str, Any] | None = None
+    teacher_guided_probe_matrix_report: dict[str, Any] | None = None
+    road_connectivity_replay_report: dict[str, Any] | None = None
+    road_connectivity_parity_audit_report: dict[str, Any] | None = None
+    road_connectivity_seed_probe_report: dict[str, Any] | None = None
+    road_connectivity_split_root_alias_repair_report: dict[str, Any] | None = None
+    road_connection_topology_replay_report: dict[str, Any] | None = None
+    teacher_guided_repair_best_variant_file: Path | None = None
+    teacher_guided_direct_replay_report: dict[str, Any] | None = None
+    teacher_guided_direct_replay_reference_delta_report: dict[str, Any] | None = None
+    teacher_guided_direct_replay_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    teacher_guided_direct_replay_best_variant_file: Path | None = None
+    teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
+    teacher_guided_seed_report: dict[str, Any] | None = None
+    teacher_guided_repair_seed_source = "skipped"
+    teacher_guided_repair_requires_reference_promotion = False
+    teacher_guided_repair_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_hierarchy_audit_report: dict[str, Any] | None = None
+    reference_hierarchy_audit_candidate_layer = "not_applicable"
+    reference_hierarchy_audit_candidate_net_file: Path | None = None
+    reference_hierarchy_type_repair_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_sumo_load_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_audit_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    corridor_geometry_simplification_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_sumo_load_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_reference_delta_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_topology_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    corridor_edit_ledger_report: dict[str, Any] | None = None
+    reference_scope_audit_report: dict[str, Any] | None = None
+    reference_scope_pruning_report: dict[str, Any] | None = None
+    reference_scope_post_prune_audit_report: dict[str, Any] | None = None
+    reference_scope_pruning_sumo_load_report: dict[str, Any] | None = None
+    reference_scope_pruning_promotion_report: dict[str, Any] = {}
+    reference_scope_final_audit_report: dict[str, Any] | None = None
+    reference_scope_final_pruning_report: dict[str, Any] | None = None
+    reference_scope_final_post_prune_audit_report: dict[str, Any] | None = None
+    reference_scope_final_sumo_load_report: dict[str, Any] | None = None
+    reference_scope_final_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_scope_candidate_layer = "not_applicable"
+    reference_scope_candidate_net_file: Path | None = None
+    reference_join_audit_candidate_layer = "not_applicable"
+    reference_join_audit_candidate_net_file: Path | None = None
+    supplied_review_decisions: dict[str, Any] | None = None
+    review_decisions_source_status = "not_supplied"
+    review_decisions_source_error = ""
+    tls_aggregation_report: dict[str, Any] | None = None
+    vehicle_core_highway_classes = _class_set(
+        network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
+    )
+    reference_visual_detail_highway_classes = _class_set(
+        network_plan.get("reference_visual_detail_highway_classes", [])
+    )
+    reference_visual_detail_modal_way_tags = {
+        str(key): {
+            str(value)
+            for value in values
+            if str(value).strip()
+        }
+        for key, values in dict(
+            network_plan.get("reference_visual_detail_modal_way_tags", {})
+        ).items()
+        if isinstance(values, (list, tuple, set, frozenset)) and values
+    }
+    should_build_reference_visual_detail = (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and (
+            bool(reference_visual_detail_highway_classes)
+            and reference_visual_detail_highway_classes != vehicle_core_highway_classes
+            or bool(reference_visual_detail_modal_way_tags)
+        )
+    )
+    if str(network_plan.get("network_profile", "")) == "reference_matched":
+        reference_visual_detail_status = "same_as_vehicle_core"
+    if should_build_reference_visual_detail:
+        visual_source_osm_path = _reference_visual_source_osm_path(
+            build_report,
+            source_osm_path,
+            reference_visual_detail_highway_classes,
+            reference_visual_detail_modal_way_tags,
+        )
+        visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
+        if not visual_source_osm_value:
+            visual_source_osm_value = None
+        visual_build_kwargs: dict[str, Any] = {
+            "bbox": bbox,
+            "output_dir": output_dir,
+            "prefix": f"{prefix}_reference_visual_detail",
+            "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
+            "allowed_highways": reference_visual_detail_highway_classes,
+            "allowed_way_ids": reference_source_way_scope,
+            "historical_date": historical_date,
+            "overpass_url": overpass_url,
+            "timeout_seconds": timeout_seconds,
+            "max_tile_area_km2": max_tile_area_km2,
+            "max_retries": max_retries,
+            "retry_pause_seconds": retry_pause_seconds,
+            "netconvert_profile": "reference_visual_detail",
+        }
+        if _supports_keyword(build_func, "include_railway"):
+            visual_build_kwargs["include_railway"] = bool(
+                reference_visual_detail_modal_way_tags.get("railway")
+            )
+        if _supports_keyword(build_func, "allowed_railways"):
+            visual_build_kwargs["allowed_railways"] = set(
+                reference_visual_detail_modal_way_tags.get("railway", set())
+            ) or None
+        if _supports_keyword(build_func, "netconvert_binary"):
+            visual_build_kwargs["netconvert_binary"] = netconvert_binary
+        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
+        reference_visual_detail_build_report = build_func(
+            **visual_build_kwargs,
+        )
+        if reference_visual_detail_build_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": _gate_value(reference_visual_detail_build_report),
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", [])),
+            }
+        reference_visual_detail_net_file = Path(str(reference_visual_detail_build_report["net_file"]))
+        reference_visual_detail_service_permission_report = service_permission_func(
+            reference_visual_detail_net_file,
+            policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+        )
+        if reference_visual_detail_service_permission_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": "fail",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", []))
+                + list(reference_visual_detail_service_permission_report.get("warnings", [])),
+            }
+        reference_visual_detail_status = "built"
+        reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
+        reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
+    filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
+    osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
+    tls_report = tls_audit_func(
+        net_file=raw_net_file,
+        output_dir=output_dir / "tls_audit",
+        prefix=f"{prefix}_tls_audit",
+        osm_file=osm_file,
+        google_maps_temporal_scope=map_temporal_scope,
+        google_maps_target_date=map_target_date,
+    )
+    if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, tls_aggregation_func):
+        tls_aggregation_report = tls_aggregation_func(
+            net_file=raw_net_file,
+            tls_audit_report=tls_report,
+            output_dir=output_dir / "tls_aggregation",
+            prefix=f"{prefix}_tls_aggregation",
+            timeout_seconds=timeout_seconds,
+        )
+        tls_variant_value = tls_aggregation_report.get("tls_aggregation_variant_file", "") if tls_aggregation_report else ""
+        if (
+            tls_aggregation_report.get("status") == "pass"
+            and tls_variant_value
+            and _tls_aggregation_preserves_controlled_connections(tls_aggregation_report)
+        ):
+            candidate_tls_net_file = Path(str(tls_variant_value))
+            if candidate_tls_net_file.exists():
+                net_file = candidate_tls_net_file
+    _tls_section_result = _workflow_tls_aggregation_section(
+        command_runner=command_runner,
+        map_target_date=map_target_date,
+        map_temporal_scope=map_temporal_scope,
+        network_plan=network_plan,
+        osm_file=osm_file,
+        output_dir=output_dir,
+        prefix=prefix,
+        reference_join_audit_func=reference_join_audit_func,
+        reference_net_file=reference_net_file,
+        reference_visual_detail_net_file=reference_visual_detail_net_file,
+        reference_visual_detail_tls_aggregation_candidates=reference_visual_detail_tls_aggregation_candidates,
+        reference_visual_detail_tls_low_vehicle_control_candidates=reference_visual_detail_tls_low_vehicle_control_candidates,
+        run_tls_aggregation_after_build=run_tls_aggregation_after_build,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        tls_aggregation_func=tls_aggregation_func,
+        tls_audit_func=tls_audit_func,
+        tls_connection_repair_func=tls_connection_repair_func,
+        tls_low_vehicle_control_func=tls_low_vehicle_control_func,
+        tls_signal_grouping_func=tls_signal_grouping_func,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
+        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
+        reference_visual_detail_raw_reference_delta_report=reference_visual_detail_raw_reference_delta_report,
+        reference_visual_detail_tls_aggregation_reference_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+        reference_visual_detail_tls_aggregation_reference_promotion_report=reference_visual_detail_tls_aggregation_reference_promotion_report,
+        reference_visual_detail_tls_aggregation_report=reference_visual_detail_tls_aggregation_report,
+        reference_visual_detail_tls_connection_repair_promotion_report=reference_visual_detail_tls_connection_repair_promotion_report,
+        reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
+        reference_visual_detail_tls_connection_repair_report=reference_visual_detail_tls_connection_repair_report,
+        reference_visual_detail_tls_connection_repair_sumo_load_report=reference_visual_detail_tls_connection_repair_sumo_load_report,
+        reference_visual_detail_tls_low_vehicle_control_reference_promotion_report=reference_visual_detail_tls_low_vehicle_control_reference_promotion_report,
+        reference_visual_detail_tls_report=reference_visual_detail_tls_report,
+        reference_visual_detail_tls_signal_grouping_reference_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
+        reference_visual_detail_tls_signal_grouping_reference_promotion_report=reference_visual_detail_tls_signal_grouping_reference_promotion_report,
+        reference_visual_detail_tls_signal_grouping_report=reference_visual_detail_tls_signal_grouping_report,
+        reference_visual_detail_tls_signal_grouping_sumo_load_report=reference_visual_detail_tls_signal_grouping_sumo_load_report,
+        tls_aggregation_report=tls_aggregation_report,
+    )
+    reference_visual_detail_comparison_net_file = _tls_section_result['reference_visual_detail_comparison_net_file']
+    reference_visual_detail_raw_reference_delta_report = _tls_section_result['reference_visual_detail_raw_reference_delta_report']
+    reference_visual_detail_tls_aggregation_reference_delta_report = _tls_section_result['reference_visual_detail_tls_aggregation_reference_delta_report']
+    reference_visual_detail_tls_aggregation_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_aggregation_reference_promotion_report']
+    reference_visual_detail_tls_aggregation_report = _tls_section_result['reference_visual_detail_tls_aggregation_report']
+    reference_visual_detail_tls_connection_repair_promotion_report = _tls_section_result['reference_visual_detail_tls_connection_repair_promotion_report']
+    reference_visual_detail_tls_connection_repair_reference_delta_report = _tls_section_result['reference_visual_detail_tls_connection_repair_reference_delta_report']
+    reference_visual_detail_tls_connection_repair_report = _tls_section_result['reference_visual_detail_tls_connection_repair_report']
+    reference_visual_detail_tls_connection_repair_sumo_load_report = _tls_section_result['reference_visual_detail_tls_connection_repair_sumo_load_report']
+    reference_visual_detail_tls_low_vehicle_control_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_promotion_report']
+    reference_visual_detail_tls_report = _tls_section_result['reference_visual_detail_tls_report']
+    reference_visual_detail_tls_signal_grouping_reference_delta_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_reference_delta_report']
+    reference_visual_detail_tls_signal_grouping_reference_promotion_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_reference_promotion_report']
+    reference_visual_detail_tls_signal_grouping_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_report']
+    reference_visual_detail_tls_signal_grouping_sumo_load_report = _tls_section_result['reference_visual_detail_tls_signal_grouping_sumo_load_report']
+    tls_aggregation_report = _tls_section_result['tls_aggregation_report']
+    if _tls_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _tls_section_result['reference_visual_detail_comparison_selection_reason']
+    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_delta_report'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_tls_low_vehicle_control_reference_delta_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_reference_delta_report']
+    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_report'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_tls_low_vehicle_control_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_report']
+    if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_tls_low_vehicle_control_sumo_load_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report']
+    raw_connectivity_report = connectivity_func(net_file)
+    connectivity_report = raw_connectivity_report
+    connectivity_quality = _connectivity_quality(connectivity_report)
+    connected_core_report = None
+    connected_core_connectivity_report = None
+    if connectivity_quality["strict_connectivity_status"] != "pass":
+        connected_core_report = connected_core_func(
+            net_file,
+            output_dir=output_dir / "connected_core",
+            prefix=prefix,
+            timeout_seconds=timeout_seconds,
+        )
+        core_file_value = connected_core_report.get("connected_core_file", "") if connected_core_report else ""
+        if connected_core_report.get("status") == "pass" and core_file_value:
+            candidate_core_file = Path(str(core_file_value))
+            connected_core_connectivity_report = connectivity_func(candidate_core_file)
+            connected_core_quality = _connectivity_quality(connected_core_connectivity_report)
+            if connected_core_quality["strict_connectivity_status"] == "pass":
+                net_file = candidate_core_file
+                connectivity_report = connected_core_connectivity_report
+                connectivity_quality = dict(connected_core_quality)
+                connectivity_quality["network_quality"] = "connected-core"
+    topology_audit_report = None
+    reference_topology_audit_report: dict[str, Any] | None = None
+    if run_topology_audit_after_build:
+        topology_audit_report = topology_audit_func(
+            net_file=net_file,
+            output_dir=output_dir / "topology_audit",
+            prefix=f"{prefix}_topology_audit",
+            cluster_radius_m=topology_cluster_radius_m,
+            min_cluster_nodes=topology_min_cluster_nodes,
+            osm_file=osm_file,
+        )
+    if (
+        topology_audit_report is not None
+        and run_junction_aggregation_after_build
+        and str(network_plan.get("network_profile", "")) != "reference_matched"
+        and _junction_aggregation_summary(topology_audit_report)["junction_aggregation_candidate_count"] > 0
+    ):
+        junction_aggregation_report = junction_aggregation_func(
+            net_file=net_file,
+            output_dir=output_dir / "junction_aggregation",
+            prefix=f"{prefix}_junction_aggregation",
+            topology_audit_report=topology_audit_report,
+            reference_join_audit_report=None,
+            join_dist_m=topology_cluster_radius_m,
+            timeout_seconds=timeout_seconds,
+        )
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and run_reference_hierarchy_audit_after_build
+    ):
+        reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
+        reference_hierarchy_audit_candidate_layer = (
+            "reference_visual_detail"
+            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
+            else "vehicle_core"
+        )
+        reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_hierarchy_audit_candidate_net_file,
+            output_dir=output_dir / "reference_hierarchy_audit",
+            prefix=f"{prefix}_reference_hierarchy_audit",
+            resolve_equivalent_fragmentation=True,
+        )
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and run_reference_scope_audit_after_build
+    ):
+        reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
+        reference_scope_candidate_layer = (
+            "reference_visual_detail"
+            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
+            else "vehicle_core"
+        )
+        reference_scope_audit_report = reference_scope_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_scope_candidate_net_file,
+            output_dir=output_dir / "reference_scope_audit",
+            prefix=f"{prefix}_reference_scope_audit",
+        )
+        if run_scope_pruning_after_build and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
+            reference_scope_pruning_report = scope_pruning_func(
+                net_file=reference_scope_candidate_net_file,
+                reference_scope_report=reference_scope_audit_report,
+                output_dir=output_dir / "reference_scope_pruning",
+                prefix=f"{prefix}_reference_scope_pruning",
+                timeout_seconds=timeout_seconds,
+            )
+            scope_variant_value = str(
+                reference_scope_pruning_report.get("scope_pruning_variant_file", "")
+            )
+            scope_variant_file = Path(scope_variant_value) if scope_variant_value else None
+            if (
+                reference_scope_pruning_report.get("status") == "pass"
+                and scope_variant_file is not None
+                and scope_variant_file.exists()
+            ):
+                reference_scope_pruning_sumo_load_report = _sumo_load_net(
+                    scope_variant_file,
+                    output_dir=output_dir / "reference_scope_pruning_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                reference_scope_post_prune_audit_report = reference_scope_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=scope_variant_file,
+                    output_dir=output_dir / "reference_scope_post_prune_audit",
+                    prefix=f"{prefix}_reference_scope_post_prune_audit",
+                )
+                reference_scope_pruning_promotion_report = _scope_pruning_promotion_decision(
+                    pruning_report=reference_scope_pruning_report,
+                    post_scope_report=reference_scope_post_prune_audit_report,
+                    sumo_load_report=reference_scope_pruning_sumo_load_report,
+                    source_net_file=reference_scope_candidate_net_file,
+                    variant_net_file=scope_variant_file,
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
+                    reference_scope_pruning_promotion_report.get("status", "blocked")
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_checks"] = reference_scope_pruning_promotion_report.get(
+                    "checks", {}
+                )
+                if reference_scope_pruning_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = scope_variant_file
+                    reference_visual_detail_comparison_selection_reason = "reference_scope_pruning_promoted"
+                    reference_scope_candidate_net_file = scope_variant_file
+                    reference_scope_candidate_layer = "reference_visual_detail"
+                    reference_scope_audit_report = reference_scope_post_prune_audit_report
+    _reference_matched_section_result = _workflow_reference_matched_section(
+        command_runner=command_runner,
+        net_file=net_file,
+        netconvert_binary=netconvert_binary,
+        network_plan=network_plan,
+        output_dir=output_dir,
+        post_teacher_tls_low_vehicle_control_candidates=post_teacher_tls_low_vehicle_control_candidates,
+        prefix=prefix,
+        reference_join_aggregation_func=reference_join_aggregation_func,
+        reference_join_audit_func=reference_join_audit_func,
+        reference_join_audit_structural_only=reference_join_audit_structural_only,
+        reference_net_file=reference_net_file,
+        reference_visual_detail_net_file=reference_visual_detail_net_file,
+        reference_visual_detail_raw_reference_delta_report=reference_visual_detail_raw_reference_delta_report,
+        reference_visual_detail_tls_aggregation_reference_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+        reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
+        reference_visual_detail_tls_low_vehicle_control_reference_delta_report=reference_visual_detail_tls_low_vehicle_control_reference_delta_report,
+        reference_visual_detail_tls_signal_grouping_reference_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
+        road_connection_topology_replay_func=road_connection_topology_replay_func,
+        road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
+        road_connectivity_replay_func=road_connectivity_replay_func,
+        road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+        road_connectivity_seed_probe_func=road_connectivity_seed_probe_func,
+        run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
+        run_reference_join_audit_after_build=run_reference_join_audit_after_build,
+        run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
+        run_tls_aggregation_after_build=run_tls_aggregation_after_build,
+        sumo_binary=sumo_binary,
+        teacher_guided_direct_replay_func=teacher_guided_direct_replay_func,
+        teacher_guided_plain_export_func=teacher_guided_plain_export_func,
+        teacher_guided_probe_matrix_func=teacher_guided_probe_matrix_func,
+        teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
+        teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        teacher_guided_repair_queue_func=teacher_guided_repair_queue_func,
+        teacher_guided_repair_run_func=teacher_guided_repair_run_func,
+        timeout_seconds=timeout_seconds,
+        tls_connection_repair_func=tls_connection_repair_func,
+        tls_low_vehicle_control_func=tls_low_vehicle_control_func,
+        tls_non_controller_junction_demotion_func=tls_non_controller_junction_demotion_func,
+        tls_signal_grouping_func=tls_signal_grouping_func,
+        topology_audit_report=topology_audit_report,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
+        post_teacher_tls_connection_repair_movement_rebuild_best_variant_file=post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
+        post_teacher_tls_connection_repair_movement_rebuild_queue_report=post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+        post_teacher_tls_connection_repair_movement_rebuild_run_report=post_teacher_tls_connection_repair_movement_rebuild_run_report,
+        post_teacher_tls_connection_repair_reference_delta_report=post_teacher_tls_connection_repair_reference_delta_report,
+        post_teacher_tls_connection_repair_reference_promotion_report=post_teacher_tls_connection_repair_reference_promotion_report,
+        post_teacher_tls_connection_repair_report=post_teacher_tls_connection_repair_report,
+        post_teacher_tls_connection_repair_sumo_load_report=post_teacher_tls_connection_repair_sumo_load_report,
+        post_teacher_tls_low_vehicle_control_reference_delta_report=post_teacher_tls_low_vehicle_control_reference_delta_report,
+        post_teacher_tls_low_vehicle_control_reference_promotion_report=post_teacher_tls_low_vehicle_control_reference_promotion_report,
+        post_teacher_tls_non_controller_junction_demotion_reference_delta_report=post_teacher_tls_non_controller_junction_demotion_reference_delta_report,
+        post_teacher_tls_non_controller_junction_demotion_reference_promotion_report=post_teacher_tls_non_controller_junction_demotion_reference_promotion_report,
+        post_teacher_tls_non_controller_junction_demotion_report=post_teacher_tls_non_controller_junction_demotion_report,
+        post_teacher_tls_non_controller_junction_demotion_sumo_load_report=post_teacher_tls_non_controller_junction_demotion_sumo_load_report,
+        post_teacher_tls_signal_grouping_reference_delta_report=post_teacher_tls_signal_grouping_reference_delta_report,
+        post_teacher_tls_signal_grouping_reference_promotion_report=post_teacher_tls_signal_grouping_reference_promotion_report,
+        post_teacher_tls_signal_grouping_report=post_teacher_tls_signal_grouping_report,
+        post_teacher_tls_signal_grouping_sumo_load_report=post_teacher_tls_signal_grouping_sumo_load_report,
+        reference_join_aggregation_report=reference_join_aggregation_report,
+        reference_join_audit_candidate_net_file=reference_join_audit_candidate_net_file,
+        reference_join_audit_report=reference_join_audit_report,
+        reference_join_post_teacher_audit_report=reference_join_post_teacher_audit_report,
+        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
+        road_connection_topology_replay_report=road_connection_topology_replay_report,
+        road_connectivity_replay_report=road_connectivity_replay_report,
+        road_connectivity_seed_probe_report=road_connectivity_seed_probe_report,
+        road_connectivity_split_root_alias_repair_report=road_connectivity_split_root_alias_repair_report,
+        teacher_guided_direct_replay_reference_delta_report=teacher_guided_direct_replay_reference_delta_report,
+        teacher_guided_direct_replay_reference_promotion_report=teacher_guided_direct_replay_reference_promotion_report,
+        teacher_guided_direct_replay_report=teacher_guided_direct_replay_report,
+        teacher_guided_plain_export_report=teacher_guided_plain_export_report,
+        teacher_guided_repair_best_variant_file=teacher_guided_repair_best_variant_file,
+        teacher_guided_repair_queue_report=teacher_guided_repair_queue_report,
+        teacher_guided_repair_reference_promotion_report=teacher_guided_repair_reference_promotion_report,
+        teacher_guided_repair_requires_reference_promotion=teacher_guided_repair_requires_reference_promotion,
+        teacher_guided_repair_run_report=teacher_guided_repair_run_report,
+        teacher_guided_scoped_tls_cell_batch_report=teacher_guided_scoped_tls_cell_batch_report,
+        teacher_guided_seed_report=teacher_guided_seed_report,
+        tls_gap_destination_mapping_report=tls_gap_destination_mapping_report,
+        tls_repair_variant_reference_audit_report=tls_repair_variant_reference_audit_report,
+        tls_repair_variant_report=tls_repair_variant_report,
+        tls_repair_variant_semantic_report=tls_repair_variant_semantic_report,
+        tls_repair_variant_sumo_load_report=tls_repair_variant_sumo_load_report,
+    )
+    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file = _reference_matched_section_result['post_teacher_tls_connection_repair_movement_rebuild_best_variant_file']
+    post_teacher_tls_connection_repair_movement_rebuild_queue_report = _reference_matched_section_result['post_teacher_tls_connection_repair_movement_rebuild_queue_report']
+    post_teacher_tls_connection_repair_movement_rebuild_run_report = _reference_matched_section_result['post_teacher_tls_connection_repair_movement_rebuild_run_report']
+    post_teacher_tls_connection_repair_reference_delta_report = _reference_matched_section_result['post_teacher_tls_connection_repair_reference_delta_report']
+    post_teacher_tls_connection_repair_reference_promotion_report = _reference_matched_section_result['post_teacher_tls_connection_repair_reference_promotion_report']
+    post_teacher_tls_connection_repair_report = _reference_matched_section_result['post_teacher_tls_connection_repair_report']
+    post_teacher_tls_connection_repair_sumo_load_report = _reference_matched_section_result['post_teacher_tls_connection_repair_sumo_load_report']
+    post_teacher_tls_low_vehicle_control_reference_delta_report = _reference_matched_section_result['post_teacher_tls_low_vehicle_control_reference_delta_report']
+    post_teacher_tls_low_vehicle_control_reference_promotion_report = _reference_matched_section_result['post_teacher_tls_low_vehicle_control_reference_promotion_report']
+    post_teacher_tls_non_controller_junction_demotion_reference_delta_report = _reference_matched_section_result['post_teacher_tls_non_controller_junction_demotion_reference_delta_report']
+    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = _reference_matched_section_result['post_teacher_tls_non_controller_junction_demotion_reference_promotion_report']
+    post_teacher_tls_non_controller_junction_demotion_report = _reference_matched_section_result['post_teacher_tls_non_controller_junction_demotion_report']
+    post_teacher_tls_non_controller_junction_demotion_sumo_load_report = _reference_matched_section_result['post_teacher_tls_non_controller_junction_demotion_sumo_load_report']
+    post_teacher_tls_signal_grouping_reference_delta_report = _reference_matched_section_result['post_teacher_tls_signal_grouping_reference_delta_report']
+    post_teacher_tls_signal_grouping_reference_promotion_report = _reference_matched_section_result['post_teacher_tls_signal_grouping_reference_promotion_report']
+    post_teacher_tls_signal_grouping_report = _reference_matched_section_result['post_teacher_tls_signal_grouping_report']
+    post_teacher_tls_signal_grouping_sumo_load_report = _reference_matched_section_result['post_teacher_tls_signal_grouping_sumo_load_report']
+    reference_join_aggregation_report = _reference_matched_section_result['reference_join_aggregation_report']
+    reference_join_audit_candidate_net_file = _reference_matched_section_result['reference_join_audit_candidate_net_file']
+    reference_join_audit_report = _reference_matched_section_result['reference_join_audit_report']
+    reference_join_post_teacher_audit_report = _reference_matched_section_result['reference_join_post_teacher_audit_report']
+    reference_visual_detail_comparison_net_file = _reference_matched_section_result['reference_visual_detail_comparison_net_file']
+    road_connection_topology_replay_report = _reference_matched_section_result['road_connection_topology_replay_report']
+    road_connectivity_replay_report = _reference_matched_section_result['road_connectivity_replay_report']
+    road_connectivity_seed_probe_report = _reference_matched_section_result['road_connectivity_seed_probe_report']
+    road_connectivity_split_root_alias_repair_report = _reference_matched_section_result['road_connectivity_split_root_alias_repair_report']
+    teacher_guided_direct_replay_reference_delta_report = _reference_matched_section_result['teacher_guided_direct_replay_reference_delta_report']
+    teacher_guided_direct_replay_reference_promotion_report = _reference_matched_section_result['teacher_guided_direct_replay_reference_promotion_report']
+    teacher_guided_direct_replay_report = _reference_matched_section_result['teacher_guided_direct_replay_report']
+    teacher_guided_plain_export_report = _reference_matched_section_result['teacher_guided_plain_export_report']
+    teacher_guided_repair_best_variant_file = _reference_matched_section_result['teacher_guided_repair_best_variant_file']
+    teacher_guided_repair_queue_report = _reference_matched_section_result['teacher_guided_repair_queue_report']
+    teacher_guided_repair_reference_promotion_report = _reference_matched_section_result['teacher_guided_repair_reference_promotion_report']
+    teacher_guided_repair_requires_reference_promotion = _reference_matched_section_result['teacher_guided_repair_requires_reference_promotion']
+    teacher_guided_repair_run_report = _reference_matched_section_result['teacher_guided_repair_run_report']
+    teacher_guided_scoped_tls_cell_batch_report = _reference_matched_section_result['teacher_guided_scoped_tls_cell_batch_report']
+    teacher_guided_seed_report = _reference_matched_section_result['teacher_guided_seed_report']
+    tls_gap_destination_mapping_report = _reference_matched_section_result['tls_gap_destination_mapping_report']
+    tls_repair_variant_reference_audit_report = _reference_matched_section_result['tls_repair_variant_reference_audit_report']
+    tls_repair_variant_report = _reference_matched_section_result['tls_repair_variant_report']
+    tls_repair_variant_semantic_report = _reference_matched_section_result['tls_repair_variant_semantic_report']
+    tls_repair_variant_sumo_load_report = _reference_matched_section_result['tls_repair_variant_sumo_load_report']
+    if _reference_matched_section_result['direct_variant_file'] is not _WORKFLOW_UNSET:
+        direct_variant_file = _reference_matched_section_result['direct_variant_file']
+    if _reference_matched_section_result['post_teacher_tls_connection_repair_movement_rebuild_plain_export_report'] is not _WORKFLOW_UNSET:
+        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report = _reference_matched_section_result['post_teacher_tls_connection_repair_movement_rebuild_plain_export_report']
+    if _reference_matched_section_result['post_teacher_tls_low_vehicle_control_report'] is not _WORKFLOW_UNSET:
+        post_teacher_tls_low_vehicle_control_report = _reference_matched_section_result['post_teacher_tls_low_vehicle_control_report']
+    if _reference_matched_section_result['post_teacher_tls_low_vehicle_control_sumo_load_report'] is not _WORKFLOW_UNSET:
+        post_teacher_tls_low_vehicle_control_sumo_load_report = _reference_matched_section_result['post_teacher_tls_low_vehicle_control_sumo_load_report']
+    if _reference_matched_section_result['reference_join_audit_candidate_layer'] is not _WORKFLOW_UNSET:
+        reference_join_audit_candidate_layer = _reference_matched_section_result['reference_join_audit_candidate_layer']
+    if _reference_matched_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _reference_matched_section_result['reference_visual_detail_comparison_selection_reason']
+    if _reference_matched_section_result['teacher_guided_direct_replay_best_variant_file'] is not _WORKFLOW_UNSET:
+        teacher_guided_direct_replay_best_variant_file = _reference_matched_section_result['teacher_guided_direct_replay_best_variant_file']
+    if _reference_matched_section_result['teacher_guided_probe_matrix_report'] is not _WORKFLOW_UNSET:
+        teacher_guided_probe_matrix_report = _reference_matched_section_result['teacher_guided_probe_matrix_report']
+    if _reference_matched_section_result['teacher_guided_repair_best_expanded_scope_net_file'] is not _WORKFLOW_UNSET:
+        teacher_guided_repair_best_expanded_scope_net_file = _reference_matched_section_result['teacher_guided_repair_best_expanded_scope_net_file']
+    if _reference_matched_section_result['teacher_guided_repair_seed_source'] is not _WORKFLOW_UNSET:
+        teacher_guided_repair_seed_source = _reference_matched_section_result['teacher_guided_repair_seed_source']
+    if _reference_matched_section_result['tls_repair_decision_report'] is not _WORKFLOW_UNSET:
+        tls_repair_decision_report = _reference_matched_section_result['tls_repair_decision_report']
     if (
         run_teacher_guided_repair_after_build
         and reference_net_file is not None
@@ -4220,10 +4603,6 @@ def run_osm_cleanup_workflow(
                     "status": "skipped",
                     "reason": "not_needed",
                 }
-
-    # Later repair stages can change the visual-detail candidate after the first
-    # scope pass. Re-run scope pruning at the end so the artifact selected for
-    # review is the artifact that actually passed the final scope checks.
     if (
         run_scope_pruning_after_build
         and str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -4315,11 +4694,6 @@ def run_osm_cleanup_workflow(
                                 "final_hierarchy_audit": _gate_value(final_hierarchy_report),
                             },
                         }
-
-    # Run the complete road/connection audit on the artifact that will be
-    # shown in HTML/NetEdit.  Local owner replays below are useful repair
-    # probes, but they must not be allowed to turn a globally mismatched road
-    # layer into a passing parity claim.
     if (
         run_road_connectivity_parity_audit_after_build
         and str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -4361,7 +4735,6 @@ def run_osm_cleanup_workflow(
                 "candidate_net_file": "",
                 "warnings": [],
             }
-
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -4442,7 +4815,6 @@ def run_osm_cleanup_workflow(
             "sumo_gui_network_file": str(net_file),
             "warnings": ["sumo-gui launch disabled by caller"],
         }
-
     supplied_review_decisions, review_decisions_source_status, review_decisions_source_error = (
         _load_review_decisions_file(review_decisions_file)
     )
@@ -4606,7 +4978,6 @@ def run_osm_cleanup_workflow(
             "before adopting it as the clean network"
         )
     warnings = list(dict.fromkeys(warnings))
-
     gate_status = {
         "area_confirmation": "pass",
         "road_level_scope": "pass",
