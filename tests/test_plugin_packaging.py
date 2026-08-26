@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Any
 import re
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,7 +71,7 @@ def test_mcp_config_uses_bundled_launcher() -> None:
         "mcpServers": {
             "torii-sumo": {
                 "command": "python",
-                "args": ["./scripts/run_torii_sumo.py"],
+                "args": ["./scripts/bootstrap_mcp.py"],
             }
         }
     }
@@ -77,6 +79,17 @@ def test_mcp_config_uses_bundled_launcher() -> None:
 
 def test_plugin_contains_bundled_launcher() -> None:
     assert (PLUGIN / "scripts" / "run_torii_sumo.py").is_file()
+    assert (PLUGIN / "scripts" / "bootstrap_mcp.py").is_file()
+
+
+def test_mcp_bootstrap_check_reports_usable_start_path() -> None:
+    result = subprocess.run(
+        [sys.executable, str(PLUGIN / "scripts" / "bootstrap_mcp.py"), "--check"],
+        check=False,
+        cwd=PLUGIN,
+    )
+
+    assert result.returncode == 0
 
 
 def test_plugin_contains_bundled_mcp_package() -> None:

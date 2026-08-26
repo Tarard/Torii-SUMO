@@ -3,7 +3,7 @@
     "torii-sumo": {
       "command": "python",
       "args": [
-        "./scripts/run_torii_sumo.py"
+        "./scripts/bootstrap_mcp.py"
       ]
     }
   }

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
+from typing import Any
+
 import anyio
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .tools.environment_tools import sumo_get_environment, sumo_preflight
 from .tools.demand_tools import (
@@ -84,13 +88,216 @@ from .tools.osm_tools import (
     sumo_tls_audit,
     sumo_tls_multisource_review,
 )
+from .tools.mcp_contract_tools import (
+    torii_config_inspect,
+    torii_demand_audit,
+    torii_intersection_classify,
+    torii_netedit_act,
+    torii_netedit_close,
+    torii_netedit_observe,
+    torii_netedit_open,
+    torii_network_audit,
+    torii_network_compare,
+    torii_place_resolve,
+    torii_preflight,
+    torii_review_create,
+    torii_run_compare,
+    torii_signal_classify,
+)
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
 from .tools.netedit_tools import sumo_netedit_session
 from .tools.workflow_tools import torii_auto_workflow
 
 
-def create_server() -> FastMCP:
+DEFAULT_MCP_PROFILE = "legacy"
+SUPPORTED_MCP_PROFILES = ("legacy", "default", "netedit")
+
+
+def _profile_from(value: str | None) -> str:
+    profile = (value or os.environ.get("TORII_MCP_PROFILE", DEFAULT_MCP_PROFILE)).strip().lower()
+    if profile not in SUPPORTED_MCP_PROFILES:
+        raise ValueError(
+            f"unsupported TORII_MCP_PROFILE {profile!r}; "
+            f"expected one of {', '.join(SUPPORTED_MCP_PROFILES)}"
+        )
+    return profile
+
+
+def _register_tool(
+    server: FastMCP,
+    function: Any,
+    *,
+    name: str,
+    title: str,
+    description: str,
+    read_only: bool | None = None,
+    destructive: bool | None = None,
+    idempotent: bool | None = None,
+    open_world: bool | None = None,
+) -> None:
+    server.add_tool(
+        function,
+        name=name,
+        title=title,
+        description=description,
+        annotations=ToolAnnotations(
+            title=title,
+            readOnlyHint=read_only,
+            destructiveHint=destructive,
+            idempotentHint=idempotent,
+            openWorldHint=open_world,
+        ),
+    )
+
+
+def _register_default_tools(server: FastMCP) -> None:
+    """Register the reduced 10-tool MCP surface under stable contract names."""
+
+    _register_tool(
+        server,
+        torii_preflight,
+        name="torii.preflight",
+        title="Check Torii environment",
+        description="Check Python, SUMO, and the Torii environment before network, demand, or replay work. Use this first.",
+        read_only=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_config_inspect,
+        name="torii.config.inspect",
+        title="Inspect a SUMO config pair",
+        description="Inspect a baseline and variant .sumocfg pair for missing inputs and shared outputs before comparing two runs.",
+        read_only=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_run_compare,
+        name="torii.run.compare",
+        title="Compare two SUMO runs",
+        description="Compare baseline and variant SUMO summary/tripinfo outputs and return comparison gates.",
+        read_only=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_place_resolve,
+        name="torii.place.resolve",
+        title="Resolve an OSM place",
+        description="Resolve a place name to a candidate OSM area and bbox. The OSM endpoint is fixed by Torii.",
+        read_only=True,
+        open_world=True,
+    )
+    _register_tool(
+        server,
+        torii_intersection_classify,
+        name="torii.intersection.classify",
+        title="Classify an OSM intersection",
+        description="Read-only classification of one local OSM intersection into a hash-bound finite composable archetype. It does not write files or mutate networks.",
+        read_only=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_signal_classify,
+        name="torii.signal.classify",
+        title="Classify a signal device inventory",
+        description="Read-only classification of one OCIT-C supply snapshot into a hash-bound signal device inventory. It does not bind traffic lights.",
+        read_only=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_network_audit,
+        name="torii.network.audit",
+        title="Audit one SUMO network",
+        description="Audit one local SUMO network with profile=quick, standard, or promotion. Writes only separate audit artifacts and never overwrites the source network.",
+        destructive=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_network_compare,
+        name="torii.network.compare",
+        title="Compare source and candidate networks",
+        description="Compare a source and candidate SUMO network with a differential audit. Writes only separate review artifacts.",
+        destructive=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_demand_audit,
+        name="torii.demand.audit",
+        title="Audit detector counts",
+        description="Compare expected detector counts against SUMO E1 detector output and report detector-fit metrics.",
+        destructive=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_review_create,
+        name="torii.review.create",
+        title="Create a network review page",
+        description="Create a human-review HTML page for a SUMO network and available audit artifacts without overwriting source files.",
+        destructive=True,
+        open_world=False,
+    )
+
+
+def _register_netedit_tools(server: FastMCP) -> None:
+    _register_tool(
+        server,
+        torii_netedit_open,
+        name="torii.netedit.open",
+        title="Open a NetEdit review session",
+        description="Open the single hash-bound NetEdit diagnostic session. Requires immutable source/candidate/output paths and the source SHA-256.",
+        destructive=False,
+        idempotent=False,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_netedit_observe,
+        name="torii.netedit.observe",
+        title="Observe a NetEdit review session",
+        description="Read the current viewport and persisted XML state from the active NetEdit session. This tool is read-only.",
+        read_only=True,
+        idempotent=True,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_netedit_act,
+        name="torii.netedit.act",
+        title="Act in a NetEdit review session",
+        description="Execute exactly one whitelisted NetEdit mouse or shortcut action after the latest screenshot SHA. Requires confirmation.",
+        destructive=True,
+        idempotent=False,
+        open_world=False,
+    )
+    _register_tool(
+        server,
+        torii_netedit_close,
+        name="torii.netedit.close",
+        title="Close a NetEdit review session",
+        description="Finalize the active NetEdit session, run SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits, and close the session. Promotion remains blocked.",
+        destructive=True,
+        idempotent=False,
+        open_world=False,
+    )
+
+
+def create_server(profile: str | None = None) -> FastMCP:
+    selected_profile = _profile_from(profile)
     server = FastMCP("Torii")
+
+    if selected_profile == "default":
+        _register_default_tools(server)
+        return server
+    if selected_profile == "netedit":
+        _register_netedit_tools(server)
+        return server
 
     server.tool(description="Return Python and SUMO environment discovery evidence.")(sumo_get_environment)
     server.tool(description="Run SUMO environment preflight and return a construction-check report.")(sumo_preflight)

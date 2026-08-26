@@ -1,6 +1,22 @@
 # Torii MCP Tool Catalog
 
-Torii currently registers 74 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+Torii currently registers 74 legacy MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+
+## MCP Profiles
+
+The server supports three profiles selected with `create_server(profile=...)` or `TORII_MCP_PROFILE`:
+
+- `legacy` (default): all 74 tools listed below.
+- `default`: the reduced 10-tool surface:
+  `torii.preflight`, `torii.config.inspect`, `torii.run.compare`,
+  `torii.place.resolve`, `torii.intersection.classify`, `torii.signal.classify`,
+  `torii.network.audit`, `torii.network.compare`, `torii.demand.audit`,
+  `torii.review.create`.
+- `netedit`: the four-tool observation loop:
+  `torii.netedit.open`, `torii.netedit.observe`, `torii.netedit.act`,
+  `torii.netedit.close`.
+
+Default and NetEdit tools use stable names, titles, safety annotations, and a common structured result shape. Long-running, Hamburg-specific, batch, and candidate-generation workflows remain in the legacy profile and are being migrated to the `torii` CLI.
 
 The implementation boundary is consistent across groups:
 
