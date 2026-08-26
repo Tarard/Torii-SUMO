@@ -3466,6 +3466,290 @@ def _workflow_teacher_guided_repair_section(
     }
 
 
+_WORKFLOW_UNSET = object()
+
+
+def _workflow_reference_comparison_section(
+    *,
+    command_runner: Callable[..., Any],
+    corridor_geometry_simplification_func: Callable[..., dict[str, Any]],
+    network_plan: Any,
+    osm_file: Any,
+    output_dir: Path,
+    prefix: str,
+    reference_hierarchy_audit_func: Callable[..., dict[str, Any]],
+    reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]],
+    reference_join_audit_func: Callable[..., dict[str, Any]],
+    reference_join_post_teacher_audit_report: dict[str, Any] | None,
+    reference_net_file: Path | None,
+    reference_scope_audit_func: Callable[..., dict[str, Any]],
+    reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None,
+    reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None,
+    run_corridor_geometry_simplification_after_build: bool,
+    run_reference_hierarchy_audit_after_build: bool,
+    run_topology_audit_after_build: bool,
+    sumo_binary: str,
+    timeout_seconds: float,
+    topology_audit_func: Callable[..., dict[str, Any]],
+    topology_cluster_radius_m: float,
+    topology_min_cluster_nodes: int,
+    corridor_geometry_simplification_promotion_report: dict[str, Any],
+    corridor_geometry_simplification_reference_delta_report: dict[str, Any] | None,
+    corridor_geometry_simplification_report: dict[str, Any] | None,
+    corridor_geometry_simplification_sumo_load_report: dict[str, Any] | None,
+    corridor_geometry_simplification_topology_report: dict[str, Any] | None,
+    reference_hierarchy_audit_candidate_net_file: Path | None,
+    reference_hierarchy_audit_report: dict[str, Any] | None,
+    reference_hierarchy_type_repair_audit_report: dict[str, Any] | None,
+    reference_hierarchy_type_repair_promotion_report: dict[str, Any],
+    reference_hierarchy_type_repair_report: dict[str, Any] | None,
+    reference_hierarchy_type_repair_sumo_load_report: dict[str, Any] | None,
+    reference_visual_detail_comparison_net_file: Path | None,
+    topology_audit_report: Any,
+) -> dict[str, Any]:
+    reference_hierarchy_audit_candidate_layer = _WORKFLOW_UNSET
+    reference_scope_audit_report = _WORKFLOW_UNSET
+    reference_scope_candidate_net_file = _WORKFLOW_UNSET
+    reference_topology_audit_report = _WORKFLOW_UNSET
+    reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
+    corridor_baseline_delta_report = _WORKFLOW_UNSET
+    corridor_geometry_simplification_promotion_report = _WORKFLOW_UNSET
+    corridor_geometry_simplification_reference_delta_report = _WORKFLOW_UNSET
+    corridor_geometry_simplification_report = _WORKFLOW_UNSET
+    corridor_geometry_simplification_sumo_load_report = _WORKFLOW_UNSET
+    corridor_geometry_simplification_topology_report = _WORKFLOW_UNSET
+    corridor_variant_file = _WORKFLOW_UNSET
+    corridor_variant_value = _WORKFLOW_UNSET
+    reference_hierarchy_audit_report = _WORKFLOW_UNSET
+    reference_hierarchy_type_repair_audit_report = _WORKFLOW_UNSET
+    reference_hierarchy_type_repair_promotion_report = _WORKFLOW_UNSET
+    reference_hierarchy_type_repair_report = _WORKFLOW_UNSET
+    reference_hierarchy_type_repair_sumo_load_report = _WORKFLOW_UNSET
+    type_repair_variant_file = _WORKFLOW_UNSET
+    type_repair_variant_value = _WORKFLOW_UNSET
+    if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
+        if (
+            run_topology_audit_after_build
+            and str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+        ):
+            reference_topology_audit_report = topology_audit_func(
+                net_file=reference_net_file,
+                output_dir=output_dir / "reference_topology_audit",
+                prefix=f"{prefix}_reference_topology_audit",
+                cluster_radius_m=topology_cluster_radius_m,
+                min_cluster_nodes=topology_min_cluster_nodes,
+                osm_file=osm_file,
+            )
+        if run_topology_audit_after_build and not _same_path_value(
+            None if topology_audit_report is None else topology_audit_report.get("net_file", ""),
+            reference_visual_detail_comparison_net_file,
+        ):
+            topology_audit_report = topology_audit_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                output_dir=output_dir / "final_topology_audit",
+                prefix=f"{prefix}_final_topology_audit",
+                cluster_radius_m=topology_cluster_radius_m,
+                min_cluster_nodes=topology_min_cluster_nodes,
+                osm_file=osm_file,
+            )
+        if (
+            str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+            and run_reference_hierarchy_audit_after_build
+            and not _same_path_value(reference_hierarchy_audit_candidate_net_file, reference_visual_detail_comparison_net_file)
+        ):
+            reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file
+            reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
+            reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+                reference_net_file=reference_net_file,
+                candidate_net_file=reference_hierarchy_audit_candidate_net_file,
+                output_dir=output_dir / "final_reference_hierarchy_audit",
+                prefix=f"{prefix}_final_reference_hierarchy_audit",
+                resolve_equivalent_fragmentation=True,
+            )
+        if (
+            str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+            and run_reference_hierarchy_audit_after_build
+            and reference_hierarchy_audit_report is not None
+            and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
+        ):
+            reference_hierarchy_type_repair_report = reference_hierarchy_type_repair_func(
+                candidate_net_file=reference_visual_detail_comparison_net_file,
+                reference_hierarchy_report=reference_hierarchy_audit_report,
+                output_dir=output_dir / "reference_hierarchy_type_repair",
+                prefix=f"{prefix}_reference_hierarchy_type_repair",
+            )
+            type_repair_variant_value = reference_hierarchy_type_repair_report.get(
+                "reference_hierarchy_type_repair_variant_file", ""
+            )
+            type_repair_variant_file = Path(str(type_repair_variant_value)) if type_repair_variant_value else None
+            if (
+                reference_hierarchy_type_repair_report.get("status") == "pass"
+                and type_repair_variant_file is not None
+                and type_repair_variant_file.exists()
+            ):
+                reference_hierarchy_type_repair_sumo_load_report = _sumo_load_net(
+                    type_repair_variant_file,
+                    output_dir=output_dir / "reference_hierarchy_type_repair_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                if reference_hierarchy_type_repair_sumo_load_report.get("status") == "pass":
+                    reference_hierarchy_type_repair_audit_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=type_repair_variant_file,
+                        output_dir=output_dir / "reference_hierarchy_type_repair_audit",
+                        prefix=f"{prefix}_reference_hierarchy_type_repair_audit",
+                        resolve_equivalent_fragmentation=True,
+                    )
+                    reference_hierarchy_type_repair_promotion_report = (
+                        _reference_hierarchy_type_repair_promotion_decision(
+                            baseline_audit_report=reference_hierarchy_audit_report,
+                            candidate_audit_report=reference_hierarchy_type_repair_audit_report,
+                            sumo_load_report=reference_hierarchy_type_repair_sumo_load_report,
+                        )
+                    )
+                    if reference_hierarchy_type_repair_promotion_report.get("status") == "pass":
+                        reference_visual_detail_comparison_net_file = type_repair_variant_file
+                        reference_visual_detail_comparison_selection_reason = "reference_hierarchy_type_repair_promoted"
+                        reference_hierarchy_audit_report = reference_hierarchy_type_repair_audit_report
+                        reference_hierarchy_audit_candidate_net_file = type_repair_variant_file
+                        reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
+                        if run_topology_audit_after_build:
+                            topology_audit_report = topology_audit_func(
+                                net_file=reference_visual_detail_comparison_net_file,
+                                output_dir=output_dir / "reference_hierarchy_type_repair_topology_audit",
+                                prefix=f"{prefix}_reference_hierarchy_type_repair_topology_audit",
+                                cluster_radius_m=topology_cluster_radius_m,
+                                min_cluster_nodes=topology_min_cluster_nodes,
+                                osm_file=osm_file,
+                            )
+                else:
+                    reference_hierarchy_type_repair_promotion_report = {
+                        "status": "blocked",
+                        "reason": "sumo_load_not_pass",
+                    }
+            elif reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_status") == "not_needed":
+                reference_hierarchy_type_repair_promotion_report = {
+                    "status": "skipped",
+                    "reason": "not_needed",
+                }
+            else:
+                reference_hierarchy_type_repair_promotion_report = {
+                    "status": "blocked",
+                    "reason": "type_repair_variant_not_created",
+                }
+
+        if (
+            run_corridor_geometry_simplification_after_build
+            and reference_visual_detail_comparison_net_file is not None
+        ):
+            corridor_geometry_simplification_report = corridor_geometry_simplification_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                reference_net_file=reference_net_file,
+                output_dir=output_dir / "corridor_geometry_simplification",
+                prefix=f"{prefix}_corridor_geometry_simplification",
+                timeout_seconds=timeout_seconds,
+            )
+            corridor_variant_value = corridor_geometry_simplification_report.get("variant_file", "")
+            corridor_variant_file = Path(str(corridor_variant_value)) if corridor_variant_value else None
+            if (
+                corridor_geometry_simplification_report.get("status") == "pass"
+                and corridor_variant_file is not None
+                and corridor_variant_file.exists()
+            ):
+                corridor_geometry_simplification_sumo_load_report = _sumo_load_net(
+                    corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                corridor_geometry_simplification_reference_delta_report = reference_join_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_reference_delta",
+                    prefix=f"{prefix}_corridor_geometry_simplification_reference_delta",
+                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                    structural_only=True,
+                )
+                corridor_geometry_simplification_topology_report = topology_audit_func(
+                    net_file=corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_topology",
+                    prefix=f"{prefix}_corridor_geometry_simplification_topology",
+                    cluster_radius_m=topology_cluster_radius_m,
+                    min_cluster_nodes=topology_min_cluster_nodes,
+                    osm_file=osm_file,
+                )
+                corridor_baseline_delta_report = (
+                    reference_join_post_teacher_audit_report
+                    or reference_visual_detail_tls_connection_repair_reference_delta_report
+                    or reference_visual_detail_raw_reference_delta_report
+                )
+                corridor_geometry_simplification_promotion_report = (
+                    _corridor_geometry_simplification_promotion_decision(
+                        variant_report=corridor_geometry_simplification_report,
+                        sumo_load_report=corridor_geometry_simplification_sumo_load_report,
+                        baseline_delta_report=corridor_baseline_delta_report,
+                        candidate_delta_report=corridor_geometry_simplification_reference_delta_report,
+                        baseline_topology_report=topology_audit_report,
+                        candidate_topology_report=corridor_geometry_simplification_topology_report,
+                    )
+                )
+                if corridor_geometry_simplification_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = corridor_variant_file
+                    reference_visual_detail_comparison_selection_reason = str(
+                        corridor_geometry_simplification_promotion_report.get("reason", "")
+                    )
+                    topology_audit_report = corridor_geometry_simplification_topology_report
+                    reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=corridor_variant_file,
+                        output_dir=output_dir / "corridor_geometry_simplification_hierarchy_audit",
+                        prefix=f"{prefix}_corridor_geometry_simplification_hierarchy_audit",
+                        resolve_equivalent_fragmentation=True,
+                    )
+                    reference_hierarchy_audit_candidate_net_file = corridor_variant_file
+                    reference_scope_audit_report = reference_scope_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=corridor_variant_file,
+                        output_dir=output_dir / "corridor_geometry_simplification_scope_audit",
+                        prefix=f"{prefix}_corridor_geometry_simplification_scope_audit",
+                    )
+                    reference_scope_candidate_net_file = corridor_variant_file
+            elif corridor_geometry_simplification_report.get(
+                "corridor_geometry_simplification_status"
+            ) == "not_needed":
+                corridor_geometry_simplification_promotion_report = {
+                    "status": "skipped",
+                    "reason": "not_needed",
+                }
+    return {
+        'corridor_geometry_simplification_promotion_report': corridor_geometry_simplification_promotion_report,
+        'corridor_geometry_simplification_reference_delta_report': corridor_geometry_simplification_reference_delta_report,
+        'corridor_geometry_simplification_report': corridor_geometry_simplification_report,
+        'corridor_geometry_simplification_sumo_load_report': corridor_geometry_simplification_sumo_load_report,
+        'corridor_geometry_simplification_topology_report': corridor_geometry_simplification_topology_report,
+        'reference_hierarchy_audit_candidate_layer': reference_hierarchy_audit_candidate_layer,
+        'reference_hierarchy_audit_candidate_net_file': reference_hierarchy_audit_candidate_net_file,
+        'reference_hierarchy_audit_report': reference_hierarchy_audit_report,
+        'reference_hierarchy_type_repair_audit_report': reference_hierarchy_type_repair_audit_report,
+        'reference_hierarchy_type_repair_promotion_report': reference_hierarchy_type_repair_promotion_report,
+        'reference_hierarchy_type_repair_report': reference_hierarchy_type_repair_report,
+        'reference_hierarchy_type_repair_sumo_load_report': reference_hierarchy_type_repair_sumo_load_report,
+        'reference_scope_audit_report': reference_scope_audit_report,
+        'reference_scope_candidate_net_file': reference_scope_candidate_net_file,
+        'reference_topology_audit_report': reference_topology_audit_report,
+        'reference_visual_detail_comparison_net_file': reference_visual_detail_comparison_net_file,
+        'reference_visual_detail_comparison_selection_reason': reference_visual_detail_comparison_selection_reason,
+        'topology_audit_report': topology_audit_report,
+    }
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -4557,207 +4841,66 @@ def run_osm_cleanup_workflow(
         final_movement_rebuild_plain_export_report = _teacher_guided_repair_section_result['final_movement_rebuild_plain_export_report']
     if _teacher_guided_repair_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
         reference_visual_detail_comparison_selection_reason = _teacher_guided_repair_section_result['reference_visual_detail_comparison_selection_reason']
-    if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
-        if (
-            run_topology_audit_after_build
-            and str(network_plan.get("network_profile", "")) == "reference_matched"
-            and reference_net_file is not None
-        ):
-            reference_topology_audit_report = topology_audit_func(
-                net_file=reference_net_file,
-                output_dir=output_dir / "reference_topology_audit",
-                prefix=f"{prefix}_reference_topology_audit",
-                cluster_radius_m=topology_cluster_radius_m,
-                min_cluster_nodes=topology_min_cluster_nodes,
-                osm_file=osm_file,
-            )
-        if run_topology_audit_after_build and not _same_path_value(
-            None if topology_audit_report is None else topology_audit_report.get("net_file", ""),
-            reference_visual_detail_comparison_net_file,
-        ):
-            topology_audit_report = topology_audit_func(
-                net_file=reference_visual_detail_comparison_net_file,
-                output_dir=output_dir / "final_topology_audit",
-                prefix=f"{prefix}_final_topology_audit",
-                cluster_radius_m=topology_cluster_radius_m,
-                min_cluster_nodes=topology_min_cluster_nodes,
-                osm_file=osm_file,
-            )
-        if (
-            str(network_plan.get("network_profile", "")) == "reference_matched"
-            and reference_net_file is not None
-            and run_reference_hierarchy_audit_after_build
-            and not _same_path_value(reference_hierarchy_audit_candidate_net_file, reference_visual_detail_comparison_net_file)
-        ):
-            reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file
-            reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
-            reference_hierarchy_audit_report = reference_hierarchy_audit_func(
-                reference_net_file=reference_net_file,
-                candidate_net_file=reference_hierarchy_audit_candidate_net_file,
-                output_dir=output_dir / "final_reference_hierarchy_audit",
-                prefix=f"{prefix}_final_reference_hierarchy_audit",
-                resolve_equivalent_fragmentation=True,
-            )
-        if (
-            str(network_plan.get("network_profile", "")) == "reference_matched"
-            and reference_net_file is not None
-            and run_reference_hierarchy_audit_after_build
-            and reference_hierarchy_audit_report is not None
-            and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
-        ):
-            reference_hierarchy_type_repair_report = reference_hierarchy_type_repair_func(
-                candidate_net_file=reference_visual_detail_comparison_net_file,
-                reference_hierarchy_report=reference_hierarchy_audit_report,
-                output_dir=output_dir / "reference_hierarchy_type_repair",
-                prefix=f"{prefix}_reference_hierarchy_type_repair",
-            )
-            type_repair_variant_value = reference_hierarchy_type_repair_report.get(
-                "reference_hierarchy_type_repair_variant_file", ""
-            )
-            type_repair_variant_file = Path(str(type_repair_variant_value)) if type_repair_variant_value else None
-            if (
-                reference_hierarchy_type_repair_report.get("status") == "pass"
-                and type_repair_variant_file is not None
-                and type_repair_variant_file.exists()
-            ):
-                reference_hierarchy_type_repair_sumo_load_report = _sumo_load_net(
-                    type_repair_variant_file,
-                    output_dir=output_dir / "reference_hierarchy_type_repair_sumo_load",
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                if reference_hierarchy_type_repair_sumo_load_report.get("status") == "pass":
-                    reference_hierarchy_type_repair_audit_report = reference_hierarchy_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=type_repair_variant_file,
-                        output_dir=output_dir / "reference_hierarchy_type_repair_audit",
-                        prefix=f"{prefix}_reference_hierarchy_type_repair_audit",
-                        resolve_equivalent_fragmentation=True,
-                    )
-                    reference_hierarchy_type_repair_promotion_report = (
-                        _reference_hierarchy_type_repair_promotion_decision(
-                            baseline_audit_report=reference_hierarchy_audit_report,
-                            candidate_audit_report=reference_hierarchy_type_repair_audit_report,
-                            sumo_load_report=reference_hierarchy_type_repair_sumo_load_report,
-                        )
-                    )
-                    if reference_hierarchy_type_repair_promotion_report.get("status") == "pass":
-                        reference_visual_detail_comparison_net_file = type_repair_variant_file
-                        reference_visual_detail_comparison_selection_reason = "reference_hierarchy_type_repair_promoted"
-                        reference_hierarchy_audit_report = reference_hierarchy_type_repair_audit_report
-                        reference_hierarchy_audit_candidate_net_file = type_repair_variant_file
-                        reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
-                        if run_topology_audit_after_build:
-                            topology_audit_report = topology_audit_func(
-                                net_file=reference_visual_detail_comparison_net_file,
-                                output_dir=output_dir / "reference_hierarchy_type_repair_topology_audit",
-                                prefix=f"{prefix}_reference_hierarchy_type_repair_topology_audit",
-                                cluster_radius_m=topology_cluster_radius_m,
-                                min_cluster_nodes=topology_min_cluster_nodes,
-                                osm_file=osm_file,
-                            )
-                else:
-                    reference_hierarchy_type_repair_promotion_report = {
-                        "status": "blocked",
-                        "reason": "sumo_load_not_pass",
-                    }
-            elif reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_status") == "not_needed":
-                reference_hierarchy_type_repair_promotion_report = {
-                    "status": "skipped",
-                    "reason": "not_needed",
-                }
-            else:
-                reference_hierarchy_type_repair_promotion_report = {
-                    "status": "blocked",
-                    "reason": "type_repair_variant_not_created",
-                }
-
-        if (
-            run_corridor_geometry_simplification_after_build
-            and reference_visual_detail_comparison_net_file is not None
-        ):
-            corridor_geometry_simplification_report = corridor_geometry_simplification_func(
-                net_file=reference_visual_detail_comparison_net_file,
-                reference_net_file=reference_net_file,
-                output_dir=output_dir / "corridor_geometry_simplification",
-                prefix=f"{prefix}_corridor_geometry_simplification",
-                timeout_seconds=timeout_seconds,
-            )
-            corridor_variant_value = corridor_geometry_simplification_report.get("variant_file", "")
-            corridor_variant_file = Path(str(corridor_variant_value)) if corridor_variant_value else None
-            if (
-                corridor_geometry_simplification_report.get("status") == "pass"
-                and corridor_variant_file is not None
-                and corridor_variant_file.exists()
-            ):
-                corridor_geometry_simplification_sumo_load_report = _sumo_load_net(
-                    corridor_variant_file,
-                    output_dir=output_dir / "corridor_geometry_simplification_sumo_load",
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
-                )
-                corridor_geometry_simplification_reference_delta_report = reference_join_audit_func(
-                    reference_net_file=reference_net_file,
-                    candidate_net_file=corridor_variant_file,
-                    output_dir=output_dir / "corridor_geometry_simplification_reference_delta",
-                    prefix=f"{prefix}_corridor_geometry_simplification_reference_delta",
-                    candidate_cluster_radius_m=topology_cluster_radius_m,
-                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                    structural_only=True,
-                )
-                corridor_geometry_simplification_topology_report = topology_audit_func(
-                    net_file=corridor_variant_file,
-                    output_dir=output_dir / "corridor_geometry_simplification_topology",
-                    prefix=f"{prefix}_corridor_geometry_simplification_topology",
-                    cluster_radius_m=topology_cluster_radius_m,
-                    min_cluster_nodes=topology_min_cluster_nodes,
-                    osm_file=osm_file,
-                )
-                corridor_baseline_delta_report = (
-                    reference_join_post_teacher_audit_report
-                    or reference_visual_detail_tls_connection_repair_reference_delta_report
-                    or reference_visual_detail_raw_reference_delta_report
-                )
-                corridor_geometry_simplification_promotion_report = (
-                    _corridor_geometry_simplification_promotion_decision(
-                        variant_report=corridor_geometry_simplification_report,
-                        sumo_load_report=corridor_geometry_simplification_sumo_load_report,
-                        baseline_delta_report=corridor_baseline_delta_report,
-                        candidate_delta_report=corridor_geometry_simplification_reference_delta_report,
-                        baseline_topology_report=topology_audit_report,
-                        candidate_topology_report=corridor_geometry_simplification_topology_report,
-                    )
-                )
-                if corridor_geometry_simplification_promotion_report.get("status") == "pass":
-                    reference_visual_detail_comparison_net_file = corridor_variant_file
-                    reference_visual_detail_comparison_selection_reason = str(
-                        corridor_geometry_simplification_promotion_report.get("reason", "")
-                    )
-                    topology_audit_report = corridor_geometry_simplification_topology_report
-                    reference_hierarchy_audit_report = reference_hierarchy_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=corridor_variant_file,
-                        output_dir=output_dir / "corridor_geometry_simplification_hierarchy_audit",
-                        prefix=f"{prefix}_corridor_geometry_simplification_hierarchy_audit",
-                        resolve_equivalent_fragmentation=True,
-                    )
-                    reference_hierarchy_audit_candidate_net_file = corridor_variant_file
-                    reference_scope_audit_report = reference_scope_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=corridor_variant_file,
-                        output_dir=output_dir / "corridor_geometry_simplification_scope_audit",
-                        prefix=f"{prefix}_corridor_geometry_simplification_scope_audit",
-                    )
-                    reference_scope_candidate_net_file = corridor_variant_file
-            elif corridor_geometry_simplification_report.get(
-                "corridor_geometry_simplification_status"
-            ) == "not_needed":
-                corridor_geometry_simplification_promotion_report = {
-                    "status": "skipped",
-                    "reason": "not_needed",
-                }
+    _reference_comparison_section_result = _workflow_reference_comparison_section(
+        command_runner=command_runner,
+        corridor_geometry_simplification_func=corridor_geometry_simplification_func,
+        network_plan=network_plan,
+        osm_file=osm_file,
+        output_dir=output_dir,
+        prefix=prefix,
+        reference_hierarchy_audit_func=reference_hierarchy_audit_func,
+        reference_hierarchy_type_repair_func=reference_hierarchy_type_repair_func,
+        reference_join_audit_func=reference_join_audit_func,
+        reference_join_post_teacher_audit_report=reference_join_post_teacher_audit_report,
+        reference_net_file=reference_net_file,
+        reference_scope_audit_func=reference_scope_audit_func,
+        reference_visual_detail_raw_reference_delta_report=reference_visual_detail_raw_reference_delta_report,
+        reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
+        run_corridor_geometry_simplification_after_build=run_corridor_geometry_simplification_after_build,
+        run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
+        run_topology_audit_after_build=run_topology_audit_after_build,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        topology_audit_func=topology_audit_func,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
+        corridor_geometry_simplification_promotion_report=corridor_geometry_simplification_promotion_report,
+        corridor_geometry_simplification_reference_delta_report=corridor_geometry_simplification_reference_delta_report,
+        corridor_geometry_simplification_report=corridor_geometry_simplification_report,
+        corridor_geometry_simplification_sumo_load_report=corridor_geometry_simplification_sumo_load_report,
+        corridor_geometry_simplification_topology_report=corridor_geometry_simplification_topology_report,
+        reference_hierarchy_audit_candidate_net_file=reference_hierarchy_audit_candidate_net_file,
+        reference_hierarchy_audit_report=reference_hierarchy_audit_report,
+        reference_hierarchy_type_repair_audit_report=reference_hierarchy_type_repair_audit_report,
+        reference_hierarchy_type_repair_promotion_report=reference_hierarchy_type_repair_promotion_report,
+        reference_hierarchy_type_repair_report=reference_hierarchy_type_repair_report,
+        reference_hierarchy_type_repair_sumo_load_report=reference_hierarchy_type_repair_sumo_load_report,
+        reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
+        topology_audit_report=topology_audit_report,
+    )
+    corridor_geometry_simplification_promotion_report = _reference_comparison_section_result['corridor_geometry_simplification_promotion_report']
+    corridor_geometry_simplification_reference_delta_report = _reference_comparison_section_result['corridor_geometry_simplification_reference_delta_report']
+    corridor_geometry_simplification_report = _reference_comparison_section_result['corridor_geometry_simplification_report']
+    corridor_geometry_simplification_sumo_load_report = _reference_comparison_section_result['corridor_geometry_simplification_sumo_load_report']
+    corridor_geometry_simplification_topology_report = _reference_comparison_section_result['corridor_geometry_simplification_topology_report']
+    reference_hierarchy_audit_candidate_net_file = _reference_comparison_section_result['reference_hierarchy_audit_candidate_net_file']
+    reference_hierarchy_audit_report = _reference_comparison_section_result['reference_hierarchy_audit_report']
+    reference_hierarchy_type_repair_audit_report = _reference_comparison_section_result['reference_hierarchy_type_repair_audit_report']
+    reference_hierarchy_type_repair_promotion_report = _reference_comparison_section_result['reference_hierarchy_type_repair_promotion_report']
+    reference_hierarchy_type_repair_report = _reference_comparison_section_result['reference_hierarchy_type_repair_report']
+    reference_hierarchy_type_repair_sumo_load_report = _reference_comparison_section_result['reference_hierarchy_type_repair_sumo_load_report']
+    reference_visual_detail_comparison_net_file = _reference_comparison_section_result['reference_visual_detail_comparison_net_file']
+    topology_audit_report = _reference_comparison_section_result['topology_audit_report']
+    if _reference_comparison_section_result['reference_hierarchy_audit_candidate_layer'] is not _WORKFLOW_UNSET:
+        reference_hierarchy_audit_candidate_layer = _reference_comparison_section_result['reference_hierarchy_audit_candidate_layer']
+    if _reference_comparison_section_result['reference_scope_audit_report'] is not _WORKFLOW_UNSET:
+        reference_scope_audit_report = _reference_comparison_section_result['reference_scope_audit_report']
+    if _reference_comparison_section_result['reference_scope_candidate_net_file'] is not _WORKFLOW_UNSET:
+        reference_scope_candidate_net_file = _reference_comparison_section_result['reference_scope_candidate_net_file']
+    if _reference_comparison_section_result['reference_topology_audit_report'] is not _WORKFLOW_UNSET:
+        reference_topology_audit_report = _reference_comparison_section_result['reference_topology_audit_report']
+    if _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
+        reference_visual_detail_comparison_selection_reason = _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason']
     if (
         run_scope_pruning_after_build
         and str(network_plan.get("network_profile", "")) == "reference_matched"
