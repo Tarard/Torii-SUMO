@@ -8,8 +8,17 @@ from torii_sumo.core import junction_rebuild_candidate as candidate_module
 from torii_sumo.core import junction_rebuild_helpers as helpers_module
 
 
+def _defined_functions(module: object) -> list[str]:
+    """Function names whose definitions live in ``module`` (not re-imports)."""
+    return [
+        name
+        for name, value in inspect.getmembers(module, inspect.isfunction)
+        if getattr(value, "__module__", None) == module.__name__
+    ]
+
+
 def test_original_module_reexports_every_helper_function() -> None:
-    helper_functions = [name for name, value in inspect.getmembers(helpers_module, inspect.isfunction)]
+    helper_functions = _defined_functions(helpers_module)
     missing = [name for name in helper_functions if not hasattr(candidate_module, name)]
     assert missing == [], missing
 
