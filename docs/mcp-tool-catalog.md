@@ -38,7 +38,7 @@ torii workflow <tool> <request.json> --json
 The implementation boundary is consistent across groups:
 
 ```text
-server.py registration -> tools/* adapter -> core/* implementation -> structured artifacts
+server.py profile switch -> mcp_contract_tools.py or legacy_tools.py -> tools/* -> core/*
 ```
 
 ## Router
@@ -218,7 +218,8 @@ discovery, but is not silently substituted for v1.0 historical primary states.
 
 ## Maintenance Contract
 
-The catalog is checked against `plugins/torii-sumo/src/torii_sumo/server.py`. When registering or removing a tool:
+The legacy catalog is checked against `plugins/torii-sumo/src/torii_sumo/legacy_tools.py`.
+The default and NetEdit profiles are checked through `create_server` contract tests. When registering or removing a tool:
 
 1. place reusable logic below the MCP adapter boundary;
 2. update the appropriate group above;

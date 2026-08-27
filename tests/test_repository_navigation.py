@@ -16,8 +16,8 @@ def test_hash_bound_repository_text_uses_lf() -> None:
 
 
 def _registered_tool_names() -> set[str]:
-    server_path = ROOT / "plugins" / "torii-sumo" / "src" / "torii_sumo" / "server.py"
-    tree = ast.parse(server_path.read_text(encoding="utf-8"))
+    legacy_tools_path = ROOT / "plugins" / "torii-sumo" / "src" / "torii_sumo" / "legacy_tools.py"
+    tree = ast.parse(legacy_tools_path.read_text(encoding="utf-8"))
     names: set[str] = set()
 
     for node in ast.walk(tree):

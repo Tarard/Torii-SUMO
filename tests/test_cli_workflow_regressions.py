@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -71,7 +73,27 @@ def test_cli_network_routeability_runs_the_long_check(monkeypatch, capsys) -> No
     ]
 
 
+def test_cli_import_does_not_load_the_legacy_bundle() -> None:
+    deferred_modules = {
+        "torii_sumo.legacy_tools",
+        "torii_sumo.tools.digital_twin_tools",
+        "torii_sumo.tools.road_network_tools",
+        "torii_sumo.tools.run_tools",
+        "torii_sumo.tools.workflow_tools",
+    }
+    script = (
+        "import sys; "
+        "import torii_sumo.cli; "
+        f"deferred={deferred_modules!r}; "
+        "assert deferred.isdisjoint(sys.modules), deferred.intersection(sys.modules)"
+    )
+
+    subprocess.run([sys.executable, "-c", script], check=True)
+
+
 def test_manifest_workflow_exposes_long_and_specialized_families() -> None:
+    from torii_sumo.legacy_tools import WORKFLOW_TOOLS
+
     expected = {
         "sumo_run_config",
         "sumo_osm_cleanup_workflow",
@@ -82,10 +104,13 @@ def test_manifest_workflow_exposes_long_and_specialized_families() -> None:
         "sumo_collect_evidence",
     }
 
-    assert expected <= set(cli.WORKFLOW_TOOLS)
+    assert expected <= set(cli._WORKFLOW_TOOL_NAMES)
+    assert set(cli._WORKFLOW_TOOL_NAMES) == set(WORKFLOW_TOOLS)
 
 
 def test_manifest_workflow_calls_allowlisted_function(monkeypatch, tmp_path, capsys) -> None:
+    from torii_sumo.legacy_tools import WORKFLOW_TOOLS
+
     request = tmp_path / "request.json"
     request.write_text(json.dumps({"output_dir": "out", "bbox": "1,2,3,4"}), encoding="utf-8")
     calls: list[dict[str, object]] = []
@@ -94,7 +119,7 @@ def test_manifest_workflow_calls_allowlisted_function(monkeypatch, tmp_path, cap
         calls.append(kwargs)
         return {"status": "pass", "claim_status": "construction-check"}
 
-    monkeypatch.setitem(cli.WORKFLOW_TOOLS, "sumo_osm_cleanup_workflow", fake_workflow)
+    monkeypatch.setitem(WORKFLOW_TOOLS, "sumo_osm_cleanup_workflow", fake_workflow)
 
     exit_code = cli.main(["workflow", "sumo_osm_cleanup_workflow", str(request), "--json"])
     payload = json.loads(capsys.readouterr().out)

@@ -22,7 +22,7 @@ flowchart TD
 | Product entry | `README.md`, `examples/` | user promise, first run, representative outputs | detailed research logs |
 | Reasoning | `plugins/torii-sumo/skills/` | task routing, questions, evidence requirements, claim language | SUMO subprocess implementation |
 | Orchestration | `core/workflow_*`, `tools/workflow_tools.py` | workflow state and safe next-step selection | low-level XML algorithms |
-| MCP boundary | `src/torii_sumo/tools/`, `server.py` | input validation, path resolution, serialization, tool registration | duplicated domain logic |
+| MCP boundary | `src/torii_sumo/mcp_contract_tools.py`, `src/torii_sumo/server.py`, `src/torii_sumo/legacy_tools.py`, `src/torii_sumo/tools/` | input validation, path resolution, serialization, profile and tool registration | duplicated domain logic |
 | Domain core | `src/torii_sumo/core/` and focused packages | parsing, inference, candidate construction, audit, comparison | UI-specific prose |
 | Contracts | `schemas/` and typed models | stable artifact shapes and decision enums | generated run data |
 | Reproduction | `plugins/torii-sumo/scripts/`, `examples/`, `benchmarks/` | CLI entry points, curated demonstrations, frozen evaluation | reusable business logic |
@@ -35,22 +35,21 @@ The intended dependency direction is:
 
 ```text
 server.py
-  -> tools/*
-      -> core/* or focused domain packages
-          -> external SUMO/OSM/data libraries
+  -> mcp_contract_tools.py -------------------\
+  -> legacy_tools.py (explicit legacy only) ---+-> tools/* -> core/* -> external libraries
 ```
 
-Core modules must not import the MCP server. Scripts should call reusable core or tool functions rather than reimplementing them. Tool registration belongs in `server.py`; tool descriptions and argument adaptation belong in `tools/*`; algorithms and artifact semantics belong below that boundary.
+Core modules must not import the MCP server. Scripts should call reusable core or tool functions rather than reimplementing them. Reduced-profile registration belongs in `server.py`; the opt-in legacy bundle belongs in `legacy_tools.py`. Tool descriptions and argument adaptation belong at the MCP or tool boundary; algorithms and artifact semantics belong below it.
 
 ## Public Entry Points
 
-Torii exposes three levels of entry:
+Torii exposes three entry levels:
 
-1. **Natural-language router:** `torii_auto_workflow` is the default entry for normal users.
-2. **Capability workflows:** OSM cleanup, intersection, candidate, demand, and digital-twin workflows compose several gates into one bounded operation.
-3. **Specialist tools:** individual audits and materializers exist for reproduction, diagnosis, and controlled research runs.
+1. **Default MCP:** ten short, model-facing operations for inspection, comparison, bounded audits, and review artifacts.
+2. **CLI workflows:** long OSM, intersection, demand, replay, and digital-twin runs invoked with `torii workflow` and a JSON request.
+3. **Legacy MCP:** the historical 74-tool surface, loaded only when an older integration selects the `legacy` profile.
 
-This hierarchy keeps the public experience as simple as ChatSUMO's short README and provider map while preserving Torii's stricter evidence contracts. The complete grouping is in [MCP Tool Catalog](mcp-tool-catalog.md).
+The complete grouping is in [MCP Tool Catalog](mcp-tool-catalog.md).
 
 ## Where New Work Goes
 
@@ -58,7 +57,7 @@ This hierarchy keeps the public experience as simple as ChatSUMO's short README 
 |---|---|---|
 | A new user-visible task family | skill routing plus a capability workflow | README capability table, tool catalog, end-to-end test |
 | A reusable parser, audit, or materializer | `src/torii_sumo/core/` or a focused package | unit tests and artifact schema if public |
-| A thin callable MCP operation | the relevant `tools/*_tools.py` module | `server.py`, tool catalog, contract test |
+| A reduced-profile MCP operation | `mcp_contract_tools.py` plus the relevant `tools/*_tools.py` adapter | `server.py`, tool catalog, contract test |
 | A reproducible experiment command | `plugins/torii-sumo/scripts/` | protocol document and regression test |
 | A small teaching/demo scenario | `examples/<number>_<name>/` | local README with exact command and expected boundary |
 | A frozen evaluation corpus | `benchmarks/<name>/` | protocol, provenance, hashes, and adjudication boundary |

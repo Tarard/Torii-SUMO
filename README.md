@@ -173,7 +173,8 @@ plugins/torii-sumo/       Codex plugin, 10-tool default MCP, and legacy profile
   src/torii_sumo/
     core/                 Domain logic
     tools/                MCP adapters
-    server.py             Tool registration
+    server.py             Default/NetEdit registration and profile switch
+    legacy_tools.py       Opt-in legacy MCP and CLI workflow bundle
   skills/                 Expert reasoning and workflow guidance
   scripts/                Reproducible CLI entry points
 docs/                     Guides, architecture, protocols, evidence snapshots

@@ -10,13 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import anyio
 
-from . import server as server_module
 from .server import create_server
 from .mcp_contract_tools import (
     ToriiToolResult,
@@ -101,11 +100,6 @@ _WORKFLOW_TOOL_NAMES = (
     "sumo_hamburg_official_tls_rebuild",
     "sumo_digital_twin_replay_validate",
 )
-
-WORKFLOW_TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
-    name: getattr(server_module, name) for name in _WORKFLOW_TOOL_NAMES
-}
-
 
 def _exit_code(result: ToriiToolResult | dict[str, Any]) -> int:
     status = result.get("status") if isinstance(result, dict) else result.status
@@ -294,7 +288,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "workflow",
         help="Run an allowlisted long or specialized workflow from a JSON request file.",
     )
-    workflow.add_argument("tool", choices=tuple(WORKFLOW_TOOLS), metavar="TOOL")
+    workflow.add_argument("tool", choices=_WORKFLOW_TOOL_NAMES, metavar="TOOL")
     workflow.add_argument("request_file")
     _add_output_argument(workflow)
 
@@ -451,6 +445,8 @@ def _dispatch(args: argparse.Namespace) -> int:
                 json_output=json_output,
             )
     if args.command == "workflow":
+        from .legacy_tools import WORKFLOW_TOOLS
+
         return _emit(
             WORKFLOW_TOOLS[args.tool](**_load_request(args.request_file)),
             json_output=json_output,
