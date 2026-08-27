@@ -6,9 +6,7 @@
         "run",
         "--isolated",
         "--frozen",
-        "--project",
-        "../..",
-        "python",
+        "--script",
         "./scripts/run_torii_sumo.py"
       ]
     }

@@ -64,7 +64,7 @@ def test_plugin_manifest_uses_app_logo_for_codex_icon() -> None:
     assert logo_path.read_bytes() == docs_logo_path.read_bytes()
 
 
-def test_mcp_config_uses_locked_checkout_launcher() -> None:
+def test_mcp_config_uses_locked_plugin_launcher() -> None:
     mcp_config = load_json(PLUGIN / ".mcp.json")
 
     assert mcp_config == {
@@ -75,9 +75,7 @@ def test_mcp_config_uses_locked_checkout_launcher() -> None:
                     "run",
                     "--isolated",
                     "--frozen",
-                    "--project",
-                    "../..",
-                    "python",
+                    "--script",
                     "./scripts/run_torii_sumo.py",
                 ],
             }
@@ -87,6 +85,7 @@ def test_mcp_config_uses_locked_checkout_launcher() -> None:
 
 def test_plugin_contains_bundled_launcher() -> None:
     assert (PLUGIN / "scripts" / "run_torii_sumo.py").is_file()
+    assert (PLUGIN / "scripts" / "run_torii_sumo.py.lock").is_file()
     assert (PLUGIN / "scripts" / "bootstrap_mcp.py").is_file()
 
 

@@ -1,10 +1,4 @@
-"""Bootstrap the Torii MCP stdio server without relying on the developer shell.
-
-When the plugin is used from a repository checkout, this launcher delegates to
-``uv run --frozen`` using the repository lockfile.  When the package is already
-importable, it falls back to the installed ``torii_sumo.server`` module.  Both
-paths use the same server implementation.
-"""
+"""Bootstrap the Torii MCP stdio server from the self-contained plugin."""
 
 from __future__ import annotations
 
@@ -12,17 +6,16 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = PLUGIN_ROOT.parents[1]
-SRC_ROOT = PLUGIN_ROOT / "src"
+RUNNER = PLUGIN_ROOT / "scripts" / "run_torii_sumo.py"
+RUNNER_LOCK = Path(f"{RUNNER}.lock")
 
 
-def _repo_start_command() -> list[str] | None:
-    if not (REPO_ROOT / "pyproject.toml").is_file():
+def _plugin_start_command() -> list[str] | None:
+    if not RUNNER.is_file() or not RUNNER_LOCK.is_file():
         return None
     uv = shutil.which("uv")
     if not uv:
@@ -32,41 +25,27 @@ def _repo_start_command() -> list[str] | None:
         "run",
         "--isolated",
         "--frozen",
-        "--project",
-        str(REPO_ROOT),
-        "python",
-        str(PLUGIN_ROOT / "scripts" / "run_torii_sumo.py"),
+        "--script",
+        str(RUNNER),
     ]
 
 
 def _check() -> int:
-    command = _repo_start_command()
+    command = _plugin_start_command()
     if command is None:
-        if str(SRC_ROOT) not in sys.path:
-            sys.path.insert(0, str(SRC_ROOT))
-        try:
-            import torii_sumo.server  # noqa: F401
-        except Exception as exc:  # noqa: BLE001 - bootstrap diagnostics are user-facing.
-            print(f"torii MCP bootstrap failed: {exc}", file=sys.stderr)
-            return 2
-        print("torii MCP bootstrap: installed-package fallback is available")
-        return 0
+        print("torii MCP bootstrap failed: uv, the plugin runner, and its lock file are required")
+        return 2
     print("torii MCP bootstrap: " + subprocess.list2cmdline(command))
     return 0
 
 
 def _start() -> int:
-    os.environ.setdefault("TORII_MCP_PROFILE", "default")
-    command = _repo_start_command()
-    if command is not None:
-        env = os.environ.copy()
-        return subprocess.call(command, cwd=REPO_ROOT, env=env)
-    if str(SRC_ROOT) not in sys.path:
-        sys.path.insert(0, str(SRC_ROOT))
-    from torii_sumo.server import main
-
-    main()
-    return 0
+    command = _plugin_start_command()
+    if command is None:
+        return _check()
+    env = os.environ.copy()
+    env.setdefault("TORII_MCP_PROFILE", "default")
+    return subprocess.call(command, cwd=PLUGIN_ROOT, env=env)
 
 
 def main() -> int:
