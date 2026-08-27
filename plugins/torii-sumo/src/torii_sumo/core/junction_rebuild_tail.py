@@ -2,9 +2,8 @@
 
 This module carries the extracted implementation layers of the legacy 15k-line
 monolith: signature, report, geometry-restore, connection-repair, edge-map and
-tls-case logic.  The original module re-exports these names so existing
-callers and tests keep working while the facade shrinks to its orchestrator
-entry points.
+TLS-case logic. The original module re-exports the public entry points while
+its remaining orchestrators import only the implementation functions they use.
 """
 
 from __future__ import annotations
@@ -3130,17 +3129,6 @@ def _final_composite_parity_gate(
         "checked_junction_count": len(reports),
         "reports": reports,
     }
-def _shape_points(shape: str) -> list[tuple[float, float]]:
-    points: list[tuple[float, float]] = []
-    for token in shape.split():
-        if "," not in token:
-            continue
-        x_value, y_value = token.split(",", 1)
-        try:
-            points.append((float(x_value), float(y_value)))
-        except ValueError:
-            continue
-    return points
 def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, object]:
     counts: dict[str, int] = {}
     failure_counts: dict[str, int] = {}

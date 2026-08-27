@@ -33,7 +33,7 @@ from .junction_rebuild_candidate import (
 from .junction_teacher_model import extract_teacher_junction_model
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
-from .network_plan import derive_network_plan
+from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan  # noqa: F401
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
 from .reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
@@ -55,6 +55,10 @@ from .reference_scope import (
     build_scope_pruning_variant,
 )
 from .routeability_audit import run_routeability_audit
+from .road_scope import (  # noqa: F401 - compatibility re-export
+    ROAD_LEVEL_SCOPE_OPTIONS,
+    RECOMMENDED_ROAD_LEVEL_SCOPE,
+)
 from .standard_nema_binding import build_standard_nema_phase_binding
 from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import (
@@ -4458,6 +4462,8 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_net_file=reference_visual_detail_net_file,
         reference_visual_detail_service_permission_report=reference_visual_detail_service_permission_report,
     )
+    if _reference_visual_detail_section_result.get("status") == "fail":
+        return _reference_visual_detail_section_result
     reference_visual_detail_build_report = _reference_visual_detail_section_result['reference_visual_detail_build_report']
     reference_visual_detail_net_file = _reference_visual_detail_section_result['reference_visual_detail_net_file']
     reference_visual_detail_service_permission_report = _reference_visual_detail_section_result['reference_visual_detail_service_permission_report']

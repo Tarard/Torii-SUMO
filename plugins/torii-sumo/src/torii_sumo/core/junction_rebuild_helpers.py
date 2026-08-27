@@ -1,7 +1,7 @@
 """Dependency-free leaf helpers extracted from ``junction_rebuild_candidate``.
 
 These helpers have no calls into the original module or ``junction_rebuild_tail``.
-The original module re-exports them for compatibility.
+The original module imports only the helpers used by its remaining orchestrators.
 """
 
 from __future__ import annotations

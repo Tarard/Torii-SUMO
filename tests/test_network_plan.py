@@ -2302,6 +2302,44 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     assert report["reference_visual_detail_build"]["road_classes"] == sorted(build_calls[1]["allowed_highways"])
 
 
+def test_reference_visual_detail_build_failure_returns_workflow_report(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+    raw_net_file = tmp_path / "raw.net.xml"
+    raw_net_file.write_text("<net/>", encoding="utf-8")
+    build_calls = 0
+
+    def fake_build(**_kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        if build_calls == 1:
+            return {"status": "pass", "net_file": str(raw_net_file), "warnings": []}
+        return {"status": "fail", "warnings": ["visual detail build failed"]}
+
+    report = run_osm_cleanup_workflow(
+        bbox="0,0,1,1",
+        output_dir=tmp_path,
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        reference_policy_report={
+            "status": "pass",
+            "reference_net_file": str(reference_net_file),
+            "selected_highway_classes": ["primary", "service"],
+            "vehicle_core_highway_classes": ["primary"],
+            "reference_visual_detail_highway_classes": ["primary", "service"],
+        },
+        run_reference_bbox_scope_after_build=False,
+        build_func=fake_build,
+        service_permission_func=lambda *_args, **_kwargs: {"status": "pass", "warnings": []},
+    )
+
+    assert build_calls == 2
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["reference_visual_detail_status"] == "failed"
+    assert report["reference_visual_detail_build"]["status"] == "fail"
+
+
 def test_reference_matched_workflow_passes_reference_source_way_scope_to_build(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     reference_net_file.write_text(

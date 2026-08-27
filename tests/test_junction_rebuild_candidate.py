@@ -14,7 +14,6 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _endpoint_rewrite_old_endpoint_ids,
     _final_context_parity_gate,
     _hybrid_osm_approach_authority_policy,
-    _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
     _limit_ready_repair_candidates,
     _restore_false_traffic_light_junction_types,
@@ -28,7 +27,6 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _target_internal_replay_input_file,
     _write_teacher_guided_promotion_gate,
     _write_joined_endpoint_edge_file,
-    _warp_anchor_shape_to_teacher_endpoint,
     _stage_file,
     _teacher_guided_candidate_sort_key,
     build_rebuild_candidate,
@@ -56,6 +54,8 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_tllogic_net,
     write_teacher_vehicle_connection_attrs_net,
 )
+from torii_sumo.core.junction_rebuild_helpers import _netedit_review_actions
+from torii_sumo.core.junction_rebuild_tail import _warp_anchor_shape_to_teacher_endpoint
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 
 

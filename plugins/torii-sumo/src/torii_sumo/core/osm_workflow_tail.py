@@ -689,6 +689,8 @@ def _run_tls_movement_routeability_smoke(
     route_file = output_dir / "m.rou.xml"
     summary_file = output_dir / "m.sum.xml"
     tripinfo_file = output_dir / "m.ti.xml"
+    summary_file.unlink(missing_ok=True)
+    tripinfo_file.unlink(missing_ok=True)
     route_root = ET.Element("routes")
     ET.SubElement(route_root, "vType", {"id": "torii_smoke_passenger", "vClass": "passenger", "maxSpeed": "13.9"})
     for position, connection in enumerate(smoke_connections):
