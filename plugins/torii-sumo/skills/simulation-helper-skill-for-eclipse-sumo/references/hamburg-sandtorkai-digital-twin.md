@@ -185,9 +185,10 @@ signal_node_ids: 228, 2421, 2394
 Normalize the official signal node `228` to count/MAP node `0228` only through the declared preset logic. Do not
 apply general leading-zero normalization to unrelated identifiers.
 
-If no network is supplied, build one only for this bbox through `sumo_osm_cleanup_workflow` and its topology,
-connectivity, routeability, connection-mode, TLS, and review gates. If a frozen `.net.xml` is supplied, preserve
-its path and hash and do not silently rebuild it.
+If no network is supplied, pass this bbox to the CLI-only
+`sumo_osm_cleanup_workflow` standard profile. Do not call cleanup through MCP.
+If a frozen `.net.xml` is supplied, preserve its path and hash. Do not silently
+rebuild it.
 
 Before joining nodes, rebuilding channelization, or binding official signals, load
 `composable-intersection-classification.md`.  Run the 2394 profile through

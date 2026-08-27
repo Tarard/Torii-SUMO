@@ -11,7 +11,7 @@ The server supports three profiles selected with `create_server(profile=...)` or
   `torii.place.resolve`, `torii.intersection.classify`, `torii.signal.classify`,
   `torii.network.audit`, `torii.network.compare`, `torii.demand.audit`,
   `torii.review.create`.
-- `legacy`: all 74 historical tools listed below. Select this profile explicitly for compatibility.
+- `legacy`: all 73 historical tools listed below. Select this profile explicitly for compatibility.
 - `netedit`: the four-tool observation loop:
   `torii.netedit.open`, `torii.netedit.observe`, `torii.netedit.act`,
   `torii.netedit.close`.
@@ -92,7 +92,6 @@ SHA-256. Abort does not require a screenshot hash and closes without saving.
 ## OSM Construction and User-Facing Review
 
 - `sumo_osm_resolve_place`
-- `sumo_osm_cleanup_workflow`
 - `sumo_osm_build_network`
 - `sumo_tls_audit`
 - `sumo_tls_multisource_review`
@@ -101,7 +100,12 @@ SHA-256. Abort does not require a screenshot hash and closes without saving.
 - `sumo_network_routeability_audit`
 - `sumo_network_review_html`
 
-`sumo_osm_cleanup_workflow` is the preferred capability workflow. `sumo_osm_build_network` is a low-level importer and must not be presented as a complete cleanup or correctness workflow.
+`sumo_osm_cleanup_workflow` is CLI-only and is not registered in an MCP
+profile. Resolve a place to a bbox before the call. Its JSON request has seven
+fields: `output_dir`, `bbox`, `profile`, `source_osm_path`, `traffic_layers`,
+`reference_net_file`, and `timeout_seconds`. The `reference_matched` profile is
+audit-only and does not repair the network. `sumo_osm_build_network` remains a
+low-level importer and is not a complete cleanup workflow.
 
 ## Structural, Reference, and Regression Audits
 

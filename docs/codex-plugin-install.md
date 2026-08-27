@@ -13,7 +13,7 @@ PEP 723 metadata and uses the adjacent `run_torii_sumo.py.lock` file. It can run
 from an installed plugin cache without the repository root or a `python` command
 on `PATH`. The retained `scripts/bootstrap_mcp.py` entry point checks the same
 plugin-local runner and lock file. Plugin-launched MCP sessions default to the
-10-tool `default` profile. Set `TORII_MCP_PROFILE=legacy` to expose all 74 legacy
+10-tool `default` profile. Set `TORII_MCP_PROFILE=legacy` to expose all 73 legacy
 tools, or `TORII_MCP_PROFILE=netedit` for only the NetEdit loop.
 
 ## Repository Layout
@@ -66,9 +66,9 @@ For one-sentence requests, start with the workflow router:
 
 - `torii_auto_workflow`: classify the user's natural-language SUMO request, choose the workflow recipe, ask only blocking questions, and run safe MCP steps when enough evidence is available.
 
-Implemented OSM/network tools:
+Implemented OSM/network interfaces:
 
-- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area inference or confirmation when needed, network-plan gating for traffic layers and reference-matched artifacts, reference `.net.xml` or policy-report analysis when supplied, network construction, `highway.service` passenger-permission cleanup when requested by the analyzed plan, mandatory Google Maps TLS review gating, physical TLS clustering, TLS aggregation review variants when redundant TLS clusters exist, passenger connectivity summary, connected-core extraction when needed, scale-derived routeability audit parameters, routeability probes when supplied, reference visual-detail join/hierarchy/scope audits plus non-destructive aggregation or scope-pruning review variants when a reference is supplied, and Netedit launch evidence.
+- `sumo_osm_cleanup_workflow`: run this CLI-only workflow with `torii workflow`; it is not an MCP tool. Resolve a place and complete area confirmation to obtain a bbox first. Pass only `output_dir`, `bbox`, `profile`, `source_osm_path`, `traffic_layers`, `reference_net_file`, and `timeout_seconds`. The `standard` profile requires traffic layers. The `reference_matched` profile requires a reference `.net.xml`, audits differences, and does not apply repairs.
 - `sumo_osm_build_network`: download or reuse an OSM extract, use tiled Overpass requests with retry, deduplicate merged OSM XML by object id, apply road-class presets or explicit highway classes, run `netconvert`, and return artifact/log paths.
 - `sumo_tls_audit`: extract SUMO TLS audit candidates, cluster nearby candidates into physical-intersection review groups, and attach map-review baseline fields.
 - `sumo_tls_multisource_review`: create a human-review CSV that combines SUMO TLS candidates with OSM traffic-signal matches, region-aware map links such as Amap/Gaode for mainland China or Google Maps where appropriate, Mapillary, KartaView, optional official signal inventory rows, optional signal-plan rows, and optional field-photo evidence rows.
@@ -86,8 +86,17 @@ Implemented OSM/network tools:
 - `sumo_network_teacher_guided_repair_queue`: execute ready teacher-guided repair queue items against explicit plain node/edge/connection files, replay and normalize the teacher target internal subgraph by default, aggregate construction and parity gates, and keep non-ready or parity-failing candidates out of adoption.
 - `sumo_network_teacher_guided_junction_variant`: build a diagnostic single-junction variant that replays a manual reference network's lane permissions, allowed movements, pedestrian ring, target internal subgraph, and target `tlLogic` onto candidate plain network files by default. Set `replay_target_internal_subgraph=false` only for a legacy lane/connection-attribute probe. Keep it at `diagnostic-demo` until Netedit connection-mode review approves the result.
 
-Use a region-aware reality baseline as supplementary evidence, but use Google Maps as a mandatory TLS reality review gate for current-network OSM cleanup. Regional map sources, official inventories, signal plans, field photos, or dated imagery may supplement Google Maps, especially where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. Unresolved TLS candidates keep the workflow claim at `construction-invalid` even when the network artifact, routeability audit, SUMO-GUI, and Netedit are produced. Ask whether the user needs the current map or a historical target date; if the user requests a historical target date, the user's stated target controls the baseline and requires time-aligned map evidence, OSM history, dated imagery, Street View or street-level imagery history where available, field photos, or agency-inventory evidence.
+Use a region-aware reality baseline as supporting evidence for current-network OSM
+cleanup. Record whether each source uses WGS84/GCJ-02/BD-09 when coordinate
+systems differ. Unresolved TLS
+candidates keep the result at `construction-invalid`. The cleanup command does
+not open a GUI or repair these findings. For a historical target, supply a
+frozen source OSM file and matching dated evidence.
 
 External OSM source patterns are tracked from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, and osm-to-xodr. Torii borrows architecture and validation ideas from these projects without vendoring their source code.
 
-The plugin does not silently certify full OSM intelligent cleanup, automatic geocoded area resolution from place names, authoritative TLS inventory, max-pressure controller generation, or controller-log inspection as complete MCP tools. The bundled skill will route unconfirmed place names into area confirmation checkpoints, route unspecified road/layer requests into the network-plan question, require a reference `.net.xml` or reference policy report before reference-matched construction, derive reference construction scope from actual reference geometry rather than stale `.net.xml` `origBoundary`, and keep incomplete gates out of stronger claims.
+The plugin does not certify full OSM cleanup, an authoritative TLS inventory,
+controller generation, or controller-log inspection through MCP. Resolve a
+place and confirm its bbox before the CLI cleanup call. A reference-matched run
+requires both that bbox and a reference `.net.xml`. It reports differences and
+keeps all network changes for a separate reviewed step.

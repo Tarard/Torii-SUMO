@@ -19,7 +19,7 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 | Single `.sumocfg` execution | `sumo_run_config` | Inspect declared outputs before interpreting performance metrics |
 | Need a minimal toolchain smoke test | `sumo_run_minimal_smoke` | Label as `diagnostic-demo`, not formal experiment evidence |
 | Need to resolve a named OSM area before construction | `sumo_osm_resolve_place` | Return Nominatim/OSM candidate display name, relation/node/way id, bbox, OSM preview link, and confirmation boundary |
-| Need OSM cleanup from place name, bbox, or extract with mandatory gates | `sumo_osm_cleanup_workflow` | Enforce area confirmation, OSM build, mandatory Google Maps TLS review gate, physical TLS clustering, TLS aggregation review variants, passenger connectivity, connected-core extraction, scale-derived routeability audit parameters, optional routeability probes, reference visual-detail join/hierarchy/scope audits, non-destructive review variants, SUMO-GUI/Netedit launch, mandatory HTML human-review cockpit generation, and claim boundary |
+| Need full OSM cleanup | CLI: `torii workflow sumo_osm_cleanup_workflow <request.json> --json` | Resolve a place to a bbox first. Use the seven-field request. Reference-matched cleanup is audit-only. Do not present this command as an MCP tool. |
 | Need bbox OSM download/reuse, road-class filtering, and SUMO network construction | `sumo_osm_build_network` | Treat tiled Overpass, retry, OSM deduplication, and netconvert output as construction evidence; inspect warnings before accepting the network |
 | Need an HTML human-review cockpit for a generated or partially edited SUMO network | `sumo_network_review_html` | Treat the HTML as a review/navigation artifact that points to gates, warnings, topology, junction aggregation, and routeability evidence; it does not by itself make the network clean |
 | Need OSM/netconvert traffic-light cleanup review | `sumo_tls_audit` | Extract TLS candidates, cluster nearby candidates, and create first-pass map review fields |
@@ -78,6 +78,12 @@ residual_risk:
 
 ## Missing Tool Boundary
 
-If the user asks for full place-name geocoding, fully automated OSM intelligent cleanup, max-pressure controller generation, controller application, or controller-log inspection and no MCP tool exists yet, say that the plugin has the skill workflow but not that execution tool. Then provide the smallest manual or code-development next step.
+If the user asks for full OSM cleanup through MCP, explain that cleanup is
+CLI-only. Resolve the place first, then provide the seven-field CLI request.
+Do not claim that reference-matched cleanup applies repairs.
 
-The current OSM tools cover named-area resolution, bounded bbox/source-OSM network construction, tiled Overpass requests, retry, OSM XML deduplication, road-class filtering, TLS audit candidate extraction, TLS clustering, mandatory Google Maps TLS review status, non-destructive TLS aggregation review variants, regional map-link emission as supplementary evidence, Mapillary/KartaView review-link emission, optional inventory/signal-plan/field-evidence review fields, passenger connectivity checks, connected-core extraction, scale-derived completion-aware routeability audit, SUMO-GUI/Netedit launch evidence, mandatory HTML human-review cockpit generation, reference visual-detail join/hierarchy/scope audits, non-destructive plain-nodes junction-join patch variants, scope-pruning review variants, and named-road routeability probe generation. The high-level cleanup workflow coordinates these tools and blocks or demotes claims when area confirmation, map/TLS review, connectivity, routeability completion, GUI inspection evidence, or required human review is missing. They do not by themselves prove signal timing, phasing, or controller readiness.
+The MCP OSM tools resolve places and run bounded construction or audit steps.
+The CLI cleanup workflow coordinates the long checks with fixed profiles. It
+requires a bbox. Its reference-matched profile reports differences and leaves
+all repairs to separate reviewed commands. These checks do not prove signal
+timing, phasing, or controller readiness.

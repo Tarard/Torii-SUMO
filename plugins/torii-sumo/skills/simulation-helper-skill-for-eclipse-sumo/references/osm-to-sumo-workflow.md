@@ -10,11 +10,11 @@ Torii should turn a short user prompt into a bounded diagnostic network build wi
 
 Default behavior:
 
-1. Infer the place, bbox, reference target, road-detail preset, and current-vs-historical map baseline when the prompt and resolved OSM candidate make them clear.
-2. Run `sumo_osm_cleanup_workflow` when Torii MCP tools are available.
-3. Let the workflow derive routeability audit parameters from passenger-network scale; do not downshift smoke tests with ad hoc smaller values.
-4. Ask only when the next action is unsafe or impossible, such as ambiguous place resolution, missing bbox/extract, missing SUMO binaries, missing reference artifact for a reference-matched request, or destructive overwrite.
-5. If regional map/TLS reality evidence is missing, continue the diagnostic build and mark the claim boundary instead of pretending the network is clean.
+1. Resolve a place to a confirmed bbox before cleanup.
+2. Run `sumo_osm_cleanup_workflow` through `torii workflow`, not MCP.
+3. Pass only `output_dir`, `bbox`, `profile`, `source_osm_path`, `traffic_layers`, `reference_net_file`, and `timeout_seconds`.
+4. Use `standard` with traffic layers. Use `reference_matched` with a reference `.net.xml` and no traffic layers.
+5. Treat reference-matched output as audit evidence. Do not apply a repair in the cleanup call.
 
 ## Network Planning Gate
 
@@ -27,7 +27,7 @@ network_plan_status:
 traffic_layers: passenger | bicycle | pedestrian | bus
 network_detail_target: arterial_core | passenger_vehicle | passenger_plus_service | bicycle | pedestrian | multimodal | reference_matched
 reference_target:
-reference_artifact: reference_net_file | reference_policy_report | locate_reference_artifact
+reference_artifact: reference_net_file | locate_reference_artifact
 primary_network_layer:
 auxiliary_modal_layers:
 selected_highway_classes:
@@ -54,7 +54,8 @@ Use a small option set rather than silently adding every OSM class:
 
 If the user asks to match, mimic, compare against, or learn from a reference network or dataset, first locate or request the reference artifact. Do not hardcode a city, repository, or named reference into the plugin.
 
-When a reference `.net.xml` is supplied and no bbox or source OSM extract was supplied, derive the construction bbox from the reference network's actual non-internal junction and lane geometry with a small meter-scale padding. Do not trust `.net.xml` `origBoundary` because it may remain stale after clipping.
+Require an explicit bbox and a reference `.net.xml`. Do not derive the bbox
+inside cleanup. If the user gives a place name, resolve and confirm it first.
 
 Infer two scopes:
 
@@ -63,21 +64,23 @@ Infer two scopes:
 
 Apply `highway.service` passenger permissions only when the reference policy uses them. Never compare a Torii `connected-core` vehicle network against a full-detail manual reference network.
 
-After construction, run reference join, hierarchy, and scope audits on the candidate `reference_visual_detail` network. Create only non-destructive aggregation or pruning review variants.
+After construction, run reference join, hierarchy, and scope audits on the
+candidate `reference_visual_detail` network. The cleanup call must not create,
+select, or apply a repair variant.
 
 ## OSM Cleanup Hard Gates
 
-1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
+1. If the user gives only a place name, resolve it before cleanup. Confirm the returned bbox when the place is ambiguous.
 2. Resolve or infer the network plan before construction. If no user intent or reference target identifies traffic layers, block on the network-plan question instead of silently choosing all road types.
 3. Build into a fresh output directory. Keep raw, filtered, connected-core, visual-detail, route, report, and review artifacts separate.
 4. Run passenger connectivity checks. If small disconnected fragments cause failure, extract the largest passenger `connected-core`, keep the discarded-component report, and rerun strict connectivity on the core.
 5. Run routeability audit on the routeability layer with fixed parameters derived from network scale.
 6. Run TLS candidate extraction and region-aware map review-link generation by default where supported.
 7. For current-network modeling, treat Google Maps TLS review as a hard gate where Google is the appropriate regional baseline. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced.
-8. When TLS audit reports multiple SUMO TLS nodes for one physical cluster, create a non-destructive TLS aggregation review variant. Use physical cluster count and aggregated `tlLogic` count as the comparison signal; raw `traffic_light` junction count is diagnostic noise.
+8. When TLS audit reports multiple SUMO TLS nodes for one physical cluster, report the finding. Use a separate reviewed command to create a variant.
 9. Run topology fragmentation, overlapping junction, modal aggregation, and junction aggregation audits. These are review gates, not automatic proof of a clean network.
 10. Generate `workflow_review_html` after construction reaches a final workflow report. The HTML must summarize artifacts, gates, warnings, topology audit, modal review actions, junction aggregation review, TLS review, and routeability evidence.
-11. Open the cleaned, connected-core, or requested comparison network in SUMO-GUI and Netedit and report launch evidence.
+11. If visual review is needed, open the selected network in a separate NetEdit session.
 
 If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`.
 
@@ -158,4 +161,3 @@ out_of_scope_items:
 residual_risks:
 claim_status:
 ```
-

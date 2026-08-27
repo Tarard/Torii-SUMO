@@ -71,8 +71,8 @@ def _parse_args() -> argparse.Namespace:
         "--materialize-teacher-candidates",
         action="store_true",
         help=(
-            "In reference-matched mode, opt in to the expensive teacher repair queue. The default "
-            "keeps the runner as a full-bbox estimator and leaves every repair candidate unpromoted."
+            "Removed for reference-matched cleanup. Use a dedicated reviewed materialization step "
+            "after the audit."
         ),
     )
     return parser.parse_args()
@@ -83,47 +83,17 @@ def _reference_matched_workflow_kwargs(
     *,
     output_dir: Path,
     teacher_net: Path,
-    netconvert_binary: str,
-    sumo_binary: str,
 ) -> dict[str, Any]:
-    """Build the thin adapter contract for Torii's existing full workflow."""
+    """Build the seven-field audit-only cleanup contract."""
 
     return {
         "output_dir": str(output_dir / "reference_matched"),
         "bbox": args.bbox,
-        "prefix": "ingolstadt_same_bbox",
+        "profile": "reference_matched",
         "source_osm_path": str(args.source_osm.resolve()) if args.source_osm is not None else None,
-        "clip_source_ways_to_bbox": False,
-        "network_profile": "reference_matched",
+        "traffic_layers": None,
         "reference_net_file": str(teacher_net),
-        "historical_date": args.historical_date,
-        "overpass_url": args.overpass_url,
         "timeout_seconds": args.timeout_seconds,
-        "netconvert_binary": netconvert_binary,
-        "sumo_binary": sumo_binary,
-        "map_temporal_scope": args.map_temporal_scope,
-        "map_target_date": args.map_target_date,
-        "launch_netedit_after_build": False,
-        "launch_sumo_gui_after_build": False,
-        "run_topology_audit_after_build": True,
-        "run_routeability_audit_after_build": not args.skip_runtime_audits,
-        "run_connection_mode_audit_after_build": True,
-        "run_standard_nema_scan_after_build": True,
-        # Preserve the raw same-bbox baseline. TLS repair belongs after one
-        # conflict-core candidate passes the reference/preservation gates.
-        "run_tls_aggregation_after_build": False,
-        "run_reference_join_audit_after_build": True,
-        "reference_join_audit_structural_only": False,
-        "run_reference_join_aggregation_after_build": True,
-        "run_reference_hierarchy_audit_after_build": True,
-        "run_reference_scope_audit_after_build": True,
-        "run_scope_pruning_after_build": False,
-        "run_corridor_geometry_simplification_after_build": False,
-        "run_corridor_edit_ledger_after_build": True,
-        "run_teacher_guided_repair_after_build": args.materialize_teacher_candidates,
-        "teacher_guided_probe_matrix_junction_ids": (
-            [args.junction_id] if args.materialize_teacher_candidates else None
-        ),
     }
 
 
@@ -141,6 +111,7 @@ def _reference_matched_summary(workflow: dict[str, Any]) -> dict[str, Any]:
     fields = (
         "status",
         "claim_status",
+        "profile",
         "network_profile",
         "filtered_osm_file",
         "raw_net_file",
@@ -155,13 +126,6 @@ def _reference_matched_summary(workflow: dict[str, Any]) -> dict[str, Any]:
         "reference_join_unmatched_case_count",
         "reference_join_audit_report_file",
         "reference_join_audit_cases_file",
-        "reference_join_aggregation_status",
-        "reference_join_aggregation_variant_file",
-        "teacher_guided_repair_queue_status",
-        "teacher_guided_repair_run_status",
-        "teacher_guided_repair_promotion_gate_status",
-        "teacher_guided_direct_replay_status",
-        "teacher_guided_direct_replay_reference_promotion_status",
         "routeability_audit_status",
         "routeability_audit_report_file",
         "connection_mode_audit_status",
@@ -455,6 +419,10 @@ def _run_reference_matched(
         )
     if not teacher_net.is_file():
         input_errors.append(f"teacher network does not exist: {teacher_net}")
+    if args.materialize_teacher_candidates:
+        input_errors.append(
+            "--materialize-teacher-candidates was removed; reference-matched cleanup is audit-only"
+        )
     source_osm = args.source_osm.resolve() if args.source_osm is not None else None
     if source_osm is not None and not source_osm.is_file():
         input_errors.append(f"source OSM does not exist: {source_osm}")
@@ -475,8 +443,6 @@ def _run_reference_matched(
             args,
             output_dir=output_dir,
             teacher_net=teacher_net,
-            netconvert_binary=str(binaries["netconvert"]),
-            sumo_binary=str(binaries["sumo"]),
         )
         workflow = workflow_func(**kwargs)
 
@@ -548,8 +514,7 @@ def _run_reference_matched(
         "candidate_net_file": "",
         "promotion_gate_status": "blocked",
         "promotion_gate_reason": (
-            "reference-matched mode is an estimator; comparison layers may include rejected or "
-            "review-only variants and are never exposed as promoted candidates"
+            "reference-matched cleanup is audit-only and never exposes a promoted candidate"
         ),
         "osm_source_mode": "explicit_osm_rebuild" if source_osm is not None else "downloaded_same_bbox",
         "historical_date": args.historical_date or "",
@@ -564,9 +529,7 @@ def _run_reference_matched(
             "promotion_gate_status": teacher_action_contracts["promotion_gate_status"],
             "file": str(teacher_action_contracts_file),
         },
-        "teacher_candidate_materialization": (
-            "enabled" if args.materialize_teacher_candidates else "estimator_only"
-        ),
+        "teacher_candidate_materialization": "not_available_in_cleanup_v2",
         "runtime_audit_status": runtime_audit_status,
         "artifact_hash_gate_status": artifact_hash_gate_status,
         "workflow_review_html_status": workflow_review_html_status,
@@ -574,8 +537,8 @@ def _run_reference_matched(
         "source_network_mutation": False,
         "manifest_file": str(manifest_file),
         "next_boundary": (
-            "review reference cluster matches and teacher-guided candidates; only transfer the "
-            "Ingolstadt pattern to Hamburg when official geometry and movement evidence agree"
+            "review reference cluster matches; use a dedicated materializer only when target-city "
+            "geometry and movement evidence agree"
         ),
     }
     write_json_atomic(aggregate_file, aggregate, sort_keys=True)

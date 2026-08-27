@@ -47,7 +47,6 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_nema_four_way_reference_workflow",
         "torii_auto_workflow",
         "sumo_osm_resolve_place",
-        "sumo_osm_cleanup_workflow",
         "sumo_osm_build_network",
         "sumo_tls_audit",
         "sumo_tls_multisource_review",
@@ -105,6 +104,12 @@ def test_server_registers_expected_tool_names() -> None:
     assert anyio.run(_list_tool_names) == EXPECTED_TOOL_NAMES
 
 
+def test_cli_keeps_osm_cleanup_workflow() -> None:
+    from torii_sumo.legacy_tools import WORKFLOW_TOOLS
+
+    assert "sumo_osm_cleanup_workflow" in WORKFLOW_TOOLS
+
+
 def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
     from torii_sumo.server import create_server
 
@@ -118,8 +123,7 @@ def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
 
     assert all(term in auto for term in ("conditionally", "phase-1", "osm", "review"))
     assert all(
-        term in scene
-        for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")
+        term in scene for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")
     )
 
 

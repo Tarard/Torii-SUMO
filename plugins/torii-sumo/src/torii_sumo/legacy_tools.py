@@ -183,9 +183,6 @@ def register_legacy_mcp_tools(server: FastMCP) -> None:
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place
     )
-    server.tool(description="Run the OSM cleanup hard-gate workflow from a place name, bbox, or OSM map URL: area inference/confirmation, traffic-layer or reference-artifact planning, OSM build, TLS map audit, connectivity, code-native Connection Mode, routeability, review HTML, and optional SUMO-GUI/NetEdit launch.")(
-        sumo_osm_cleanup_workflow
-    )
     server.tool(description="Read-only classification of one local OSM intersection into a hash-bound finite composable archetype; preserve physical-cell, topology, and movement evidence without joining nodes, rebuilding channelization, or binding traffic lights.")(
         sumo_intersection_archetype_classify
     )

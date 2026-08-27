@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
@@ -3218,6 +3218,7 @@ def _workflow_reference_comparison_section(
     reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None,
     run_corridor_geometry_simplification_after_build: bool,
     run_reference_hierarchy_audit_after_build: bool,
+    run_reference_hierarchy_type_repair_after_build: bool,
     run_topology_audit_after_build: bool,
     sumo_binary: str,
     timeout_seconds: float,
@@ -3293,6 +3294,7 @@ def _workflow_reference_comparison_section(
             str(network_plan.get("network_profile", "")) == "reference_matched"
             and reference_net_file is not None
             and run_reference_hierarchy_audit_after_build
+            and run_reference_hierarchy_type_repair_after_build
             and reference_hierarchy_audit_report is not None
             and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
         ):
@@ -3896,103 +3898,77 @@ def _workflow_reference_matched_gate_section(
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
-    bbox: str | None = None,
-    place_name: str | None = None,
-    confirmed_area: bool = False,
-    prefix: str = "sumo_osm_cleanup",
+    bbox: str,
+    profile: Literal["standard", "reference_matched"] = "standard",
     source_osm_path: Path | None = None,
-    clip_source_ways_to_bbox: bool = True,
-    highway_classes: set[str] | None = None,
     traffic_layers: str | set[str] | None = None,
-    network_profile: str | None = None,
     reference_net_file: Path | None = None,
-    reference_policy_report: str | Path | Mapping[str, Any] | None = None,
-    service_passenger_policy: str | None = None,
-    historical_date: str | None = None,
-    overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
-    netconvert_binary: str = "netconvert",
-    sumo_binary: str = "sumo",
-    max_tile_area_km2: float = 2500.0,
-    max_retries: int = 2,
-    retry_pause_seconds: float = 5.0,
-    map_temporal_scope: str = "current",
-    map_target_date: str | None = None,
-    review_decisions_file: Path | None = None,
-    launch_netedit_after_build: bool = True,
-    launch_netedit_review_after_build: bool | None = None,
-    launch_sumo_gui_after_build: bool = True,
-    run_topology_audit_after_build: bool = True,
-    topology_cluster_radius_m: float = 30.0,
-    topology_min_cluster_nodes: int = 3,
-    run_routeability_audit_after_build: bool = True,
-    run_connection_mode_audit_after_build: bool = True,
-    run_standard_nema_scan_after_build: bool = True,
-    routeability_vehicle_count: int | None = None,
-    routeability_initial_end: int | None = None,
-    routeability_max_end: int | None = None,
-    run_tls_aggregation_after_build: bool = True,
-    run_junction_aggregation_after_build: bool = True,
-    run_reference_join_audit_after_build: bool = True,
-    reference_join_audit_structural_only: bool = True,
-    run_reference_join_aggregation_after_build: bool = True,
-    run_reference_hierarchy_audit_after_build: bool = True,
-    run_reference_scope_audit_after_build: bool = True,
-    run_reference_bbox_scope_after_build: bool = True,
-    run_road_connectivity_parity_audit_after_build: bool = True,
-    run_scope_pruning_after_build: bool = False,
-    run_corridor_geometry_simplification_after_build: bool = False,
-    run_corridor_edit_ledger_after_build: bool = False,
-    teacher_guided_repair_max_ready_candidates: int | None = 80,
-    run_teacher_guided_repair_after_build: bool = True,
-    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
-    road_connectivity_replay_max_owners: int | None = 4,
-    road_connectivity_probe_edge_ids: list[str] | None = None,
-    key_edge_queries: list[Mapping[str, Any]] | None = None,
-    build_func: Callable[..., dict[str, Any]] = build_osm_network,
-    tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
-    connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
-    connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
-    routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
-    topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
-    routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
-    connection_mode_audit_func: Callable[..., dict[str, Any]] = build_network_connection_mode_audit,
-    standard_nema_binding_func: Callable[..., dict[str, Any]] = build_standard_nema_phase_binding,
-    tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
-    tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
-    tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
-    tls_non_controller_junction_demotion_func: Callable[
-        ..., dict[str, Any]
-    ] = build_tls_non_controller_junction_demotion_variant,
-    tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
-    junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
-    reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
-    reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]] = build_reference_hierarchy_type_repair_variant,
-    reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
-    reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
-    teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
-    teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
-    teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
-    teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_matrix,
-    teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
-    road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
-    road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
-    road_connection_topology_replay_func: Callable[..., dict[str, Any]] = _run_road_connection_topology_replay,
-    road_connectivity_parity_func: Callable[..., dict[str, Any]] = audit_road_connectivity_parity,
-    reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
-    scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
-    corridor_geometry_simplification_func: Callable[..., dict[str, Any]] = build_corridor_geometry_simplification_variant,
-    corridor_edit_ledger_func: Callable[..., dict[str, Any]] = build_corridor_edit_ledger,
-    netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
-    netedit_review_func: Callable[[Path], dict[str, Any]] | None = None,
-    sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
-    place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
-    reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
-    reference_bbox_scope_func: Callable[..., dict[str, Any]] = build_reference_bbox_variant,
-    service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
-    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
-    command_runner: Callable[..., Any] = run_command,
 ) -> dict[str, Any]:
+    if profile not in {"standard", "reference_matched"}:
+        raise ValueError("profile must be 'standard' or 'reference_matched'")
+    if profile == "standard":
+        if not traffic_layers:
+            raise ValueError("traffic_layers is required for profile='standard'")
+        if reference_net_file is not None:
+            raise ValueError("reference_net_file is not allowed for profile='standard'")
+    else:
+        if reference_net_file is None:
+            raise ValueError("reference_net_file is required for profile='reference_matched'")
+        if traffic_layers:
+            raise ValueError("traffic_layers is not allowed for profile='reference_matched'")
+
+    is_reference_matched = profile == "reference_matched"
+    place_name = None
+    confirmed_area = True
+    prefix = "sumo_osm_cleanup"
+    clip_source_ways_to_bbox = True
+    highway_classes = None
+    network_profile = profile
+    reference_policy_report = None
+    service_passenger_policy = None
+    historical_date = None
+    overpass_url = "https://overpass-api.de/api/interpreter"
+    netconvert_binary = "netconvert"
+    sumo_binary = "sumo"
+    max_tile_area_km2 = 2500.0
+    max_retries = 2
+    retry_pause_seconds = 5.0
+    map_temporal_scope = "current"
+    map_target_date = None
+    review_decisions_file = None
+    launch_netedit_after_build = False
+    launch_netedit_review_after_build = False
+    launch_sumo_gui_after_build = False
+    run_topology_audit_after_build = True
+    topology_cluster_radius_m = 30.0
+    topology_min_cluster_nodes = 3
+    run_routeability_audit_after_build = True
+    run_connection_mode_audit_after_build = True
+    run_standard_nema_scan_after_build = True
+    routeability_vehicle_count = None
+    routeability_initial_end = None
+    routeability_max_end = None
+    run_tls_aggregation_after_build = not is_reference_matched
+    run_junction_aggregation_after_build = False
+    run_reference_join_audit_after_build = is_reference_matched
+    reference_join_audit_structural_only = False
+    run_reference_join_aggregation_after_build = False
+    run_reference_hierarchy_audit_after_build = is_reference_matched
+    run_reference_hierarchy_type_repair_after_build = False
+    run_reference_scope_audit_after_build = is_reference_matched
+    run_reference_bbox_scope_after_build = is_reference_matched
+    run_road_connectivity_parity_audit_after_build = is_reference_matched
+    run_scope_pruning_after_build = False
+    run_corridor_geometry_simplification_after_build = False
+    run_corridor_edit_ledger_after_build = False
+    teacher_guided_repair_max_ready_candidates = 80
+    run_teacher_guided_repair_after_build = False
+    teacher_guided_probe_matrix_junction_ids = None
+    road_connectivity_replay_max_owners = 4
+    road_connectivity_probe_edge_ids = None
+    key_edge_queries = None
+
     cleaned_place_name = (place_name or "").strip()
     bbox_input = (bbox or "").strip()
     bbox_from_url = osm_map_url_bbox(bbox_input)
@@ -4006,12 +3982,12 @@ def run_osm_cleanup_workflow(
     place_report = None
     reference_bbox_report: dict[str, Any] | None = None
     if not bbox and source_osm_path is None and reference_net_file is not None:
-        reference_bbox_report = reference_bbox_func(reference_net_file)
+        reference_bbox_report = derive_reference_net_bbox(reference_net_file)
         derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
         if reference_bbox_report.get("status") == "pass" and derived_bbox:
             bbox = derived_bbox
     if cleaned_place_name and not bbox and source_osm_path is None:
-        place_report = place_resolver(cleaned_place_name)
+        place_report = resolve_osm_place(cleaned_place_name)
         if not confirmed_area:
             return _blocked_place_report(cleaned_place_name, output_dir, place_report)
         resolved_bbox = str(place_report.get("candidate_bbox", ""))
@@ -4117,14 +4093,14 @@ def run_osm_cleanup_workflow(
         and str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
     ):
-        reference_bbox_scope_report = reference_bbox_scope_func(
+        reference_bbox_scope_report = build_reference_bbox_variant(
             reference_net_file=reference_net_file,
             bbox=bbox,
             output_dir=output_dir / "reference_bbox_scope",
             prefix=f"{prefix}_reference_bbox_scope",
             netconvert_binary=netconvert_binary,
             timeout_seconds=timeout_seconds,
-            command_runner=command_runner,
+            command_runner=run_command,
         )
         scoped_reference_value = reference_bbox_scope_report.get("variant_file", "")
         scoped_reference_file = Path(str(scoped_reference_value)) if scoped_reference_value else None
@@ -4160,11 +4136,11 @@ def run_osm_cleanup_workflow(
         "retry_pause_seconds": retry_pause_seconds,
         "netconvert_profile": "vehicle_core",
     }
-    if _supports_keyword(build_func, "netconvert_binary"):
+    if _supports_keyword(build_osm_network, "netconvert_binary"):
         build_kwargs["netconvert_binary"] = netconvert_binary
-    if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+    if _supports_keyword(build_osm_network, "clip_source_ways_to_bbox"):
         build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
-    build_report = build_func(**build_kwargs)
+    build_report = build_osm_network(**build_kwargs)
     if build_report.get("status") != "pass":
         return {
             "status": "fail",
@@ -4198,7 +4174,7 @@ def run_osm_cleanup_workflow(
             "warnings": list(build_report.get("warnings", [])),
         }
     raw_net_file = Path(str(build_report["net_file"]))
-    service_permission_report = service_permission_func(
+    service_permission_report = apply_service_passenger_permissions(
         raw_net_file,
         policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
     )
@@ -4435,7 +4411,7 @@ def run_osm_cleanup_workflow(
     _reference_visual_detail_section_result = _workflow_reference_visual_detail_section(
         area_status=area_status,
         bbox=bbox,
-        build_func=build_func,
+        build_func=build_osm_network,
         build_report=build_report,
         cleaned_place_name=cleaned_place_name,
         clip_source_ways_to_bbox=clip_source_ways_to_bbox,
@@ -4452,7 +4428,7 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_highway_classes=reference_visual_detail_highway_classes,
         reference_visual_detail_modal_way_tags=reference_visual_detail_modal_way_tags,
         retry_pause_seconds=retry_pause_seconds,
-        service_permission_func=service_permission_func,
+        service_permission_func=apply_service_passenger_permissions,
         service_permission_report=service_permission_report,
         should_build_reference_visual_detail=should_build_reference_visual_detail,
         source_osm_path=source_osm_path,
@@ -4475,7 +4451,7 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_status = _reference_visual_detail_section_result['reference_visual_detail_status']
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
-    tls_report = tls_audit_func(
+    tls_report = audit_tls(
         net_file=raw_net_file,
         output_dir=output_dir / "tls_audit",
         prefix=f"{prefix}_tls_audit",
@@ -4483,8 +4459,8 @@ def run_osm_cleanup_workflow(
         google_maps_temporal_scope=map_temporal_scope,
         google_maps_target_date=map_target_date,
     )
-    if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, tls_aggregation_func):
-        tls_aggregation_report = tls_aggregation_func(
+    if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, build_tls_aggregation_variant):
+        tls_aggregation_report = build_tls_aggregation_variant(
             net_file=raw_net_file,
             tls_audit_report=tls_report,
             output_dir=output_dir / "tls_aggregation",
@@ -4501,14 +4477,14 @@ def run_osm_cleanup_workflow(
             if candidate_tls_net_file.exists():
                 net_file = candidate_tls_net_file
     _tls_section_result = _workflow_tls_aggregation_section(
-        command_runner=command_runner,
+        command_runner=run_command,
         map_target_date=map_target_date,
         map_temporal_scope=map_temporal_scope,
         network_plan=network_plan,
         osm_file=osm_file,
         output_dir=output_dir,
         prefix=prefix,
-        reference_join_audit_func=reference_join_audit_func,
+        reference_join_audit_func=audit_reference_join_patterns,
         reference_net_file=reference_net_file,
         reference_visual_detail_net_file=reference_visual_detail_net_file,
         reference_visual_detail_tls_aggregation_candidates=reference_visual_detail_tls_aggregation_candidates,
@@ -4516,11 +4492,11 @@ def run_osm_cleanup_workflow(
         run_tls_aggregation_after_build=run_tls_aggregation_after_build,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
-        tls_aggregation_func=tls_aggregation_func,
-        tls_audit_func=tls_audit_func,
-        tls_connection_repair_func=tls_connection_repair_func,
-        tls_low_vehicle_control_func=tls_low_vehicle_control_func,
-        tls_signal_grouping_func=tls_signal_grouping_func,
+        tls_aggregation_func=build_tls_aggregation_variant,
+        tls_audit_func=audit_tls,
+        tls_connection_repair_func=build_tls_connection_repair_variant,
+        tls_low_vehicle_control_func=build_tls_low_vehicle_control_variant,
+        tls_signal_grouping_func=build_tls_signal_grouping_variant,
         topology_cluster_radius_m=topology_cluster_radius_m,
         topology_min_cluster_nodes=topology_min_cluster_nodes,
         reference_visual_detail_comparison_net_file=reference_visual_detail_comparison_net_file,
@@ -4564,13 +4540,13 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_low_vehicle_control_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_report']
     if _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report'] is not _WORKFLOW_UNSET:
         reference_visual_detail_tls_low_vehicle_control_sumo_load_report = _tls_section_result['reference_visual_detail_tls_low_vehicle_control_sumo_load_report']
-    raw_connectivity_report = connectivity_func(net_file)
+    raw_connectivity_report = summarize_passenger_connectivity(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
     connected_core_report = None
     connected_core_connectivity_report = None
     if connectivity_quality["strict_connectivity_status"] != "pass":
-        connected_core_report = connected_core_func(
+        connected_core_report = extract_largest_passenger_component_core(
             net_file,
             output_dir=output_dir / "connected_core",
             prefix=prefix,
@@ -4579,7 +4555,7 @@ def run_osm_cleanup_workflow(
         core_file_value = connected_core_report.get("connected_core_file", "") if connected_core_report else ""
         if connected_core_report.get("status") == "pass" and core_file_value:
             candidate_core_file = Path(str(core_file_value))
-            connected_core_connectivity_report = connectivity_func(candidate_core_file)
+            connected_core_connectivity_report = summarize_passenger_connectivity(candidate_core_file)
             connected_core_quality = _connectivity_quality(connected_core_connectivity_report)
             if connected_core_quality["strict_connectivity_status"] == "pass":
                 net_file = candidate_core_file
@@ -4589,7 +4565,7 @@ def run_osm_cleanup_workflow(
     topology_audit_report = None
     reference_topology_audit_report: dict[str, Any] | None = None
     if run_topology_audit_after_build:
-        topology_audit_report = topology_audit_func(
+        topology_audit_report = audit_topology_fragmentation(
             net_file=net_file,
             output_dir=output_dir / "topology_audit",
             prefix=f"{prefix}_topology_audit",
@@ -4603,7 +4579,7 @@ def run_osm_cleanup_workflow(
         and str(network_plan.get("network_profile", "")) != "reference_matched"
         and _junction_aggregation_summary(topology_audit_report)["junction_aggregation_candidate_count"] > 0
     ):
-        junction_aggregation_report = junction_aggregation_func(
+        junction_aggregation_report = build_junction_aggregation_variant(
             net_file=net_file,
             output_dir=output_dir / "junction_aggregation",
             prefix=f"{prefix}_junction_aggregation",
@@ -4623,7 +4599,7 @@ def run_osm_cleanup_workflow(
             if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
             else "vehicle_core"
         )
-        reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+        reference_hierarchy_audit_report = audit_reference_hierarchy(
             reference_net_file=reference_net_file,
             candidate_net_file=reference_hierarchy_audit_candidate_net_file,
             output_dir=output_dir / "reference_hierarchy_audit",
@@ -4631,17 +4607,17 @@ def run_osm_cleanup_workflow(
             resolve_equivalent_fragmentation=True,
         )
     _reference_matched_gate_section_result = _workflow_reference_matched_gate_section(
-        command_runner=command_runner,
+        command_runner=run_command,
         net_file=net_file,
         network_plan=network_plan,
         output_dir=output_dir,
         prefix=prefix,
         reference_net_file=reference_net_file,
-        reference_scope_audit_func=reference_scope_audit_func,
+        reference_scope_audit_func=audit_reference_scope,
         reference_visual_detail_net_file=reference_visual_detail_net_file,
         run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
-        scope_pruning_func=scope_pruning_func,
+        scope_pruning_func=build_scope_pruning_variant,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
         reference_scope_audit_report=reference_scope_audit_report,
@@ -4664,15 +4640,15 @@ def run_osm_cleanup_workflow(
     if _reference_matched_gate_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
         reference_visual_detail_comparison_selection_reason = _reference_matched_gate_section_result['reference_visual_detail_comparison_selection_reason']
     _reference_matched_section_result = _workflow_reference_matched_section(
-        command_runner=command_runner,
+        command_runner=run_command,
         net_file=net_file,
         netconvert_binary=netconvert_binary,
         network_plan=network_plan,
         output_dir=output_dir,
         post_teacher_tls_low_vehicle_control_candidates=post_teacher_tls_low_vehicle_control_candidates,
         prefix=prefix,
-        reference_join_aggregation_func=reference_join_aggregation_func,
-        reference_join_audit_func=reference_join_audit_func,
+        reference_join_aggregation_func=build_junction_aggregation_variant,
+        reference_join_audit_func=audit_reference_join_patterns,
         reference_join_audit_structural_only=reference_join_audit_structural_only,
         reference_net_file=reference_net_file,
         reference_visual_detail_net_file=reference_visual_detail_net_file,
@@ -4681,28 +4657,28 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
         reference_visual_detail_tls_low_vehicle_control_reference_delta_report=reference_visual_detail_tls_low_vehicle_control_reference_delta_report,
         reference_visual_detail_tls_signal_grouping_reference_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
-        road_connection_topology_replay_func=road_connection_topology_replay_func,
+        road_connection_topology_replay_func=_run_road_connection_topology_replay,
         road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
-        road_connectivity_replay_func=road_connectivity_replay_func,
+        road_connectivity_replay_func=_run_owner_road_connectivity_replay,
         road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
-        road_connectivity_seed_probe_func=road_connectivity_seed_probe_func,
+        road_connectivity_seed_probe_func=_run_road_connectivity_seed_probe,
         run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
         run_reference_join_audit_after_build=run_reference_join_audit_after_build,
         run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
         run_tls_aggregation_after_build=run_tls_aggregation_after_build,
         sumo_binary=sumo_binary,
-        teacher_guided_direct_replay_func=teacher_guided_direct_replay_func,
-        teacher_guided_plain_export_func=teacher_guided_plain_export_func,
-        teacher_guided_probe_matrix_func=teacher_guided_probe_matrix_func,
+        teacher_guided_direct_replay_func=_run_direct_local_teacher_replay,
+        teacher_guided_plain_export_func=export_plain_net_for_teacher_guided_repair,
+        teacher_guided_probe_matrix_func=run_teacher_guided_repair_matrix,
         teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-        teacher_guided_repair_queue_func=teacher_guided_repair_queue_func,
-        teacher_guided_repair_run_func=teacher_guided_repair_run_func,
+        teacher_guided_repair_queue_func=build_teacher_guided_repair_queue,
+        teacher_guided_repair_run_func=run_teacher_guided_repair_queue,
         timeout_seconds=timeout_seconds,
-        tls_connection_repair_func=tls_connection_repair_func,
-        tls_low_vehicle_control_func=tls_low_vehicle_control_func,
-        tls_non_controller_junction_demotion_func=tls_non_controller_junction_demotion_func,
-        tls_signal_grouping_func=tls_signal_grouping_func,
+        tls_connection_repair_func=build_tls_connection_repair_variant,
+        tls_low_vehicle_control_func=build_tls_low_vehicle_control_variant,
+        tls_non_controller_junction_demotion_func=build_tls_non_controller_junction_demotion_variant,
+        tls_signal_grouping_func=build_tls_signal_grouping_variant,
         topology_audit_report=topology_audit_report,
         topology_cluster_radius_m=topology_cluster_radius_m,
         topology_min_cluster_nodes=topology_min_cluster_nodes,
@@ -4812,21 +4788,21 @@ def run_osm_cleanup_workflow(
     if _reference_matched_section_result['tls_repair_decision_report'] is not _WORKFLOW_UNSET:
         tls_repair_decision_report = _reference_matched_section_result['tls_repair_decision_report']
     _teacher_guided_repair_section_result = _workflow_teacher_guided_repair_section(
-        command_runner=command_runner,
+        command_runner=run_command,
         netconvert_binary=netconvert_binary,
         output_dir=output_dir,
         prefix=prefix,
-        reference_join_audit_func=reference_join_audit_func,
+        reference_join_audit_func=audit_reference_join_patterns,
         reference_join_audit_structural_only=reference_join_audit_structural_only,
         reference_net_file=reference_net_file,
         run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
         sumo_binary=sumo_binary,
-        teacher_guided_direct_replay_func=teacher_guided_direct_replay_func,
-        teacher_guided_plain_export_func=teacher_guided_plain_export_func,
+        teacher_guided_direct_replay_func=_run_direct_local_teacher_replay,
+        teacher_guided_plain_export_func=export_plain_net_for_teacher_guided_repair,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-        teacher_guided_repair_queue_func=teacher_guided_repair_queue_func,
+        teacher_guided_repair_queue_func=build_teacher_guided_repair_queue,
         teacher_guided_repair_requires_reference_promotion=teacher_guided_repair_requires_reference_promotion,
-        teacher_guided_repair_run_func=teacher_guided_repair_run_func,
+        teacher_guided_repair_run_func=run_teacher_guided_repair_queue,
         teacher_guided_seed_report=teacher_guided_seed_report,
         timeout_seconds=timeout_seconds,
         topology_cluster_radius_m=topology_cluster_radius_m,
@@ -4871,26 +4847,27 @@ def run_osm_cleanup_workflow(
     if _teacher_guided_repair_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
         reference_visual_detail_comparison_selection_reason = _teacher_guided_repair_section_result['reference_visual_detail_comparison_selection_reason']
     _reference_comparison_section_result = _workflow_reference_comparison_section(
-        command_runner=command_runner,
-        corridor_geometry_simplification_func=corridor_geometry_simplification_func,
+        command_runner=run_command,
+        corridor_geometry_simplification_func=build_corridor_geometry_simplification_variant,
         network_plan=network_plan,
         osm_file=osm_file,
         output_dir=output_dir,
         prefix=prefix,
-        reference_hierarchy_audit_func=reference_hierarchy_audit_func,
-        reference_hierarchy_type_repair_func=reference_hierarchy_type_repair_func,
-        reference_join_audit_func=reference_join_audit_func,
+        reference_hierarchy_audit_func=audit_reference_hierarchy,
+        reference_hierarchy_type_repair_func=build_reference_hierarchy_type_repair_variant,
+        reference_join_audit_func=audit_reference_join_patterns,
         reference_join_post_teacher_audit_report=reference_join_post_teacher_audit_report,
         reference_net_file=reference_net_file,
-        reference_scope_audit_func=reference_scope_audit_func,
+        reference_scope_audit_func=audit_reference_scope,
         reference_visual_detail_raw_reference_delta_report=reference_visual_detail_raw_reference_delta_report,
         reference_visual_detail_tls_connection_repair_reference_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
         run_corridor_geometry_simplification_after_build=run_corridor_geometry_simplification_after_build,
         run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
+        run_reference_hierarchy_type_repair_after_build=run_reference_hierarchy_type_repair_after_build,
         run_topology_audit_after_build=run_topology_audit_after_build,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
-        topology_audit_func=topology_audit_func,
+        topology_audit_func=audit_topology_fragmentation,
         topology_cluster_radius_m=topology_cluster_radius_m,
         topology_min_cluster_nodes=topology_min_cluster_nodes,
         corridor_geometry_simplification_promotion_report=corridor_geometry_simplification_promotion_report,
@@ -4931,20 +4908,20 @@ def run_osm_cleanup_workflow(
     if _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason'] is not _WORKFLOW_UNSET:
         reference_visual_detail_comparison_selection_reason = _reference_comparison_section_result['reference_visual_detail_comparison_selection_reason']
     _scope_pruning_section_result = _workflow_scope_pruning_section(
-        command_runner=command_runner,
+        command_runner=run_command,
         network_plan=network_plan,
         osm_file=osm_file,
         output_dir=output_dir,
         prefix=prefix,
-        reference_hierarchy_audit_func=reference_hierarchy_audit_func,
+        reference_hierarchy_audit_func=audit_reference_hierarchy,
         reference_net_file=reference_net_file,
-        reference_scope_audit_func=reference_scope_audit_func,
+        reference_scope_audit_func=audit_reference_scope,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
         run_topology_audit_after_build=run_topology_audit_after_build,
-        scope_pruning_func=scope_pruning_func,
+        scope_pruning_func=build_scope_pruning_variant,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
-        topology_audit_func=topology_audit_func,
+        topology_audit_func=audit_topology_fragmentation,
         topology_cluster_radius_m=topology_cluster_radius_m,
         topology_min_cluster_nodes=topology_min_cluster_nodes,
         reference_scope_candidate_net_file=reference_scope_candidate_net_file,
@@ -5005,11 +4982,11 @@ def run_osm_cleanup_workflow(
             )
             visual_source_path = Path(str(visual_source_value)) if visual_source_value else None
             if visual_source_path is not None and visual_source_path.exists() and _supports_keyword(
-                road_connectivity_parity_func,
+                audit_road_connectivity_parity,
                 "source_osm_file",
             ):
                 road_parity_kwargs["source_osm_file"] = visual_source_path
-            road_connectivity_parity_audit_report = road_connectivity_parity_func(**road_parity_kwargs)
+            road_connectivity_parity_audit_report = audit_road_connectivity_parity(**road_parity_kwargs)
         else:
             road_connectivity_parity_audit_report = {
                 "status": "blocked",
@@ -5021,7 +4998,7 @@ def run_osm_cleanup_workflow(
             }
     routeability_report = None
     if key_edge_queries:
-        routeability_report = routeability_func(
+        routeability_report = build_routeability_probe(
             net_file=net_file,
             output_dir=output_dir / "routeability",
             prefix=f"{prefix}_routeability",
@@ -5035,7 +5012,7 @@ def run_osm_cleanup_workflow(
         requested_max_end=routeability_max_end,
     )
     if run_routeability_audit_after_build:
-        routeability_audit_report = routeability_audit_func(
+        routeability_audit_report = run_routeability_audit(
             net_file=net_file,
             output_dir=output_dir / "routeability_audit",
             prefix=f"{prefix}_routeability_audit",
@@ -5046,14 +5023,14 @@ def run_osm_cleanup_workflow(
         )
     connection_mode_audit_report = None
     if run_connection_mode_audit_after_build:
-        connection_mode_audit_report = connection_mode_audit_func(
+        connection_mode_audit_report = build_network_connection_mode_audit(
             net_file,
             output_dir=output_dir / "connection_mode_audit",
             prefix=f"{prefix}_connection_mode",
         )
     standard_nema_scan_report = None
     if run_standard_nema_scan_after_build:
-        standard_nema_scan_report = standard_nema_binding_func(
+        standard_nema_scan_report = build_standard_nema_phase_binding(
             net_file,
             output_dir=output_dir / "standard_nema_review",
             prefix=f"{prefix}_standard_nema",
@@ -5062,7 +5039,7 @@ def run_osm_cleanup_workflow(
             run_routeability=False,
         )
     if launch_netedit_after_build:
-        netedit_report = netedit_func(net_file)
+        netedit_report = launch_netedit(net_file)
     else:
         netedit_report = {
             "status": "blocked",
@@ -5073,7 +5050,7 @@ def run_osm_cleanup_workflow(
         }
     if reference_visual_detail_comparison_net_file is not None:
         if launch_netedit_after_build:
-            reference_visual_detail_netedit_report = netedit_func(reference_visual_detail_comparison_net_file)
+            reference_visual_detail_netedit_report = launch_netedit(reference_visual_detail_comparison_net_file)
         else:
             reference_visual_detail_netedit_report = {
                 "status": "blocked",
@@ -5083,7 +5060,7 @@ def run_osm_cleanup_workflow(
                 "warnings": ["reference visual-detail netedit launch disabled by caller"],
             }
     if launch_sumo_gui_after_build:
-        sumo_gui_report = sumo_gui_func(
+        sumo_gui_report = launch_sumo_gui(
             net_file,
             output_dir=output_dir / "sumo_gui",
             prefix=f"{prefix}_sumo_gui",
@@ -5452,7 +5429,7 @@ def run_osm_cleanup_workflow(
         ledger_source_net_file = reference_visual_detail_comparison_net_file or net_file
         if ledger_source_net_file.exists():
             try:
-                corridor_edit_ledger_report = corridor_edit_ledger_func(
+                corridor_edit_ledger_report = build_corridor_edit_ledger(
                     net_file=ledger_source_net_file,
                     output_dir=output_dir / "corridor_edit_ledger",
                     reference_net_file=reference_net_file,
@@ -7062,7 +7039,7 @@ def run_osm_cleanup_workflow(
     report["review_decisions_source_error"] = review_decisions_source_error
     if supplied_review_decisions is not None:
         report["review_decisions"] = supplied_review_decisions
-    workflow_review_html_report = review_html_func(
+    workflow_review_html_report = build_workflow_review_html(
         output_dir=output_dir / "review",
         prefix=f"{prefix}_workflow_review",
         title="SUMO Network Review",
@@ -7090,11 +7067,7 @@ def run_osm_cleanup_workflow(
         if launch_netedit_review_after_build is None
         else launch_netedit_review_after_build
     )
-    review_launcher = netedit_review_func
-    if review_launcher is None and netedit_func is launch_netedit:
-        review_launcher = netedit_func
-    elif review_launcher is None:
-        should_launch_netedit_review = False
+    review_launcher = launch_netedit
     if should_launch_netedit_review and netedit_review_sumocfg:
         review_launch_kwargs: dict[str, Any] = {}
         if netedit_review_selection_files and _supports_keyword(review_launcher, "selection_file"):

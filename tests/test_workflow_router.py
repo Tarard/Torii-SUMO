@@ -13,6 +13,17 @@ from torii_sumo.tools.workflow_tools import torii_auto_workflow
 from torii_sumo.core.osm_network import parse_bbox
 
 
+CLEANUP_FIELDS = {
+    "output_dir",
+    "bbox",
+    "profile",
+    "source_osm_path",
+    "traffic_layers",
+    "reference_net_file",
+    "timeout_seconds",
+}
+
+
 def _write_reference_net(path: Path) -> None:
     path.write_text(
         """<net>
@@ -39,7 +50,9 @@ def test_infer_place_name_from_one_prompt_osm_request() -> None:
 def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("Build a four-way TLS intersection") == "intersection_scene"
     assert detect_workflow("download the Altstadt map from OSM and open it in SUMO") == "osm_to_sumo"
-    assert detect_workflow("generate a TUM-like SUMO network from OSM with TLS and connection semantics") == "osm_to_sumo"
+    assert (
+        detect_workflow("generate a TUM-like SUMO network from OSM with TLS and connection semantics") == "osm_to_sumo"
+    )
     assert (
         detect_workflow(
             "clean the Ingolstadt city-center network from OSM, compare it with the TUM cleaned network, and open it in Netedit"
@@ -63,22 +76,10 @@ def test_intersection_scene_recipe_uses_phase_one_workflow_tool() -> None:
 
 def test_detect_workflow_keeps_audit_and_osm_patch_requests_out_of_scene_generation() -> None:
     assert detect_workflow("Create a TLS audit for this SUMO network") == "tls_review"
-    assert (
-        detect_workflow("Build this local OSM four-way TLS intersection patch")
-        == "intersection_clean"
-    )
-    assert (
-        detect_workflow("Create this local OSM four-way TLS intersection patch")
-        == "intersection_clean"
-    )
-    assert (
-        detect_workflow("Patch this local OSM four-way TLS intersection")
-        == "intersection_clean"
-    )
-    assert (
-        detect_workflow("Dispatch this local OSM four-way TLS intersection")
-        != "intersection_clean"
-    )
+    assert detect_workflow("Build this local OSM four-way TLS intersection patch") == "intersection_clean"
+    assert detect_workflow("Create this local OSM four-way TLS intersection patch") == "intersection_clean"
+    assert detect_workflow("Patch this local OSM four-way TLS intersection") == "intersection_clean"
+    assert detect_workflow("Dispatch this local OSM four-way TLS intersection") != "intersection_clean"
 
 
 def test_detect_workflow_requires_affirmative_scene_signalization() -> None:
@@ -102,21 +103,14 @@ def test_detect_workflow_requires_affirmative_scene_signalization() -> None:
 
 def test_detect_workflow_keeps_negated_signalization_reviews_in_tls_review() -> None:
     assert detect_workflow("Audit why this intersection is not signalized") == "tls_review"
-    assert (
-        detect_workflow("Review the TLS because this junction is not signalized")
-        == "tls_review"
-    )
+    assert detect_workflow("Review the TLS because this junction is not signalized") == "tls_review"
 
 
-@pytest.mark.parametrize(
-    "near_match", ["traffic-lighting", "tlssuffix", "signalizedness"]
-)
+@pytest.mark.parametrize("near_match", ["traffic-lighting", "tlssuffix", "signalizedness"])
 def test_detect_workflow_does_not_treat_signalization_near_matches_as_scene(
     near_match: str,
 ) -> None:
-    assert (
-        detect_workflow(f"Build a four-way {near_match} intersection") == "general"
-    )
+    assert detect_workflow(f"Build a four-way {near_match} intersection") == "general"
 
 
 @pytest.mark.parametrize(
@@ -129,12 +123,7 @@ def test_detect_workflow_does_not_treat_signalization_near_matches_as_scene(
     ],
 )
 def test_detect_workflow_shares_scene_feature_limits(unsupported_feature: str) -> None:
-    assert (
-        detect_workflow(
-            f"Build a four-way TLS intersection with {unsupported_feature} access"
-        )
-        == "tls_review"
-    )
+    assert detect_workflow(f"Build a four-way TLS intersection with {unsupported_feature} access") == "tls_review"
 
 
 @pytest.mark.parametrize(
@@ -144,12 +133,7 @@ def test_detect_workflow_shares_scene_feature_limits(unsupported_feature: str) -
 def test_detect_workflow_routes_phase_two_scene_features_to_scene_builder(
     supported_feature: str,
 ) -> None:
-    assert (
-        detect_workflow(
-            f"Build a four-way TLS intersection with {supported_feature} access"
-        )
-        == "intersection_scene"
-    )
+    assert detect_workflow(f"Build a four-way TLS intersection with {supported_feature} access") == "intersection_scene"
 
 
 @pytest.mark.parametrize(
@@ -169,29 +153,17 @@ def test_detect_workflow_prioritizes_osm_generation_over_scene(prompt: str) -> N
 
 @pytest.mark.parametrize("intent", ["compare", "baseline", "fixed-time", "max-pressure"])
 def test_detect_workflow_prioritizes_experiments_over_scene(intent: str) -> None:
-    assert (
-        detect_workflow(f"Build a four-way TLS intersection for a {intent} experiment")
-        == "experiment_audit"
-    )
+    assert detect_workflow(f"Build a four-way TLS intersection for a {intent} experiment") == "experiment_audit"
 
 
 def test_detect_workflow_recognizes_explicit_experiment_intent() -> None:
-    assert (
-        detect_workflow("Build a four-way TLS intersection experiment")
-        == "experiment_audit"
-    )
+    assert detect_workflow("Build a four-way TLS intersection experiment") == "experiment_audit"
 
 
 def test_detect_workflow_prioritizes_tls_review_over_generic_network_review() -> None:
     assert detect_workflow("Review TLS in this SUMO network") == "tls_review"
-    assert (
-        detect_workflow("Review traffic signals in this SUMO network")
-        == "tls_review"
-    )
-    assert (
-        detect_workflow("Create an HTML review cockpit for this TLS SUMO network")
-        == "network_review"
-    )
+    assert detect_workflow("Review traffic signals in this SUMO network") == "tls_review"
+    assert detect_workflow("Create an HTML review cockpit for this TLS SUMO network") == "network_review"
 
 
 def test_detect_workflow_does_not_treat_roadmap_as_map_intent() -> None:
@@ -265,9 +237,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     report = run_auto_workflow(
         user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
         output_dir=tmp_path,
-        highway_classes="arterial",
-        teacher_guided_repair_max_ready_candidates=1,
-        run_teacher_guided_repair_after_build=False,
+        traffic_layers="passenger",
         place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
@@ -275,12 +245,10 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert report["status"] == "pass"
     assert report["execution_status"] == "executed"
     assert report["tool_called"] == "sumo_osm_cleanup_workflow"
+    assert set(captured) == CLEANUP_FIELDS
     assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
-    assert captured["place_name"] == "Altstadt, Dresden"
-    assert {"primary", "tertiary"} <= captured["highway_classes"]
-    assert captured["run_routeability_audit_after_build"] is True
-    assert captured["teacher_guided_repair_max_ready_candidates"] == 1
-    assert captured["run_teacher_guided_repair_after_build"] is False
+    assert captured["profile"] == "standard"
+    assert captured["traffic_layers"] == "passenger"
     assert report["area_resolution_status"] == "candidate_found"
 
 
@@ -303,7 +271,7 @@ def test_auto_workflow_extracts_bbox_from_osm_map_url(tmp_path: Path) -> None:
             "to generate a SUMO network"
         ),
         output_dir=tmp_path,
-        highway_classes="arterial",
+        traffic_layers="passenger",
         cleanup_workflow_func=fake_cleanup,
     )
 
@@ -313,7 +281,8 @@ def test_auto_workflow_extracts_bbox_from_osm_map_url(tmp_path: Path) -> None:
     assert report["area_resolution_status"] == "osm_map_url_bbox"
     assert parsed.west < 11.422681 < parsed.east
     assert parsed.south < 48.768610 < parsed.north
-    assert captured["place_name"] is None
+    assert set(captured) == CLEANUP_FIELDS
+    assert captured["profile"] == "standard"
 
 
 def test_auto_workflow_prefers_explicit_bbox_over_prompt_osm_url(tmp_path: Path) -> None:
@@ -332,38 +301,14 @@ def test_auto_workflow_prefers_explicit_bbox_over_prompt_osm_url(tmp_path: Path)
         ),
         output_dir=tmp_path,
         bbox="11.413800,48.755391,11.433800,48.775391",
-        network_profile="reference_matched",
         reference_net_file=reference_net_file,
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
+    assert set(captured) == CLEANUP_FIELDS
     assert captured["bbox"] == "11.413800,48.755391,11.433800,48.775391"
-
-
-def test_auto_workflow_can_disable_gui_launches_for_headless_reference_promotion(tmp_path: Path) -> None:
-    captured = {}
-    reference_net_file = tmp_path / "reference.net.xml"
-    _write_reference_net(reference_net_file)
-
-    def fake_cleanup(**kwargs):
-        captured.update(kwargs)
-        return {"status": "pass", "claim_status": "diagnostic-demo"}
-
-    report = run_auto_workflow(
-        user_request="Use Torii to generate a TUM-like SUMO network from OSM using the reference net",
-        output_dir=tmp_path,
-        bbox="11.413800,48.755391,11.433800,48.775391",
-        network_profile="reference_matched",
-        reference_net_file=reference_net_file,
-        launch_netedit_after_build=False,
-        launch_sumo_gui_after_build=False,
-        cleanup_workflow_func=fake_cleanup,
-    )
-
-    assert report["status"] == "pass"
-    assert captured["launch_netedit_after_build"] is False
-    assert captured["launch_sumo_gui_after_build"] is False
+    assert captured["profile"] == "reference_matched"
 
 
 def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
@@ -384,7 +329,7 @@ def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
     report = run_auto_workflow(
         user_request="Use Torii to generate a TUM-like SUMO network from this local OSM extract",
         output_dir=tmp_path,
-        network_profile="reference_matched",
+        bbox="11.413800,48.755391,11.433800,48.775391",
         reference_net_file=reference_net_file,
         osm_file=osm_file,
         cleanup_workflow_func=fake_cleanup,
@@ -392,8 +337,9 @@ def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
 
     assert report["status"] == "pass"
     assert report["execution_status"] == "executed"
+    assert set(captured) == CLEANUP_FIELDS
     assert captured["source_osm_path"] == osm_file
-    assert captured["bbox"] is None
+    assert captured["profile"] == "reference_matched"
 
 
 def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_cleaner(tmp_path: Path) -> None:
@@ -660,22 +606,19 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
         user_request="Use Torii to build this city-center SUMO network with the same layer policy as a manually cleaned reference network",
         output_dir=tmp_path,
         bbox="11.413800,48.755391,11.433800,48.775391",
-        network_profile="reference_matched",
         reference_net_file=reference_net_file,
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
     assert report["execution_status"] == "executed"
-    assert captured["network_profile"] == "reference_matched"
+    assert set(captured) == CLEANUP_FIELDS
+    assert captured["profile"] == "reference_matched"
     assert captured["reference_net_file"] == reference_net_file
-    assert captured["service_passenger_policy"] == "reference_match"
-    assert captured["reference_join_audit_structural_only"] is False
-    assert "service" not in captured["highway_classes"]
-    assert "cycleway" not in captured["highway_classes"]
+    assert captured["traffic_layers"] is None
 
 
-def test_auto_workflow_reference_match_does_not_pre_resolve_place_bbox(tmp_path: Path) -> None:
+def test_auto_workflow_resolves_bbox_before_reference_cleanup(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "manual-reference.net.xml"
     _write_reference_net(reference_net_file)
     captured = {}
@@ -690,20 +633,27 @@ def test_auto_workflow_reference_match_does_not_pre_resolve_place_bbox(tmp_path:
             "reference_bbox_status": "derived_from_reference_geometry",
         }
 
+    def fake_resolver(_place_name: str):
+        return {
+            "status": "pass",
+            "candidate_bbox": "11.4062777,48.7483625,11.4382247,48.7803406",
+            "warnings": [],
+        }
+
     report = run_auto_workflow(
         user_request="Clean the Ingolstadt city-center network from OSM, compare it with the TUM cleaned network, and generate a TUM-like SUMO network",
         output_dir=tmp_path,
         place_name="Ingolstadt city center",
         reference_net_file=reference_net_file,
-        place_resolver=lambda _place: (_ for _ in ()).throw(AssertionError("place resolver should not run")),
+        place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
     assert report["network_plan"]["network_profile"] == "reference_matched"
-    assert captured["bbox"] is None
-    assert captured["place_name"] == "Ingolstadt city center"
-    assert captured["network_profile"] == "reference_matched"
+    assert set(captured) == CLEANUP_FIELDS
+    assert captured["bbox"] == "11.4062777,48.7483625,11.4382247,48.7803406"
+    assert captured["profile"] == "reference_matched"
     assert captured["reference_net_file"] == reference_net_file
 
 
@@ -720,291 +670,16 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         user_request="Generate a TUM-like SUMO network from OSM using the reference net",
         output_dir=str(tmp_path),
         bbox="11.413800,48.755391,11.433800,48.775391",
-        network_profile="reference_matched",
         seed_osm_node_id="98101394",
         reference_net_file=str(tmp_path / "reference.net.xml"),
-        teacher_guided_repair_max_ready_candidates=2,
-        run_teacher_guided_repair_after_build=False,
-        road_connectivity_replay_max_owners=3,
-        road_connectivity_probe_edge_ids=["road#0"],
-        teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         launch_netedit_after_build=False,
-        launch_sumo_gui_after_build=False,
     )
 
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
-    assert captured["teacher_guided_repair_max_ready_candidates"] == 2
-    assert captured["run_teacher_guided_repair_after_build"] is False
     assert captured["seed_osm_node_id"] == "98101394"
-    assert captured["road_connectivity_replay_max_owners"] == 3
-    assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
-    assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
+    assert captured["reference_net_file"] == tmp_path / "reference.net.xml"
     assert captured["launch_netedit_after_build"] is False
-    assert captured["launch_sumo_gui_after_build"] is False
-
-
-def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:
-    reference_net_file = tmp_path / "tum-reference.net.xml"
-    _write_reference_net(reference_net_file)
-    captured = {}
-
-    def fake_cleanup(**kwargs):
-        captured.update(kwargs)
-        return {
-            "status": "pass",
-            "claim_status": "diagnostic-demo",
-            "network_profile": "reference_matched",
-            "reference_visual_detail_comparison_net_file": str(tmp_path / "teacher_guided_best.net.xml"),
-            "teacher_guided_repair_best_variant_file": str(tmp_path / "teacher_guided_best.net.xml"),
-            "teacher_guided_repair_run_report_file": str(tmp_path / "teacher_guided_run.json"),
-            "teacher_guided_repair_run_status": "pass",
-            "teacher_guided_repair_parity_gate_status": "pass",
-            "teacher_guided_repair_promotion_gate_status": "pass",
-            "teacher_guided_repair_promotion_gate_file": str(tmp_path / "teacher_guided_promotion_gate.json"),
-            "teacher_guided_repair_application_scope": "single_best_variant",
-            "teacher_guided_repair_applied_candidate_count": 1,
-            "teacher_guided_repair_unapplied_pass_candidate_count": 4,
-            "teacher_guided_probe_matrix_status": "pass",
-            "teacher_guided_probe_matrix_file": str(tmp_path / "probe_matrix.json"),
-            "teacher_guided_probe_matrix_probe_count": 2,
-            "teacher_guided_probe_matrix_all_parity_gate_pass": True,
-            "teacher_guided_probe_matrix_all_promotion_gate_pass": True,
-            "teacher_guided_probe_matrix_all_road_continuity_gate_pass": True,
-            "teacher_guided_probe_matrix_missing_junction_ids": [],
-            "post_teacher_tls_connection_repair_movement_rebuild_run_status": "pass",
-            "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status": "pass",
-            "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file": str(
-                tmp_path / "movement_rebuild_best.net.xml"
-            ),
-            "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count": 4,
-            "final_movement_rebuild_run_status": "pass",
-            "final_movement_rebuild_parity_gate_status": "pass",
-            "final_movement_rebuild_sumo_load_status": "pass",
-            "final_movement_rebuild_best_variant_file": str(tmp_path / "final_movement_best.net.xml"),
-            "final_movement_rebuild_applied_candidate_count": 1,
-            "final_movement_rebuild_semantic_layer_gate_counts": {
-                "topology": {"pass": 1, "fail": 0, "failure_count": 0},
-                "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
-                "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
-            },
-            "road_connectivity_replay_status": "pass",
-            "road_connectivity_replay_gate_status": "pass",
-            "road_connectivity_replay_sumo_load_status": "pass",
-            "road_connectivity_replay_best_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
-            "road_connectivity_replay_run_report_file": str(tmp_path / "road_connectivity_run.json"),
-            "road_connectivity_replay_gate_counts": {
-                "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
-            },
-            "road_connectivity_seed_probe_status": "pass",
-            "road_connectivity_seed_probe_file": str(tmp_path / "road_seed.json"),
-            "road_connectivity_seed_probe_edge_delta_count": 0,
-            "road_connectivity_seed_probe_connection_delta_count": 0,
-            "road_connectivity_seed_probe_candidate_missing_seed_edge_ids": [],
-            "road_connectivity_split_root_alias_repair_status": "pass",
-            "road_connectivity_split_root_alias_repair_file": str(tmp_path / "road_connectivity_alias.net.xml"),
-            "road_connectivity_split_root_alias_repair_report_file": str(tmp_path / "road_connectivity_alias.json"),
-            "road_connection_topology_replay_status": "pass",
-            "road_connection_topology_replay_file": str(tmp_path / "road_connection_topology.net.xml"),
-            "road_connection_topology_replay_report_file": str(tmp_path / "road_connection_topology.json"),
-            "workflow_review_html_status": "pass",
-            "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
-            "workflow_report_file": str(tmp_path / "workflow_report.json"),
-            "review_manifest_file": str(tmp_path / "review_manifest.json"),
-            "reference_join_post_teacher_audit_status": "pass",
-            "routeability_audit_status": "pass",
-            "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
-                "gate_status": {
-                    "connection_mode_audit": "review_required",
-                    "reference_join_audit": "pass",
-                "reference_join_aggregation": "blocked",
-                "netedit_connection_mode_review": "blocked",
-                "netedit": "blocked",
-            },
-        }
-
-    report = run_auto_workflow(
-        user_request="Use Torii to generate a TUM-like SUMO network from OSM and mimic the manually cleaned reference connection and TLS semantics",
-        output_dir=tmp_path,
-        bbox="11.413800,48.755391,11.433800,48.775391",
-        reference_net_file=reference_net_file,
-        teacher_guided_repair_max_ready_candidates=1,
-        road_connectivity_replay_max_owners=3,
-        road_connectivity_probe_edge_ids=["road#0"],
-        teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
-        cleanup_workflow_func=fake_cleanup,
-    )
-
-    assert report["status"] == "pass"
-    assert report["network_plan"]["network_profile"] == "reference_matched"
-    assert "sumo_network_reference_join_audit" in report["tool_chain"]
-    assert "sumo_network_junction_aggregation_variant" in report["tool_chain"]
-    assert "sumo_network_teacher_guided_repair_queue" in report["tool_chain"]
-    assert "sumo_network_teacher_guided_junction_variant" in report["tool_chain"]
-    assert "sumo_network_tls_warning_parity" in report["tool_chain"]
-    assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
-    assert report["reference_matched_semantics_workflow"]["batch_repair_tool"] == "sumo_network_teacher_guided_repair_queue"
-    assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
-    assert (
-        report["reference_matched_semantics_workflow"]["warning_parity_tool"]
-        == "sumo_network_tls_warning_parity"
-    )
-    assert report["reference_matched_semantics_workflow"]["best_variant_file"] == str(tmp_path / "final_movement_best.net.xml")
-    assert report["reference_matched_semantics_workflow"]["comparison_net_file"] == str(
-        tmp_path / "final_movement_best.net.xml"
-    )
-    assert report["reference_matched_semantics_workflow"]["movement_rebuild_best_variant_file"] == str(
-        tmp_path / "final_movement_best.net.xml"
-    )
-    assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
-    assert report["reference_matched_semantics_workflow"]["configured_max_ready_candidates"] == 1
-    assert captured["road_connectivity_replay_max_owners"] == 3
-    assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
-    assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
-    assert report["teacher_guided_repair_configured_max_ready_candidates"] == 1
-    assert report["reference_matched_semantics_workflow"]["probe_matrix"] == {
-        "status": "pass",
-        "matrix_file": str(tmp_path / "probe_matrix.json"),
-        "probe_count": 2,
-        "all_parity_gate_pass": True,
-        "all_promotion_gate_pass": True,
-        "all_road_continuity_gate_pass": True,
-        "missing_junction_ids": [],
-    }
-    assert report["reference_matched_semantics_workflow"]["semantic_layer_gate_counts"] == {
-        "topology": {"pass": 1, "fail": 0, "failure_count": 0},
-        "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
-        "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
-    }
-    assert report["reference_matched_semantics_workflow"]["road_connectivity_layer"] == {
-        "run_status": "pass",
-        "gate_status": "pass",
-        "sumo_load_status": "pass",
-        "best_variant_file": str(tmp_path / "road_connection_topology.net.xml"),
-        "owner_replay_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
-        "split_root_alias_repair_file": str(tmp_path / "road_connectivity_alias.net.xml"),
-        "topology_replay_file": str(tmp_path / "road_connection_topology.net.xml"),
-        "run_report_file": str(tmp_path / "road_connectivity_run.json"),
-        "gate_counts": {
-            "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
-        },
-    }
-    assert report["reference_matched_semantics_workflow"]["road_connectivity_seed_probe"] == {
-        "status": "pass",
-        "report_file": str(tmp_path / "road_seed.json"),
-        "edge_delta_count": 0,
-        "connection_delta_count": 0,
-        "candidate_missing_seed_edge_ids": [],
-    }
-    assert report["reference_matched_semantics_workflow"]["road_connectivity_split_root_alias_repair"] == {
-        "status": "pass",
-        "output_file": str(tmp_path / "road_connectivity_alias.net.xml"),
-        "report_file": str(tmp_path / "road_connectivity_alias.json"),
-    }
-    assert report["reference_matched_semantics_workflow"]["road_connection_topology_replay"] == {
-        "status": "pass",
-        "output_file": str(tmp_path / "road_connection_topology.net.xml"),
-        "report_file": str(tmp_path / "road_connection_topology.json"),
-    }
-    assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
-    assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"
-    assert report["reference_matched_semantics_workflow"]["promotion_gate_file"] == str(
-        tmp_path / "teacher_guided_promotion_gate.json"
-    )
-    assert report["reference_matched_semantics_workflow"]["application_scope"] == "single_best_variant"
-    assert report["reference_matched_semantics_workflow"]["applied_candidate_count"] == 1
-    assert report["reference_matched_semantics_workflow"]["unapplied_pass_candidate_count"] == 4
-    assert report["workflow_review_html_status"] == "pass"
-    assert report["workflow_review_html_file"] == str(tmp_path / "workflow_review.html")
-    assert report["workflow_report_file"] == str(tmp_path / "workflow_report.json")
-    assert report["review_manifest_file"] == str(tmp_path / "review_manifest.json")
-    assert report["teacher_guided_repair_run_status"] == "pass"
-    assert report["teacher_guided_repair_parity_gate_status"] == "pass"
-    assert report["teacher_guided_repair_promotion_gate_status"] == "pass"
-    assert report["teacher_guided_repair_promotion_gate_file"] == str(tmp_path / "teacher_guided_promotion_gate.json")
-    assert report["teacher_guided_repair_application_scope"] == "single_best_variant"
-    assert report["teacher_guided_repair_best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
-    assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
-    assert report["post_teacher_tls_connection_repair_movement_rebuild_run_status"] == "pass"
-    assert report["post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status"] == "pass"
-    assert report["post_teacher_tls_connection_repair_movement_rebuild_best_variant_file"] == str(
-        tmp_path / "movement_rebuild_best.net.xml"
-    )
-    assert report["post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count"] == 4
-    assert report["final_movement_rebuild_sumo_load_status"] == "pass"
-    assert report["final_movement_rebuild_semantic_layer_gate_counts"]["pedestrian_bike"]["failure_count"] == 2
-    assert report["road_connectivity_replay_gate_status"] == "pass"
-    assert report["reference_join_post_teacher_audit_status"] == "pass"
-    assert report["routeability_audit_status"] == "pass"
-    stage_results = {stage["stage_name"]: stage for stage in report["workflow_stage_results"]}
-    assert list(stage_results) == [
-        "reference_comparison",
-        "teacher_guided_repair",
-        "road_connectivity",
-        "routeability",
-        "review_html",
-    ]
-    assert stage_results["teacher_guided_repair"]["promotion_decision"] == "pass"
-    assert stage_results["teacher_guided_repair"]["output_artifacts"]["best_variant"] == str(
-        tmp_path / "teacher_guided_best.net.xml"
-    )
-    assert (
-        stage_results["road_connectivity"]["after_quality"]["connectivity"]["road_connectivity_replay_gate_status"]
-        == "pass"
-    )
-    assert stage_results["routeability"]["after_quality"]["routeability"] == {"status": "pass"}
-    promotion_trace = report["workflow_promotion_trace"]
-    assert promotion_trace["case_id"] == "reference_matched"
-    assert promotion_trace["claim_status"] == "diagnostic-demo"
-    assert [stage["stage_id"] for stage in promotion_trace["stages"]] == list(stage_results)
-    assert promotion_trace["stages"][1]["promotion_decision"] == "pass"
-    assert (
-        "map_or_field_evidence_for_connection_review_findings"
-        in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
-    )
-    assert (
-        "netedit_connection_mode_review"
-        not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
-    )
-    assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
-    assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
-    assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
-    assert "internal_junction_parity" in report["network_plan"]["validation_gates"]
-
-
-def test_auto_workflow_keeps_road_only_variant_in_road_layer(tmp_path: Path) -> None:
-    reference_net_file = tmp_path / "tum-reference.net.xml"
-    _write_reference_net(reference_net_file)
-    raw_net_file = tmp_path / "raw_visual.net.xml"
-    road_net_file = tmp_path / "road_connectivity.net.xml"
-
-    def fake_cleanup(**_kwargs):
-        return {
-            "status": "fail",
-            "claim_status": "construction-invalid",
-            "network_profile": "reference_matched",
-            "reference_visual_detail_comparison_net_file": str(raw_net_file),
-            "road_connectivity_replay_status": "pass",
-            "road_connectivity_replay_gate_status": "pass",
-            "road_connectivity_replay_sumo_load_status": "pass",
-            "road_connectivity_replay_best_variant_file": str(road_net_file),
-            "road_connectivity_seed_probe_status": "pass",
-            "road_connectivity_seed_probe_edge_delta_count": 0,
-            "road_connectivity_seed_probe_connection_delta_count": 0,
-        }
-
-    report = run_auto_workflow(
-        user_request="Use Torii to generate a TUM-like SUMO network from OSM with TLS and connection semantics",
-        output_dir=tmp_path,
-        bbox="11.413800,48.755391,11.433800,48.775391",
-        reference_net_file=reference_net_file,
-        cleanup_workflow_func=fake_cleanup,
-    )
-
-    semantics = report["reference_matched_semantics_workflow"]
-    assert semantics["best_variant_file"] == ""
-    assert semantics["comparison_net_file"] == str(raw_net_file)
-    assert semantics["road_connectivity_layer"]["best_variant_file"] == str(road_net_file)
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
@@ -1064,7 +739,7 @@ def test_auto_workflow_can_route_partial_network_to_review_html(tmp_path: Path) 
     assert calls["title"] == "SUMO Network Review"
 
 
-def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_path: Path) -> None:
+def test_auto_workflow_passes_standard_profile_to_cleanup(tmp_path: Path) -> None:
     captured = {}
 
     def fake_cleanup(**kwargs):
@@ -1079,38 +754,14 @@ def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_p
         user_request="Build a SUMO network for Altstadt, Dresden from OSM",
         output_dir=tmp_path,
         bbox="13.6,50.9,13.9,51.1",
-        highway_classes="arterial",
+        traffic_layers="passenger",
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
-    assert {"primary", "tertiary"} <= captured["highway_classes"]
-    assert captured["run_routeability_audit_after_build"] is True
-
-
-def test_auto_workflow_keeps_legacy_cleanup_fake_compatible(tmp_path: Path) -> None:
-    def fake_cleanup(output_dir, bbox, place_name, confirmed_area):
-        return {
-            "status": "pass",
-            "claim_status": "diagnostic-demo",
-            "received": {
-                "output_dir": str(output_dir),
-                "bbox": bbox,
-                "place_name": place_name,
-                "confirmed_area": confirmed_area,
-            },
-        }
-
-    report = run_auto_workflow(
-        user_request="Build a SUMO network for Altstadt, Dresden from OSM",
-        output_dir=tmp_path,
-        bbox="13.6,50.9,13.9,51.1",
-        highway_classes="arterial",
-        cleanup_workflow_func=fake_cleanup,
-    )
-
-    assert report["status"] == "pass"
-    assert report["workflow_result"]["received"]["bbox"] == "13.6,50.9,13.9,51.1"
+    assert set(captured) == CLEANUP_FIELDS
+    assert captured["profile"] == "standard"
+    assert captured["traffic_layers"] == "passenger"
 
 
 def test_auto_workflow_inspect_only_returns_plan_without_running_tools(tmp_path: Path) -> None:

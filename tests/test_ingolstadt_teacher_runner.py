@@ -61,7 +61,7 @@ def test_default_cli_mode_remains_bounded_slice(monkeypatch) -> None:
     assert args.materialize_teacher_candidates is False
 
 
-def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path) -> None:
+def test_reference_matched_mode_uses_seven_field_audit_contract(tmp_path: Path) -> None:
     script = _load_script()
     source = tmp_path / "source.osm.xml"
     teacher = tmp_path / "teacher.net.xml"
@@ -73,38 +73,42 @@ def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path)
         args,
         output_dir=tmp_path / "run",
         teacher_net=teacher,
-        netconvert_binary="netconvert-test",
-        sumo_binary="sumo-test",
     )
 
-    assert kwargs["network_profile"] == "reference_matched"
-    assert kwargs["reference_net_file"] == str(teacher)
-    assert kwargs["source_osm_path"] == str(source)
-    assert kwargs["bbox"] == args.bbox
-    assert kwargs["reference_join_audit_structural_only"] is False
-    assert kwargs["run_reference_join_aggregation_after_build"] is True
-    assert kwargs["run_tls_aggregation_after_build"] is False
-    assert kwargs["run_teacher_guided_repair_after_build"] is False
-    assert kwargs["teacher_guided_probe_matrix_junction_ids"] is None
-    assert kwargs["launch_netedit_after_build"] is False
-    assert kwargs["launch_sumo_gui_after_build"] is False
+    assert kwargs == {
+        "output_dir": str(tmp_path / "run" / "reference_matched"),
+        "bbox": args.bbox,
+        "profile": "reference_matched",
+        "source_osm_path": str(source),
+        "traffic_layers": None,
+        "reference_net_file": str(teacher),
+        "timeout_seconds": 45.0,
+    }
 
 
-def test_reference_matched_teacher_materialization_is_explicit_opt_in(tmp_path: Path) -> None:
+def test_reference_matched_teacher_materialization_is_rejected(tmp_path: Path) -> None:
     script = _load_script()
+    output_dir = tmp_path / "run"
+    output_dir.mkdir()
+    source = tmp_path / "source.osm.xml"
     teacher = tmp_path / "teacher.net.xml"
-    args = _args(materialize_teacher_candidates=True)
+    source.write_text("<osm/>", encoding="utf-8")
+    teacher.write_text("<net/>", encoding="utf-8")
 
-    kwargs = script._reference_matched_workflow_kwargs(
-        args,
-        output_dir=tmp_path / "run",
+    result = script._run_reference_matched(
+        _args(source_osm=source, materialize_teacher_candidates=True),
+        output_dir=output_dir,
         teacher_net=teacher,
-        netconvert_binary="netconvert-test",
-        sumo_binary="sumo-test",
+        binaries={"netconvert": "netconvert-test", "sumo": "sumo-test"},
+        workflow_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("audit-only cleanup must not materialize teacher candidates")
+        ),
     )
 
-    assert kwargs["run_teacher_guided_repair_after_build"] is True
-    assert kwargs["teacher_guided_probe_matrix_junction_ids"] == ["267517510"]
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
+    assert result == 1
+    assert report["status"] == "blocked"
+    assert report["candidate_net_file"] == ""
 
 
 def test_comparison_selector_does_not_claim_review_layer_is_promoted(tmp_path: Path) -> None:
@@ -113,17 +117,12 @@ def test_comparison_selector_does_not_claim_review_layer_is_promoted(tmp_path: P
     review_only.write_text("<net/>", encoding="utf-8")
 
     assert (
-        script._select_reference_matched_comparison_net(
-            {"reference_join_aggregation_variant_file": str(review_only)}
-        )
+        script._select_reference_matched_comparison_net({"reference_join_aggregation_variant_file": str(review_only)})
         == ""
     )
-    assert (
-        script._select_reference_matched_comparison_net(
-            {"reference_visual_detail_comparison_net_file": str(review_only)}
-        )
-        == str(review_only.resolve())
-    )
+    assert script._select_reference_matched_comparison_net(
+        {"reference_visual_detail_comparison_net_file": str(review_only)}
+    ) == str(review_only.resolve())
 
 
 def test_reference_matched_run_hash_binds_source_teacher_and_workflow_artifacts(
@@ -140,12 +139,12 @@ def test_reference_matched_run_hash_binds_source_teacher_and_workflow_artifacts(
     review_manifest = tmp_path / "review.manifest.json"
     reference_join_report = tmp_path / "reference-join.json"
     for path, payload in (
-        (source, "<osm version='0.6'/>") ,
-        (teacher, "<net version='1.20'/>") ,
-        (raw, "<net id='raw'/>") ,
-        (candidate, "<net id='candidate'/>") ,
-        (workflow_report, "{}") ,
-        (review_manifest, "{}") ,
+        (source, "<osm version='0.6'/>"),
+        (teacher, "<net version='1.20'/>"),
+        (raw, "<net id='raw'/>"),
+        (candidate, "<net id='candidate'/>"),
+        (workflow_report, "{}"),
+        (review_manifest, "{}"),
     ):
         path.write_text(payload, encoding="utf-8")
     reference_join_report.write_text(
@@ -231,14 +230,18 @@ def test_reference_matched_run_hash_binds_source_teacher_and_workflow_artifacts(
     )
 
     assert result == 0
-    assert captured["network_profile"] == "reference_matched"
+    assert captured == {
+        "output_dir": str(output_dir / "reference_matched"),
+        "bbox": "11.0,48.0,12.0,49.0",
+        "profile": "reference_matched",
+        "source_osm_path": str(source.resolve()),
+        "traffic_layers": None,
+        "reference_net_file": str(teacher),
+        "timeout_seconds": 45.0,
+    }
     assert _sha256(source) == source_sha
     assert _sha256(teacher) == teacher_sha
-    manifest = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    manifest = json.loads((output_dir / "ingolstadt_corridor_teacher_run.manifest.json").read_text(encoding="utf-8"))
     artifact_hashes = {Path(item["path"]).name: item["sha256"] for item in manifest["artifacts"]}
     assert artifact_hashes[source.name] == source_sha
     assert artifact_hashes[teacher.name] == teacher_sha
@@ -246,9 +249,7 @@ def test_reference_matched_run_hash_binds_source_teacher_and_workflow_artifacts(
     assert review_manifest.name in artifact_hashes
     assert reference_join_report.name in artifact_hashes
     assert "ingolstadt_teacher_action_contracts.json" in artifact_hashes
-    aggregate = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    aggregate = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert aggregate["runtime_audited_net_file"] == str(raw)
     assert aggregate["comparison_net_file"] == str(candidate.resolve())
     assert aggregate["candidate_net_file"] == ""
@@ -262,25 +263,19 @@ def test_reference_matched_run_hash_binds_source_teacher_and_workflow_artifacts(
         "bounded_conflict_core_join": 1,
         "source_identity_join_review": 1,
     }
-    action_contracts = json.loads(
-        (output_dir / "ingolstadt_teacher_action_contracts.json").read_text(encoding="utf-8")
-    )
+    action_contracts = json.loads((output_dir / "ingolstadt_teacher_action_contracts.json").read_text(encoding="utf-8"))
     provenance = action_contracts["input_provenance"]
     assert provenance["bbox"] == "11.0,48.0,12.0,49.0"
     assert provenance["artifacts"]["source_osm"]["sha256"] == source_sha
     assert provenance["artifacts"]["teacher_net"]["sha256"] == teacher_sha
-    assert provenance["artifacts"]["reference_join_audit"]["sha256"] == _sha256(
-        reference_join_report
-    )
+    assert provenance["artifacts"]["reference_join_audit"]["sha256"] == _sha256(reference_join_report)
     assert provenance["artifacts"]["comparison_net"]["sha256"] == _sha256(candidate)
     join_action = action_contracts["actions"][0]
     assert join_action["action_family"] == "source_identity_join_review"
     assert join_action["teacher_action"]["absorbed_source_node_ids"] == ["1", "2"]
     assert join_action["teacher_action"]["absorbed_internal_edge_ids"] == ["core"]
     assert join_action["teacher_action"]["retained_boundary_edge_ids"] == ["in", "out"]
-    assert join_action["counterexample_evidence"]["candidate_nodes_outside_teacher_core"] == [
-        "storage"
-    ]
+    assert join_action["counterexample_evidence"]["candidate_nodes_outside_teacher_core"] == ["storage"]
     assert join_action["transfer_gate_status"] == "blocked"
     clean_join_action = action_contracts["actions"][2]
     assert clean_join_action["action_family"] == "bounded_conflict_core_join"
@@ -319,9 +314,7 @@ def test_reference_matched_run_separates_successful_estimator_from_review_eviden
     )
 
     assert result == 0
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["status"] == "pass"
     assert report["execution_status"] == "pass"
     assert report["evidence_status"] == "review_required"
@@ -355,9 +348,7 @@ def test_reference_matched_mode_rejects_explicit_candidate(tmp_path: Path) -> No
 
     assert result == 1
     assert called is False
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["status"] == "blocked"
     assert report["claim_status"] == "construction-invalid"
 
@@ -393,9 +384,7 @@ def test_reference_matched_run_does_not_hide_blocked_runtime_audit(tmp_path: Pat
     )
 
     assert result == 1
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["status"] == "blocked"
     assert report["runtime_audit_status"] == "blocked"
 
@@ -429,9 +418,7 @@ def test_reference_matched_run_requires_inner_artifact_hash_gate(tmp_path: Path)
     )
 
     assert result == 1
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["execution_status"] == "blocked"
     assert report["artifact_hash_gate_status"] == "blocked"
     assert report["comparison_status"] == "review_ready"
@@ -471,9 +458,7 @@ def test_reference_matched_run_blocks_if_teacher_changes_during_workflow(tmp_pat
     )
 
     assert result == 1
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["input_parity"]["status"] == "blocked"
     assert report["input_parity"]["teacher_net"]["unchanged"] is False
 
@@ -507,8 +492,6 @@ def test_reference_matched_run_blocks_mismatched_reference_bbox(tmp_path: Path) 
     )
 
     assert result == 1
-    report = json.loads(
-        (output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8")
-    )
+    report = json.loads((output_dir / "ingolstadt_corridor_teacher_run.json").read_text(encoding="utf-8"))
     assert report["input_parity"]["status"] == "blocked"
     assert "bboxes are not identical" in report["input_parity"]["blockers"][0]

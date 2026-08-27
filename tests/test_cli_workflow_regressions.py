@@ -112,7 +112,17 @@ def test_manifest_workflow_calls_allowlisted_function(monkeypatch, tmp_path, cap
     from torii_sumo.legacy_tools import WORKFLOW_TOOLS
 
     request = tmp_path / "request.json"
-    request.write_text(json.dumps({"output_dir": "out", "bbox": "1,2,3,4"}), encoding="utf-8")
+    request.write_text(
+        json.dumps(
+            {
+                "output_dir": "out",
+                "bbox": "1,2,3,4",
+                "profile": "standard",
+                "traffic_layers": "passenger",
+            }
+        ),
+        encoding="utf-8",
+    )
     calls: list[dict[str, object]] = []
 
     def fake_workflow(**kwargs: object) -> dict[str, object]:
@@ -126,7 +136,14 @@ def test_manifest_workflow_calls_allowlisted_function(monkeypatch, tmp_path, cap
 
     assert exit_code == 0
     assert payload["status"] == "pass"
-    assert calls == [{"output_dir": "out", "bbox": "1,2,3,4"}]
+    assert calls == [
+        {
+            "output_dir": "out",
+            "bbox": "1,2,3,4",
+            "profile": "standard",
+            "traffic_layers": "passenger",
+        }
+    ]
 
 
 def test_manifest_workflow_rejects_non_object_json(tmp_path, capsys) -> None:
