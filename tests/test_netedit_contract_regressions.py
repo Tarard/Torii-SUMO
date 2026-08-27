@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from torii_sumo import cli
 from torii_sumo.server import create_server
@@ -59,7 +60,7 @@ def test_netedit_close_abort_does_not_require_screenshot_sha256(monkeypatch) -> 
     assert calls[0]["reason"] == "review_rejected"
 
 
-def test_netedit_close_abort_preserves_the_core_default_reason(monkeypatch) -> None:
+def test_netedit_close_abort_uses_the_mcp_default_reason(monkeypatch) -> None:
     calls: list[dict[str, object]] = []
 
     def fake_session(**kwargs: object) -> dict[str, object]:
@@ -70,7 +71,7 @@ def test_netedit_close_abort_preserves_the_core_default_reason(monkeypatch) -> N
 
     contract.torii_netedit_close("session-2", mode="abort")
 
-    assert "reason" not in calls[0]
+    assert calls[0]["reason"] == "caller_aborted"
 
 
 def test_netedit_close_does_not_claim_success_when_finalize_is_blocked(monkeypatch) -> None:
@@ -91,6 +92,31 @@ def test_netedit_close_does_not_claim_success_when_finalize_is_blocked(monkeypat
 
     assert result.status == "blocked"
     assert "blocked" in result.summary.lower()
+    assert "finalized and closed" not in result.summary.lower()
+
+
+@pytest.mark.parametrize("status", ["blocked", "fail"])
+def test_netedit_close_does_not_claim_success_when_finalize_audits_fail(
+    monkeypatch,
+    status: str,
+) -> None:
+    monkeypatch.setattr(
+        contract,
+        "sumo_netedit_session",
+        lambda **_: {
+            "status": status,
+            "operation_status": "pass",
+            "session_state": "finalized",
+        },
+    )
+
+    result = contract.torii_netedit_close(
+        "session-2",
+        mode="finalize",
+        expected_screenshot_sha256=SCREENSHOT_SHA256,
+    )
+
+    assert result.status == status
     assert "finalized and closed" not in result.summary.lower()
 
 

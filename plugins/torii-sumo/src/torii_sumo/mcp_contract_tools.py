@@ -622,19 +622,19 @@ def torii_netedit_close(
         ),
     ] = None,
     reason: Annotated[
-        str | None,
-        Field(description="Optional abort reason; defaults to caller_aborted."),
-    ] = None,
+        str,
+        Field(description="Abort reason; defaults to caller_aborted."),
+    ] = "caller_aborted",
 ) -> ToriiToolResult:
     kwargs: dict[str, Any] = {"operation": mode, "session_id": session_id}
-    if reason is not None:
-        kwargs["reason"] = reason
     if mode == "finalize":
         if not expected_screenshot_sha256:
             raise ValueError("expected_screenshot_sha256 is required when mode='finalize'")
         kwargs["expected_screenshot_sha256"] = expected_screenshot_sha256
+    else:
+        kwargs["reason"] = reason or "caller_aborted"
     raw = sumo_netedit_session(**kwargs)
-    operation_passed = raw.get("operation_status", raw.get("status")) == "pass"
+    operation_passed = raw.get("status") == "pass" and raw.get("operation_status", "pass") == "pass"
     if operation_passed:
         summary = (
             "Finalized and closed the NetEdit review session."

@@ -5,6 +5,7 @@ import json
 import pytest
 
 from torii_sumo import cli
+from torii_sumo import mcp_contract_tools as contract
 
 
 @pytest.mark.parametrize(
@@ -14,9 +15,19 @@ from torii_sumo import cli
         ("ready", 0),
         ("review_ready", 1),
         ("topology_ready", 1),
+        ("classified", 1),
+        ("fail", 3),
+        ("blocked", 3),
+        ("error", 3),
+        ("timeout", 3),
+        ("cleanup_failed", 3),
+        ("fetch_error", 3),
+        ("blocked_pending_review", 3),
+        ("invalid", 3),
+        (None, 3),
     ],
 )
-def test_workflow_statuses_use_non_error_exit_codes(status: str, expected: int) -> None:
+def test_cli_maps_domain_statuses_to_exit_codes(status: str | None, expected: int) -> None:
     assert cli._exit_code({"status": status}) == expected
 
 
@@ -103,3 +114,19 @@ def test_manifest_workflow_rejects_non_object_json(tmp_path, capsys) -> None:
     assert exit_code == 3
     assert payload["status"] == "error"
     assert "JSON object" in payload["error"]
+
+
+def test_cli_abort_preserves_the_core_default_reason(monkeypatch, capsys) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_session(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {"status": "pass", "operation": kwargs["operation"]}
+
+    monkeypatch.setattr(contract, "sumo_netedit_session", fake_session)
+
+    exit_code = cli.main(["netedit", "close", "session-2", "--mode", "abort", "--json"])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    assert calls[0]["reason"] == "caller_aborted"

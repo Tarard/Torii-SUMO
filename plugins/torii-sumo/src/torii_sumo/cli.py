@@ -109,18 +109,17 @@ WORKFLOW_TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
 
 def _exit_code(result: ToriiToolResult | dict[str, Any]) -> int:
     status = result.get("status") if isinstance(result, dict) else result.status
+    if not isinstance(status, str) or not status.strip():
+        return 3
+    status = status.strip().lower()
     if status in {"pass", "ok", "success", "complete", "ready"}:
         return 0
-    if status in {
-        "review_required",
-        "review_ready",
-        "topology_ready",
-        "partial",
-        "unknown",
-        "warn",
-    }:
-        return 1
-    return 3
+    if status in {"error", "fail", "failed", "invalid", "timeout"} or (
+        status.startswith("blocked")
+        or status.endswith(("_error", "-error", "_failed", "-failed"))
+    ):
+        return 3
+    return 1
 
 
 def _emit(result: ToriiToolResult | dict[str, Any], *, json_output: bool) -> int:

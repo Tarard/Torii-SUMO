@@ -78,6 +78,7 @@ def test_netedit_close_schema_requires_mode_and_describes_conditional_hash() -> 
 
     assert "mode" in close.inputSchema["required"]
     assert "finalize" in screenshot_hash["description"]
+    assert close.inputSchema["properties"]["reason"]["default"] == "caller_aborted"
     assert any(
         branch.get("pattern") == "^[0-9a-fA-F]{64}$"
         for branch in screenshot_hash["anyOf"]
