@@ -1775,9 +1775,6 @@ def _workflow_tls_aggregation_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_reference_matched_section(
     *,
     command_runner: Callable[..., Any],
@@ -1926,45 +1923,21 @@ def _workflow_reference_matched_section(
     non_controller_demotion_source_net_file = _WORKFLOW_UNSET
     non_controller_demotion_variant_file = _WORKFLOW_UNSET
     non_controller_demotion_variant_value = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_movement_rebuild_queue_report = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_reference_delta_report = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_reference_promotion_report = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_report = _WORKFLOW_UNSET
-    post_teacher_tls_connection_repair_sumo_load_report = _WORKFLOW_UNSET
-    post_teacher_tls_low_vehicle_control_reference_delta_report = _WORKFLOW_UNSET
-    post_teacher_tls_low_vehicle_control_reference_promotion_report = _WORKFLOW_UNSET
-    post_teacher_tls_non_controller_junction_demotion_reference_delta_report = _WORKFLOW_UNSET
-    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = _WORKFLOW_UNSET
-    post_teacher_tls_non_controller_junction_demotion_report = _WORKFLOW_UNSET
-    post_teacher_tls_non_controller_junction_demotion_sumo_load_report = _WORKFLOW_UNSET
-    post_teacher_tls_signal_grouping_reference_delta_report = _WORKFLOW_UNSET
-    post_teacher_tls_signal_grouping_reference_promotion_report = _WORKFLOW_UNSET
-    post_teacher_tls_signal_grouping_report = _WORKFLOW_UNSET
-    post_teacher_tls_signal_grouping_sumo_load_report = _WORKFLOW_UNSET
     preservation_status = _WORKFLOW_UNSET
     probe_matrix_junction_ids = _WORKFLOW_UNSET
     queue_file_value = _WORKFLOW_UNSET
     raw_tllogic_value = _WORKFLOW_UNSET
     raw_type_value = _WORKFLOW_UNSET
-    reference_join_aggregation_report = _WORKFLOW_UNSET
-    reference_join_audit_candidate_net_file = _WORKFLOW_UNSET
     reference_join_audit_is_structural_only = _WORKFLOW_UNSET
-    reference_join_audit_report = _WORKFLOW_UNSET
-    reference_join_post_teacher_audit_report = _WORKFLOW_UNSET
     repair_variant_file = _WORKFLOW_UNSET
     repair_variant_value = _WORKFLOW_UNSET
     restore_promotion_report = _WORKFLOW_UNSET
     restored_delta_report = _WORKFLOW_UNSET
     restored_followup_file = _WORKFLOW_UNSET
     restored_sumo_load_report = _WORKFLOW_UNSET
-    road_connection_topology_replay_report = _WORKFLOW_UNSET
     road_connection_topology_variant_file = _WORKFLOW_UNSET
-    road_connectivity_replay_report = _WORKFLOW_UNSET
     road_connectivity_seed_edge_ids = _WORKFLOW_UNSET
-    road_connectivity_seed_probe_report = _WORKFLOW_UNSET
     road_connectivity_split_alias_variant_file = _WORKFLOW_UNSET
-    road_connectivity_split_root_alias_repair_report = _WORKFLOW_UNSET
     selected_low_vehicle_candidate = _WORKFLOW_UNSET
     shared_candidate_value = _WORKFLOW_UNSET
     shared_controller_candidate_net_file = _WORKFLOW_UNSET
@@ -1974,26 +1947,10 @@ def _workflow_reference_matched_section(
     signal_grouping_source_net_file = _WORKFLOW_UNSET
     signal_grouping_variant_file = _WORKFLOW_UNSET
     signal_grouping_variant_value = _WORKFLOW_UNSET
-    teacher_guided_direct_replay_reference_delta_report = _WORKFLOW_UNSET
-    teacher_guided_direct_replay_reference_promotion_report = _WORKFLOW_UNSET
-    teacher_guided_direct_replay_report = _WORKFLOW_UNSET
-    teacher_guided_plain_export_report = _WORKFLOW_UNSET
     teacher_guided_queue_needed = _WORKFLOW_UNSET
-    teacher_guided_repair_best_variant_file = _WORKFLOW_UNSET
-    teacher_guided_repair_queue_report = _WORKFLOW_UNSET
-    teacher_guided_repair_reference_promotion_report = _WORKFLOW_UNSET
-    teacher_guided_repair_requires_reference_promotion = _WORKFLOW_UNSET
-    teacher_guided_repair_run_report = _WORKFLOW_UNSET
     teacher_guided_replay_source_net_file = _WORKFLOW_UNSET
     teacher_guided_scoped_tls_batch_pass_candidate_ids = _WORKFLOW_UNSET
-    teacher_guided_scoped_tls_cell_batch_report = _WORKFLOW_UNSET
-    teacher_guided_seed_report = _WORKFLOW_UNSET
     teacher_guided_seed_structural_only = _WORKFLOW_UNSET
-    tls_gap_destination_mapping_report = _WORKFLOW_UNSET
-    tls_repair_variant_reference_audit_report = _WORKFLOW_UNSET
-    tls_repair_variant_report = _WORKFLOW_UNSET
-    tls_repair_variant_semantic_report = _WORKFLOW_UNSET
-    tls_repair_variant_sumo_load_report = _WORKFLOW_UNSET
     trial_queue_report = _WORKFLOW_UNSET
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -3152,9 +3109,6 @@ def _workflow_reference_matched_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_teacher_guided_repair_section(
     *,
     command_runner: Callable[..., Any],
@@ -3207,16 +3161,6 @@ def _workflow_teacher_guided_repair_section(
     final_movement_candidate_delta_report = _WORKFLOW_UNSET
     final_movement_candidate_file = _WORKFLOW_UNSET
     final_movement_edge_map = _WORKFLOW_UNSET
-    final_movement_rebuild_best_variant_file = _WORKFLOW_UNSET
-    final_movement_rebuild_internal_regression_restore_promotion_report = _WORKFLOW_UNSET
-    final_movement_rebuild_internal_regression_restore_reference_delta_report = _WORKFLOW_UNSET
-    final_movement_rebuild_internal_regression_restore_report = _WORKFLOW_UNSET
-    final_movement_rebuild_internal_regression_restore_sumo_load_report = _WORKFLOW_UNSET
-    final_movement_rebuild_queue_report = _WORKFLOW_UNSET
-    final_movement_rebuild_reference_delta_report = _WORKFLOW_UNSET
-    final_movement_rebuild_reference_promotion_report = _WORKFLOW_UNSET
-    final_movement_rebuild_run_report = _WORKFLOW_UNSET
-    final_movement_rebuild_sumo_load_report = _WORKFLOW_UNSET
     final_movement_source_net_file = _WORKFLOW_UNSET
     iteration_label = _WORKFLOW_UNSET
     iteration_number = _WORKFLOW_UNSET
@@ -3466,9 +3410,6 @@ def _workflow_teacher_guided_repair_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_reference_comparison_section(
     *,
     command_runner: Callable[..., Any],
@@ -3513,18 +3454,8 @@ def _workflow_reference_comparison_section(
     reference_topology_audit_report = _WORKFLOW_UNSET
     reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
     corridor_baseline_delta_report = _WORKFLOW_UNSET
-    corridor_geometry_simplification_promotion_report = _WORKFLOW_UNSET
-    corridor_geometry_simplification_reference_delta_report = _WORKFLOW_UNSET
-    corridor_geometry_simplification_report = _WORKFLOW_UNSET
-    corridor_geometry_simplification_sumo_load_report = _WORKFLOW_UNSET
-    corridor_geometry_simplification_topology_report = _WORKFLOW_UNSET
     corridor_variant_file = _WORKFLOW_UNSET
     corridor_variant_value = _WORKFLOW_UNSET
-    reference_hierarchy_audit_report = _WORKFLOW_UNSET
-    reference_hierarchy_type_repair_audit_report = _WORKFLOW_UNSET
-    reference_hierarchy_type_repair_promotion_report = _WORKFLOW_UNSET
-    reference_hierarchy_type_repair_report = _WORKFLOW_UNSET
-    reference_hierarchy_type_repair_sumo_load_report = _WORKFLOW_UNSET
     type_repair_variant_file = _WORKFLOW_UNSET
     type_repair_variant_value = _WORKFLOW_UNSET
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
@@ -3750,9 +3681,6 @@ def _workflow_reference_comparison_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_scope_pruning_section(
     *,
     command_runner: Callable[..., Any],
@@ -3790,12 +3718,6 @@ def _workflow_scope_pruning_section(
     final_hierarchy_report = _WORKFLOW_UNSET
     final_scope_variant_file = _WORKFLOW_UNSET
     final_scope_variant_value = _WORKFLOW_UNSET
-    reference_scope_final_audit_report = _WORKFLOW_UNSET
-    reference_scope_final_post_prune_audit_report = _WORKFLOW_UNSET
-    reference_scope_final_promotion_report = _WORKFLOW_UNSET
-    reference_scope_final_pruning_report = _WORKFLOW_UNSET
-    reference_scope_final_sumo_load_report = _WORKFLOW_UNSET
-    reference_scope_pruning_report = _WORKFLOW_UNSET
     if (
         run_scope_pruning_after_build
         and str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -3906,9 +3828,6 @@ def _workflow_scope_pruning_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_reference_visual_detail_section(
     *,
     area_status: Any,
@@ -3943,9 +3862,6 @@ def _workflow_reference_visual_detail_section(
     reference_visual_detail_comparison_net_file = _WORKFLOW_UNSET
     reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
     reference_visual_detail_status = _WORKFLOW_UNSET
-    reference_visual_detail_build_report = _WORKFLOW_UNSET
-    reference_visual_detail_net_file = _WORKFLOW_UNSET
-    reference_visual_detail_service_permission_report = _WORKFLOW_UNSET
     visual_build_kwargs = _WORKFLOW_UNSET
     visual_source_osm_path = _WORKFLOW_UNSET
     visual_source_osm_value = _WORKFLOW_UNSET
@@ -4081,9 +3997,6 @@ def _workflow_reference_visual_detail_section(
     }
 
 
-_WORKFLOW_UNSET = object()
-
-
 def _workflow_reference_matched_gate_section(
     *,
     command_runner: Callable[..., Any],
@@ -4109,12 +4022,6 @@ def _workflow_reference_matched_gate_section(
 ) -> dict[str, Any]:
     reference_scope_candidate_layer = _WORKFLOW_UNSET
     reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
-    reference_scope_audit_report = _WORKFLOW_UNSET
-    reference_scope_candidate_net_file = _WORKFLOW_UNSET
-    reference_scope_post_prune_audit_report = _WORKFLOW_UNSET
-    reference_scope_pruning_promotion_report = _WORKFLOW_UNSET
-    reference_scope_pruning_report = _WORKFLOW_UNSET
-    reference_scope_pruning_sumo_load_report = _WORKFLOW_UNSET
     scope_variant_file = _WORKFLOW_UNSET
     scope_variant_value = _WORKFLOW_UNSET
     if (

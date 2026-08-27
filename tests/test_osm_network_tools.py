@@ -64,11 +64,14 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
 ) -> None:
     captured = {}
 
-    def fake_cleanup(**kwargs):
-        captured.update(kwargs)
+    def fake_cleanup(request):
+        captured.update(request.to_legacy_kwargs())
         return {"status": "pass", "claim_status": "diagnostic-demo"}
 
-    monkeypatch.setattr("torii_sumo.tools.osm_tools.run_osm_cleanup_workflow", fake_cleanup)
+    monkeypatch.setattr(
+        "torii_sumo.tools.osm_tools.run_osm_cleanup_workflow_with_request",
+        fake_cleanup,
+    )
     reference_net_file = tmp_path / "reference.net.xml"
     reference_net_file.write_text("<net/>", encoding="utf-8")
 
