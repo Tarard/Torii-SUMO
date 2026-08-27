@@ -21,6 +21,8 @@ README.zh-CN.md
 README.de.md
 ARCHITECTURE.md
 LICENSE
+LICENSE-CODE
+LICENSE-DOCS
 NOTICE.md
 CITATION.cff
 .zenodo.json
@@ -70,7 +72,7 @@ machine-local absolute paths
 - No private project acronyms, collaborator names, unpublished methods, or dataset identifiers.
 - No vendored third-party source from OSMnx, OSMNet, pyrosm, SUMO, osm-to-xodr, SUMO Lights, or Google Maps.
 - No claim that Google Maps is always the correct target; current versus historical map scope must be confirmed by the user.
-- No claim that full place-name geocoding, full city-scale OSM cleanup, controller generation, or controller-log inspection is already complete as an MCP tool.
+- Full OSM cleanup is CLI-only. MCP does not expose it as a tool. Place resolution must produce a bbox before cleanup.
 
 ## GitHub Topics
 

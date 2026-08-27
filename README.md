@@ -106,7 +106,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.
 
 | You want to... | Torii provides |
 |---|---|
-| Build and audit a SUMO network from OSM | Full cleanup workflow with Connection Mode, TLS reality, routeability, and review HTML |
+| Build and audit a SUMO network from OSM | CLI cleanup with fixed standard or reference-matched audit profiles |
 | Audit a signal-control experiment | Controller identity, paired demand, teleport/collision check, 4-class claim label |
 | Reconstruct a digital-twin corridor | W0–W5 executable plan using official MAP, OCIT, counts, and detector data |
 | Audit lane-level connections | Code-native Connection Mode: fromLane→toLane→via, request/foes, lane order, TLS binding |
@@ -130,7 +130,7 @@ Start a new Codex session.  Requires Python 3.11+ and Eclipse SUMO
 ## Interfaces
 
 The MCP server starts with the 10-tool `default` profile. Use `legacy` only
-when an older integration requires one of the 74 historical tool names.
+when an older integration requires one of the 73 historical tool names.
 
 The default network audit has two profiles:
 
@@ -166,6 +166,13 @@ For a long workflow, prepare its JSON arguments and run:
 torii workflow sumo_osm_cleanup_workflow request.json --json
 ```
 
+OSM cleanup is CLI-only and is not an MCP tool. Resolve a place to a bbox
+first. The request has seven fields: `output_dir`, `bbox`, `profile`,
+`source_osm_path`, `traffic_layers`, `reference_net_file`, and
+`timeout_seconds`. Use `traffic_layers` with `profile=standard`. Use a
+`reference_net_file` with `profile=reference_matched`; this profile audits
+differences and does not apply repairs.
+
 ## Repository Structure
 
 ```text
@@ -194,9 +201,11 @@ tests/                    Unit, contract, integration, and regression tests
 
 ## License
 
-Source code: PolyForm Noncommercial 1.0.0.  Skills, docs, and examples:
-CC BY-NC 4.0.  Commercial use requires written permission.  See
-[`LICENSE`](LICENSE).
+Source code uses [PolyForm Noncommercial 1.0.0](LICENSE-CODE).
+Repository-authored skills, documentation, checklists, examples, manifests,
+schemas, protocol text, prompts, and visual assets use
+[CC BY-NC 4.0](LICENSE-DOCS). Commercial use is not licensed by these terms.
+See the [scope notice](LICENSE).
 
 Eclipse SUMO is a trademark of the Eclipse Foundation.  OSM data
 © OpenStreetMap contributors (ODbL).  Earlier releases archived at

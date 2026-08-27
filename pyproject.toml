@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "1.1.0"
 description = "Torii agent plugin for evidence-aware Eclipse SUMO, OSM cleanup, and public-data corridor digital twins."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
+license-files = ["LICENSE", "LICENSE-CODE", "LICENSE-DOCS", "NOTICE.md"]
 authors = [
   { name = "Torii contributors" }
 ]

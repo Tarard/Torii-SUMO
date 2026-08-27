@@ -1,14 +1,14 @@
 {
   "title": "Torii: Task-Oriented Road Infrastructure Intelligence",
   "upload_type": "software",
-  "description": "An agent plugin for SUMO that bundles a SUMO expert skill with local MCP tools for OSM-to-SUMO network construction, TLS review, routeability checks, evidence bundles, and feedback-driven simulation repair. Torii treats bad metrics, warnings, teleports, disconnected routes, and map disagreements as feedback about the model rather than raw optimization targets.",
+  "description": "An agent plugin for SUMO that bundles a SUMO expert skill with local MCP tools for OSM-to-SUMO network construction, TLS review, routeability checks, evidence bundles, and feedback-driven simulation repair. Torii treats bad metrics, warnings, teleports, disconnected routes, and map disagreements as feedback about the model rather than raw optimization targets. Source code uses PolyForm Noncommercial 1.0.0. Repository-authored skills, documentation, checklists, examples, manifests, schemas, protocol text, prompts, and visual assets use CC BY-NC 4.0.",
   "creators": [
     {
       "name": "Tarard"
     }
   ],
   "access_right": "open",
-  "license": "MIT",
+  "license": "polyform-noncommercial-1.0.0",
   "keywords": [
     "Eclipse SUMO",
     "TraCI",

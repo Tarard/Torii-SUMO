@@ -41,6 +41,13 @@ Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router
 
 Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
 
+Der vollstaendige OSM-Cleanup laeuft nur ueber die CLI und ist kein MCP Tool.
+Zuerst muss ein Ortsname in eine bbox aufgeloest werden. Der Request hat sieben
+Felder: `output_dir`, `bbox`, `profile`, `source_osm_path`, `traffic_layers`,
+`reference_net_file` und `timeout_seconds`. `standard` verwendet
+`traffic_layers`. `reference_matched` verwendet `reference_net_file`, prueft
+nur Unterschiede und fuehrt keine Reparatur aus.
+
 ## Example
 
 Mit diesem Prompt kann Torii getestet werden:
@@ -95,7 +102,7 @@ Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als 
 
 ## License and Notices
 
-Quelltext ist unter PolyForm Noncommercial 1.0.0 lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY-NC 4.0 lizenziert. Kommerzielle Nutzung erfordert eine separate schriftliche Erlaubnis. Beide Bereiche stehen in [`LICENSE`](LICENSE).
+Quelltext ist unter [PolyForm Noncommercial 1.0.0](LICENSE-CODE) lizenziert. Vom Projekt erstellte Skill-Dateien, Dokumentation, Checklisten, Beispiele, Manifeste, Schemata, Protokolltexte, Prompts und visuelle Inhalte sind unter [CC BY-NC 4.0](LICENSE-DOCS) lizenziert. Diese Bedingungen erlauben keine kommerzielle Nutzung. Den Geltungsbereich beschreibt [`LICENSE`](LICENSE).
 
 Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
 

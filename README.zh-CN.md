@@ -39,6 +39,11 @@ Torii 有两层：
 
 当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、代码原生的全网及原网到候选 Connection Mode 差分审计、严格的标准三/四叉口 NEMA 相位绑定候选、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、overlapping top-level junction audit、reference join audit、junction aggregation review variant 和可选的 NetEdit 打开证据。
 
+完整 OSM 清洗只通过 CLI 运行，不注册为 MCP tool。先把地名解析成 bbox，再向
+`sumo_osm_cleanup_workflow` 传入七个字段：`output_dir`、`bbox`、`profile`、
+`source_osm_path`、`traffic_layers`、`reference_net_file` 和 `timeout_seconds`。
+`standard` 使用 `traffic_layers`。`reference_matched` 使用 `reference_net_file`，只审计差异，不自动修复。
+
 ### 当前走廊级验收边界
 
 研究状态（2026-07-14）：Stage 1-M 已达到 **Machine REVIEW_READY**。30 个盲化 held-out 走廊包、完整机器 witness census、确定性抽样和 provenance 已冻结，可以进入真实人工验证。这不等于 Stage 1 退出、自动修复获得认证，也不证明任意 OSM 路网已经达到专家 NetEdit 质量。详见 [Stage 1-M 机器证据](docs/stage1-machine-review-ready-plan.md)。
@@ -178,11 +183,10 @@ reference-cluster 匹配、聚合候选估计和差分门禁，可继续使用�
 python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py --workflow-mode reference-matched
 ```
 
-该模式直接委托 Torii 已有的 `reference_matched` OSM 清洗工作流，不另造第二套聚类
-算法；原始 OSM、聚合候选、teacher replay 候选和人工参考网会分别保存并绑定哈希。
-默认只运行 estimator；teacher replay 和昂贵的候选物化必须显式传入
-`--materialize-teacher-candidates`。该 estimator 路径会关闭全网 TLS 聚合，避免在单个
-冲突核通过保真与几何门禁前污染 OSM 比较基线。
+该模式通过 CLI 委托 `reference_matched` OSM 清洗审计，不另造第二套聚类方法。
+它保存原始 OSM、审计结果和人工参考网，并绑定文件哈希。该模式不自动聚合、重放
+teacher 修改或物化候选。`--materialize-teacher-candidates` 已移除；后续修改必须使用
+独立的审核步骤。
 
 它会下载当前 OSM bbox，构建 raw visual-detail 路网，只应用边界严格、证据充分的结构修复，然后运行 SUMO load、completion-aware routeability，并把 junction `267517510` 与 TUM 人工清洗单元对照。结构修复始终写入独立候选：本次只从一条已经是无控制状态的人行内部连接删除了 1 个陈旧 TLS identity，58 个内嵌 `tlLogic` 和 12 个铁路隐式控制器保持不变，源文件哈希确认未变，同时生成逐项回滚计划和仅用于显示的 review `additional.xml`。
 
@@ -244,7 +248,7 @@ Torii 可以构建和审计 SUMO artifacts，但不会认证模型一定正确�
 
 ## License and Notices
 
-源代码使用 PolyForm Noncommercial 1.0.0。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY-NC 4.0。商业使用需要另行取得书面许可。两个授权范围都写在 [`LICENSE`](LICENSE)。
+源代码使用 [PolyForm Noncommercial 1.0.0](LICENSE-CODE)。仓库原创的 Skill 文件、文档、检查清单、示例、清单文件、模式、协议文本、提示词和视觉素材使用 [CC BY-NC 4.0](LICENSE-DOCS)。这些条款不许可商业使用。适用范围见 [`LICENSE`](LICENSE)。
 
 Eclipse SUMO 是 Eclipse Foundation 的商标。OSM demo 中的地图数据 © OpenStreetMap contributors，并基于 Open Database License (ODbL) 提供。
 
