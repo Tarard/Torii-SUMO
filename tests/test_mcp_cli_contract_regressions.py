@@ -7,7 +7,7 @@ import pytest
 
 from torii_sumo import cli
 from torii_sumo.server import create_server
-from torii_sumo.tools import mcp_contract_tools as contracts
+from torii_sumo import mcp_contract_tools as contracts
 
 
 DEFAULT_TOOL_NAMES = [

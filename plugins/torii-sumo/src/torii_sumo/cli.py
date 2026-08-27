@@ -18,7 +18,7 @@ import anyio
 
 from . import server as server_module
 from .server import create_server
-from .tools.mcp_contract_tools import (
+from .mcp_contract_tools import (
     ToriiToolResult,
     torii_config_inspect,
     torii_demand_audit,

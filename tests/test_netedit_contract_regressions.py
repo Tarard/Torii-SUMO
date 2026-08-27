@@ -4,7 +4,7 @@ import anyio
 
 from torii_sumo import cli
 from torii_sumo.server import create_server
-from torii_sumo.tools import mcp_contract_tools as contract
+from torii_sumo import mcp_contract_tools as contract
 
 
 SCREENSHOT_SHA256 = "a" * 64
