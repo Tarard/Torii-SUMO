@@ -45,7 +45,8 @@ flowchart TD
 | Layer | Role |
 |---|---|
 | **Expert skills** | Classify tasks, select checks, state claim boundaries |
-| **MCP tools** (74 registered) | Run SUMO, TraCI, NetEdit, OSM conversion, audits, and evidence export |
+| **MCP tools** | The default profile exposes 10 focused tools for checks, classification, comparison, and review |
+| **CLI** | Run routeability, long workflows, batch work, and specialized legacy capabilities |
 
 ## Hamburg Corridor Digital Twin
 
@@ -112,7 +113,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.
 | Compare two network versions | Exact semantic diff, Connection Mode regression, outside-scope preservation |
 | Bind standard NEMA phases | Four-way (1–8) and three-way candidates; never batch-promotes |
 
-[All 74 MCP tools](docs/mcp-tool-catalog.md) —
+[MCP profiles and legacy tool catalog](docs/mcp-tool-catalog.md) —
 [Example workflows](examples/01_signal_control_audit/task.md)
 
 ## Installation
@@ -126,6 +127,32 @@ Start a new Codex session.  Requires Python 3.11+ and Eclipse SUMO
 (`sumo`, `netconvert`, `netedit`).  See the
 [installation guide](docs/codex-plugin-install.md).
 
+## Interfaces
+
+The MCP server starts with the 10-tool `default` profile. Use `legacy` only
+when an older integration requires one of the 74 historical tool names.
+
+The default network audit has two profiles:
+
+- `quick`: topology only.
+- `standard`: topology, Connection Mode, and overlapping-junction checks.
+
+Neither profile runs SUMO routeability. Run that longer check through the CLI:
+
+```powershell
+torii network routeability <network.net.xml> <output-dir> --json
+```
+
+Run an allowlisted long, batch, or specialized legacy capability from a JSON
+request file:
+
+```powershell
+torii workflow <tool> <request.json> --json
+```
+
+NetEdit `observe` writes a screenshot and report. Close a session with
+`--mode abort`, or use `--mode finalize` with the latest screenshot SHA-256.
+
 ## Quick Start
 
 ```text
@@ -133,16 +160,16 @@ Use Torii to build a passenger-road SUMO network from this OSM area.
 Check connectivity, audit traffic signals, test routeability, and save a review package.
 ```
 
-Or start with the router:
+For a long workflow, prepare its JSON arguments and run:
 
-```text
-torii_auto_workflow
+```powershell
+torii workflow sumo_osm_cleanup_workflow request.json --json
 ```
 
 ## Repository Structure
 
 ```text
-plugins/torii-sumo/       Codex plugin and MCP server (74 tools)
+plugins/torii-sumo/       Codex plugin, 10-tool default MCP, and legacy profile
   src/torii_sumo/
     core/                 Domain logic
     tools/                MCP adapters
@@ -159,7 +186,7 @@ tests/                    Unit, contract, integration, and regression tests
 
 - [Architecture](ARCHITECTURE.md) — router, planner, executor, reviewer, promotion rules
 - [Repository Guide](docs/repository-guide.md) — code, documentation, and evidence boundaries
-- [MCP Tool Catalog](docs/mcp-tool-catalog.md) — all 74 registered tools
+- [MCP Tool Catalog](docs/mcp-tool-catalog.md) — default, NetEdit, and legacy profiles
 - [Stage 1-M Evidence](docs/stage1-machine-review-ready-plan.md) — 30-corridor blind review, 102,398 atomic witnesses
 - [Research Status](docs/torii-corridor-human-modeling-implementation-status.md)
 - [Hamburg Evidence & Log](docs/hamburg-digital-twin-evidence-summary.json)

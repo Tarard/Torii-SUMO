@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = PLUGIN_ROOT.parent
+REPO_ROOT = PLUGIN_ROOT.parents[1]
 SRC_ROOT = PLUGIN_ROOT / "src"
 
 
@@ -51,7 +51,7 @@ def _check() -> int:
             return 2
         print("torii MCP bootstrap: installed-package fallback is available")
         return 0
-    print("torii MCP bootstrap: uv run --frozen " + " ".join(command[2:]))
+    print("torii MCP bootstrap: " + subprocess.list2cmdline(command))
     return 0
 
 

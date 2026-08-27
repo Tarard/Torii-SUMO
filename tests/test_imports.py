@@ -98,7 +98,7 @@ def test_server_registers_expected_tool_names() -> None:
     from torii_sumo.server import create_server
 
     async def _list_tool_names() -> list[str]:
-        server = create_server()
+        server = create_server("legacy")
         tools = await server.list_tools()
         return sorted(tool.name for tool in tools)
 
@@ -109,7 +109,7 @@ def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
     from torii_sumo.server import create_server
 
     async def _tool_descriptions() -> dict[str, str]:
-        tools = await create_server().list_tools()
+        tools = await create_server("legacy").list_tools()
         return {tool.name: tool.description or "" for tool in tools}
 
     descriptions = anyio.run(_tool_descriptions)
@@ -127,7 +127,7 @@ def test_server_smoke_tool_reports_blocked_without_real_sumo(tmp_path) -> None:
     from torii_sumo.server import create_server
 
     async def _call_minimal_smoke() -> dict[str, object]:
-        server = create_server()
+        server = create_server("legacy")
         _content, structured = await server.call_tool(
             "sumo_run_minimal_smoke",
             {
@@ -150,7 +150,7 @@ def test_server_netedit_session_exposes_constrained_operation_schema() -> None:
     from torii_sumo.server import create_server
 
     async def _schema() -> dict[str, object]:
-        tools = await create_server().list_tools()
+        tools = await create_server("legacy").list_tools()
         tool = next(item for item in tools if item.name == "sumo_netedit_session")
         return tool.inputSchema
 

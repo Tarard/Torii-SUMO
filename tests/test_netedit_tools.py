@@ -140,7 +140,7 @@ def test_fastmcp_schema_constrains_netedit_operation_action_and_object_type() ->
     from torii_sumo.server import create_server
 
     async def schema() -> dict[str, object]:
-        registered = await create_server().list_tools()
+        registered = await create_server("legacy").list_tools()
         return next(tool.inputSchema for tool in registered if tool.name == "sumo_netedit_session")
 
     properties = anyio.run(schema)["properties"]

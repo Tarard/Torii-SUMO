@@ -97,7 +97,7 @@ from .tools.mcp_contract_tools import (
     torii_netedit_observe,
     torii_netedit_open,
     torii_network_audit,
-    torii_network_compare,
+    torii_network_compare_mcp,
     torii_place_resolve,
     torii_preflight,
     torii_review_create,
@@ -109,7 +109,7 @@ from .tools.netedit_tools import sumo_netedit_session
 from .tools.workflow_tools import torii_auto_workflow
 
 
-DEFAULT_MCP_PROFILE = "legacy"
+DEFAULT_MCP_PROFILE = "default"
 SUPPORTED_MCP_PROFILES = ("legacy", "default", "netedit")
 
 
@@ -130,10 +130,10 @@ def _register_tool(
     name: str,
     title: str,
     description: str,
-    read_only: bool | None = None,
-    destructive: bool | None = None,
-    idempotent: bool | None = None,
-    open_world: bool | None = None,
+    read_only: bool,
+    destructive: bool,
+    idempotent: bool,
+    open_world: bool,
 ) -> None:
     server.add_tool(
         function,
@@ -160,6 +160,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Check Torii environment",
         description="Check Python, SUMO, and the Torii environment before network, demand, or replay work. Use this first.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=False,
     )
     _register_tool(
@@ -169,6 +171,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Inspect a SUMO config pair",
         description="Inspect a baseline and variant .sumocfg pair for missing inputs and shared outputs before comparing two runs.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=False,
     )
     _register_tool(
@@ -178,6 +182,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Compare two SUMO runs",
         description="Compare baseline and variant SUMO summary/tripinfo outputs and return comparison gates.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=False,
     )
     _register_tool(
@@ -187,6 +193,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Resolve an OSM place",
         description="Resolve a place name to a candidate OSM area and bbox. The OSM endpoint is fixed by Torii.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=True,
     )
     _register_tool(
@@ -196,6 +204,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Classify an OSM intersection",
         description="Read-only classification of one local OSM intersection into a hash-bound finite composable archetype. It does not write files or mutate networks.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=False,
     )
     _register_tool(
@@ -205,6 +215,8 @@ def _register_default_tools(server: FastMCP) -> None:
         title="Classify a signal device inventory",
         description="Read-only classification of one OCIT-C supply snapshot into a hash-bound signal device inventory. It does not bind traffic lights.",
         read_only=True,
+        destructive=False,
+        idempotent=True,
         open_world=False,
     )
     _register_tool(
@@ -212,17 +224,21 @@ def _register_default_tools(server: FastMCP) -> None:
         torii_network_audit,
         name="torii.network.audit",
         title="Audit one SUMO network",
-        description="Audit one local SUMO network with profile=quick, standard, or promotion. Writes only separate audit artifacts and never overwrites the source network.",
+        description="Audit one local SUMO network with a quick topology check or the standard topology, Connection Mode, and overlap checks. Writes only separate audit artifacts and never runs SUMO.",
+        read_only=False,
         destructive=True,
+        idempotent=False,
         open_world=False,
     )
     _register_tool(
         server,
-        torii_network_compare,
+        torii_network_compare_mcp,
         name="torii.network.compare",
         title="Compare source and candidate networks",
         description="Compare a source and candidate SUMO network with a differential audit. Writes only separate review artifacts.",
+        read_only=False,
         destructive=True,
+        idempotent=False,
         open_world=False,
     )
     _register_tool(
@@ -231,7 +247,9 @@ def _register_default_tools(server: FastMCP) -> None:
         name="torii.demand.audit",
         title="Audit detector counts",
         description="Compare expected detector counts against SUMO E1 detector output and report detector-fit metrics.",
+        read_only=False,
         destructive=True,
+        idempotent=False,
         open_world=False,
     )
     _register_tool(
@@ -240,7 +258,9 @@ def _register_default_tools(server: FastMCP) -> None:
         name="torii.review.create",
         title="Create a network review page",
         description="Create a human-review HTML page for a SUMO network and available audit artifacts without overwriting source files.",
+        read_only=False,
         destructive=True,
+        idempotent=False,
         open_world=False,
     )
 
@@ -252,6 +272,7 @@ def _register_netedit_tools(server: FastMCP) -> None:
         name="torii.netedit.open",
         title="Open a NetEdit review session",
         description="Open the single hash-bound NetEdit diagnostic session. Requires immutable source/candidate/output paths and the source SHA-256.",
+        read_only=False,
         destructive=False,
         idempotent=False,
         open_world=False,
@@ -261,9 +282,10 @@ def _register_netedit_tools(server: FastMCP) -> None:
         torii_netedit_observe,
         name="torii.netedit.observe",
         title="Observe a NetEdit review session",
-        description="Read the current viewport and persisted XML state from the active NetEdit session. This tool is read-only.",
-        read_only=True,
-        idempotent=True,
+        description="Capture the current viewport and read persisted XML state from the active NetEdit session. Each call writes a new screenshot and session report.",
+        read_only=False,
+        destructive=False,
+        idempotent=False,
         open_world=False,
     )
     _register_tool(
@@ -272,6 +294,7 @@ def _register_netedit_tools(server: FastMCP) -> None:
         name="torii.netedit.act",
         title="Act in a NetEdit review session",
         description="Execute exactly one whitelisted NetEdit mouse or shortcut action after the latest screenshot SHA. Requires confirmation.",
+        read_only=False,
         destructive=True,
         idempotent=False,
         open_world=False,
@@ -281,7 +304,8 @@ def _register_netedit_tools(server: FastMCP) -> None:
         torii_netedit_close,
         name="torii.netedit.close",
         title="Close a NetEdit review session",
-        description="Finalize the active NetEdit session, run SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits, and close the session. Promotion remains blocked.",
+        description="Finalize or abort the active NetEdit session. Finalize requires the latest screenshot SHA and runs the closing audits. Abort closes without saving. Promotion remains blocked.",
+        read_only=False,
         destructive=True,
         idempotent=False,
         open_world=False,

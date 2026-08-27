@@ -9,7 +9,7 @@ functions as the legacy MCP tools and the ``torii`` CLI.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,16 +23,20 @@ from .netedit_tools import (
     sumo_netedit_session,
 )
 from .osm_tools import (
+    sumo_network_connection_mode_audit,
     sumo_network_connection_mode_regression_audit,
+    sumo_network_overlapping_junction_audit,
     sumo_network_review_html,
-    sumo_network_routeability_audit,
     sumo_network_topology_audit,
     sumo_osm_resolve_place,
 )
 from .signal_tools import sumo_signal_device_profile_classify
 
-NetworkAuditProfile = Literal["quick", "standard", "promotion"]
-NetworkCompareProfile = Literal["standard", "promotion"]
+NetworkAuditProfile = Literal["quick", "standard"]
+NetworkCompareProfile = Literal["standard"]
+NeteditCloseMode = Literal["finalize", "abort"]
+TrafficSide = Literal["left", "right"]
+Sha256 = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{64}$")]
 
 
 class ToriiArtifact(BaseModel):
@@ -105,8 +109,14 @@ def torii_preflight() -> ToriiToolResult:
 
 
 def torii_config_inspect(
-    baseline_config: str,
-    variant_config: str,
+    baseline_config: Annotated[
+        str,
+        Field(description="Path to the baseline .sumocfg file; Torii does not modify it."),
+    ],
+    variant_config: Annotated[
+        str,
+        Field(description="Path to the variant .sumocfg file; Torii does not modify it."),
+    ],
 ) -> ToriiToolResult:
     raw = sumo_config_pair_preflight(
         baseline_config=baseline_config,
@@ -124,10 +134,22 @@ def torii_config_inspect(
 
 
 def torii_run_compare(
-    baseline_summary: str | None = None,
-    baseline_tripinfo: str | None = None,
-    variant_summary: str | None = None,
-    variant_tripinfo: str | None = None,
+    baseline_summary: Annotated[
+        str | None,
+        Field(description="Optional baseline summary.xml path."),
+    ] = None,
+    baseline_tripinfo: Annotated[
+        str | None,
+        Field(description="Optional baseline tripinfo.xml path."),
+    ] = None,
+    variant_summary: Annotated[
+        str | None,
+        Field(description="Optional variant summary.xml path."),
+    ] = None,
+    variant_tripinfo: Annotated[
+        str | None,
+        Field(description="Optional variant tripinfo.xml path."),
+    ] = None,
 ) -> ToriiToolResult:
     raw = sumo_compare_outputs(
         baseline_summary=baseline_summary,
@@ -142,7 +164,10 @@ def torii_run_compare(
     )
 
 
-def torii_place_resolve(place_name: str, limit: int = 1) -> ToriiToolResult:
+def torii_place_resolve(
+    place_name: Annotated[str, Field(description="Place name to resolve through OSM Nominatim.")],
+    limit: Annotated[int, Field(ge=1, description="Maximum candidate areas to return.")] = 1,
+) -> ToriiToolResult:
     raw = sumo_osm_resolve_place(
         place_name=place_name,
         limit=limit,
@@ -157,10 +182,16 @@ def torii_place_resolve(place_name: str, limit: int = 1) -> ToriiToolResult:
 
 
 def torii_intersection_classify(
-    osm_file: str,
-    seed_osm_node_id: str,
-    traffic_side: str = "right",
-    road_network_evidence_file: str | None = None,
+    osm_file: Annotated[str, Field(description="Path to the immutable local OSM XML input.")],
+    seed_osm_node_id: Annotated[str, Field(description="OSM node ID at the intersection center.")],
+    traffic_side: Annotated[
+        TrafficSide,
+        Field(description="Traffic side used to interpret lane order."),
+    ] = "right",
+    road_network_evidence_file: Annotated[
+        str | None,
+        Field(description="Optional path to a reviewed road-network evidence JSON file."),
+    ] = None,
 ) -> ToriiToolResult:
     raw = sumo_intersection_archetype_classify(
         osm_file=osm_file,
@@ -176,8 +207,11 @@ def torii_intersection_classify(
 
 
 def torii_signal_classify(
-    ocit_file: str,
-    expected_node_id: str | None = None,
+    ocit_file: Annotated[str, Field(description="Path to the immutable OCIT-C supply file.")],
+    expected_node_id: Annotated[
+        str | None,
+        Field(description="Optional controller node ID that the supply must contain."),
+    ] = None,
 ) -> ToriiToolResult:
     raw = sumo_signal_device_profile_classify(
         ocit_file=ocit_file,
@@ -191,75 +225,102 @@ def torii_signal_classify(
 
 
 def torii_network_audit(
-    net_file: str,
-    output_dir: str,
-    profile: NetworkAuditProfile = "standard",
-    prefix: str = "network_audit",
+    net_file: Annotated[str, Field(description="Path to the local SUMO .net.xml input.")],
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where audit reports are created or replaced."),
+    ],
+    profile: Annotated[
+        NetworkAuditProfile,
+        Field(
+            description=(
+                "quick runs topology only; standard runs topology, Connection Mode, "
+                "and overlap checks. Neither runs SUMO routeability."
+            )
+        ),
+    ] = "standard",
+    prefix: Annotated[str, Field(description="Filename prefix for generated audit reports.")] = (
+        "network_audit"
+    ),
 ) -> ToriiToolResult:
+    if profile not in {"quick", "standard"}:
+        raise ValueError("network audit profile must be quick or standard")
+    topology = sumo_network_topology_audit(
+        net_file=net_file,
+        output_dir=output_dir,
+        prefix=f"{prefix}_topology",
+    )
     if profile == "quick":
-        raw = sumo_network_topology_audit(
-            net_file=net_file,
-            output_dir=output_dir,
-            prefix=f"{prefix}_topology",
-        )
+        raw = topology
         summary = "Quick network topology audit completed."
-    elif profile == "standard":
-        raw = sumo_network_routeability_audit(
-            net_file=net_file,
-            output_dir=output_dir,
-            prefix=f"{prefix}_routeability",
-        )
-        summary = "Standard network routeability audit completed."
     else:
-        topology = sumo_network_topology_audit(
+        connection = sumo_network_connection_mode_audit(
             net_file=net_file,
             output_dir=output_dir,
-            prefix=f"{prefix}_topology",
+            prefix=f"{prefix}_connection",
         )
-        routeability = sumo_network_routeability_audit(
+        overlap = sumo_network_overlapping_junction_audit(
             net_file=net_file,
             output_dir=output_dir,
-            prefix=f"{prefix}_routeability",
+            prefix=f"{prefix}_overlap",
+        )
+        existing_overlap_artifacts = overlap.get("artifacts")
+        overlap_artifacts = (
+            list(existing_overlap_artifacts)
+            if isinstance(existing_overlap_artifacts, list)
+            else []
+        )
+        for field, role, media_type in (
+            ("groups_file", "overlapping-junction-groups", "text/csv"),
+            ("summary_file", "overlapping-junction-audit", "application/json"),
+        ):
+            if isinstance(overlap.get(field), str):
+                overlap_artifacts.append(
+                    {
+                        "role": role,
+                        "path": overlap[field],
+                        "media_type": media_type,
+                    }
+                )
+        overlap_groups = overlap.get("overlapping_junction_groups")
+        if not isinstance(overlap_groups, list):
+            overlap_groups = []
+        overlap = {**overlap, "artifacts": overlap_artifacts}
+        if overlap.get("status") == "pass" and overlap_groups:
+            overlap["status"] = "review_required"
+            overlap["findings"] = overlap_groups
+        reports = (topology, connection, overlap)
+        statuses = [str(report.get("status") or "unknown") for report in reports]
+        if "fail" in statuses:
+            status = "fail"
+        elif "blocked" in statuses:
+            status = "blocked"
+        elif all(item == "pass" for item in statuses):
+            status = "pass"
+        else:
+            status = "review_required"
+        claim_report = next(
+            (report for report in reports if report.get("status") == status),
+            next((report for report in reports if report.get("status") != "pass"), topology),
         )
         raw = {
-            "status": (
-                "pass"
-                if topology.get("status") == "pass" and routeability.get("status") == "pass"
-                else "review_required"
-            ),
-            "claim_status": (
-                topology.get("claim_status")
-                if topology.get("status") != "pass"
-                else routeability.get("claim_status")
-            ),
+            "status": status,
+            "claim_status": claim_report.get("claim_status"),
             "findings": [
-                *(
-                    topology.get("findings")
-                    if isinstance(topology.get("findings"), list)
-                    else []
-                ),
-                *(
-                    routeability.get("findings")
-                    if isinstance(routeability.get("findings"), list)
-                    else []
-                ),
+                finding
+                for report in reports
+                for finding in (report.get("findings") if isinstance(report.get("findings"), list) else [])
             ],
             "artifacts": [
-                *(
-                    topology.get("artifacts")
-                    if isinstance(topology.get("artifacts"), list)
-                    else []
-                ),
-                *(
-                    routeability.get("artifacts")
-                    if isinstance(routeability.get("artifacts"), list)
-                    else []
-                ),
+                artifact
+                for report in reports
+                for artifact in (report.get("artifacts") if isinstance(report.get("artifacts"), list) else [])
             ],
             "topology": topology,
-            "routeability": routeability,
+            "connection_mode": connection,
+            "overlap": overlap,
         }
-        summary = "Promotion network audit completed."
+        summary = "Standard network audit completed without running SUMO."
     return _result(
         raw,
         summary=summary,
@@ -268,14 +329,26 @@ def torii_network_audit(
 
 
 def torii_network_compare(
-    source_net_file: str,
-    candidate_net_file: str,
-    output_dir: str,
+    source_net_file: Annotated[
+        str,
+        Field(description="Path to the immutable source SUMO .net.xml baseline."),
+    ],
+    candidate_net_file: Annotated[
+        str,
+        Field(description="Path to the candidate SUMO .net.xml to compare against the source."),
+    ],
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where comparison reports are created or replaced."),
+    ],
     profile: NetworkCompareProfile = "standard",
-    prefix: str = "network_compare",
+    prefix: Annotated[
+        str,
+        Field(description="Filename prefix for generated comparison reports."),
+    ] = "network_compare",
 ) -> ToriiToolResult:
     if profile != "standard":
-        raise ValueError("network compare profile must be 'standard' in this release; promotion merge is not yet exposed")
+        raise ValueError("network compare profile must be standard")
     raw = sumo_network_connection_mode_regression_audit(
         source_net_file=source_net_file,
         candidate_net_file=candidate_net_file,
@@ -289,11 +362,50 @@ def torii_network_compare(
     )
 
 
+def torii_network_compare_mcp(
+    source_net_file: Annotated[
+        str,
+        Field(description="Path to the immutable source SUMO .net.xml baseline."),
+    ],
+    candidate_net_file: Annotated[
+        str,
+        Field(description="Path to the candidate SUMO .net.xml to compare against the source."),
+    ],
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where comparison reports are created or replaced."),
+    ],
+    prefix: Annotated[
+        str,
+        Field(description="Filename prefix for generated comparison reports."),
+    ] = "network_compare",
+) -> ToriiToolResult:
+    """Expose the reduced MCP schema while accepting old standard-profile Python calls."""
+
+    return torii_network_compare(
+        source_net_file,
+        candidate_net_file,
+        output_dir,
+        prefix=prefix,
+    )
+
+
 def torii_demand_audit(
-    expected_counts_csv: str,
-    detector_output_xml: str,
-    output_dir: str,
-    prefix: str = "demand_audit",
+    expected_counts_csv: Annotated[
+        str,
+        Field(description="Path to expected detector counts in CSV format."),
+    ],
+    detector_output_xml: Annotated[
+        str,
+        Field(description="Path to observed SUMO E1 detector output XML."),
+    ],
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where demand-audit reports are created or replaced."),
+    ],
+    prefix: Annotated[str, Field(description="Filename prefix for generated audit reports.")] = (
+        "demand_audit"
+    ),
 ) -> ToriiToolResult:
     raw = sumo_detector_count_audit(
         expected_counts_csv=expected_counts_csv,
@@ -309,16 +421,45 @@ def torii_demand_audit(
 
 
 def torii_review_create(
-    output_dir: str,
-    net_file: str | None = None,
-    title: str = "SUMO Network Review",
-    claim_status: str = "diagnostic-demo",
-    raw_net_file: str | None = None,
-    connected_core_file: str | None = None,
-    tls_review_file: str | None = None,
-    topology_audit_report_file: str | None = None,
-    junction_aggregation_report_file: str | None = None,
-    routeability_audit_report_file: str | None = None,
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where the review HTML and support files are created."),
+    ],
+    net_file: Annotated[
+        str | None,
+        Field(description="Optional SUMO .net.xml to render in the review page."),
+    ] = None,
+    title: Annotated[str, Field(description="Title shown on the generated review page.")] = (
+        "SUMO Network Review"
+    ),
+    claim_status: Annotated[
+        str,
+        Field(description="Evidence claim label displayed on the review page."),
+    ] = "diagnostic-demo",
+    raw_net_file: Annotated[
+        str | None,
+        Field(description="Optional raw network path linked as source evidence."),
+    ] = None,
+    connected_core_file: Annotated[
+        str | None,
+        Field(description="Optional connected-core network path linked for comparison."),
+    ] = None,
+    tls_review_file: Annotated[
+        str | None,
+        Field(description="Optional TLS review JSON path included in the page."),
+    ] = None,
+    topology_audit_report_file: Annotated[
+        str | None,
+        Field(description="Optional topology-audit JSON path included in the page."),
+    ] = None,
+    junction_aggregation_report_file: Annotated[
+        str | None,
+        Field(description="Optional junction-aggregation JSON path included in the page."),
+    ] = None,
+    routeability_audit_report_file: Annotated[
+        str | None,
+        Field(description="Optional routeability-audit JSON path included in the page."),
+    ] = None,
 ) -> ToriiToolResult:
     raw = sumo_network_review_html(
         output_dir=output_dir,
@@ -340,16 +481,46 @@ def torii_review_create(
 
 
 def torii_netedit_open(
-    source_net_file: str,
-    candidate_net_file: str,
-    output_dir: str,
-    expected_source_sha256: str,
-    gui_settings_file: str | None = None,
-    selection_file: str | None = None,
-    target_source_junction_ids: list[str] | None = None,
-    target_candidate_junction_ids: list[str] | None = None,
-    window_size: str = "1400,1000",
-    window_pos: str = "20,20",
+    source_net_file: Annotated[
+        str,
+        Field(description="Path to the immutable source SUMO network."),
+    ],
+    candidate_net_file: Annotated[
+        str,
+        Field(description="Path to the separate candidate SUMO network NetEdit may modify."),
+    ],
+    output_dir: Annotated[
+        str,
+        Field(description="Directory where session screenshots and reports are written."),
+    ],
+    expected_source_sha256: Annotated[
+        Sha256,
+        Field(description="Expected SHA-256 of the immutable source network."),
+    ],
+    gui_settings_file: Annotated[
+        str | None,
+        Field(description="Optional NetEdit GUI settings XML path."),
+    ] = None,
+    selection_file: Annotated[
+        str | None,
+        Field(description="Optional frozen NetEdit selection file used to bind edit scope."),
+    ] = None,
+    target_source_junction_ids: Annotated[
+        list[str] | None,
+        Field(description="Source junction IDs that may be replaced by a bounded edit."),
+    ] = None,
+    target_candidate_junction_ids: Annotated[
+        list[str] | None,
+        Field(description="Expected candidate junction IDs created by the bounded edit."),
+    ] = None,
+    window_size: Annotated[
+        str,
+        Field(description="NetEdit client size as width,height pixels."),
+    ] = "1400,1000",
+    window_pos: Annotated[
+        str,
+        Field(description="NetEdit window position as x,y pixels."),
+    ] = "20,20",
 ) -> ToriiToolResult:
     raw = sumo_netedit_session(
         operation="open",
@@ -372,10 +543,18 @@ def torii_netedit_open(
 
 
 def torii_netedit_observe(
-    session_id: str,
-    object_type: NeteditObjectType | None = None,
-    object_id: str | None = None,
-    label: str = "observe",
+    session_id: Annotated[str, Field(min_length=1, description="Active NetEdit session ID.")],
+    object_type: Annotated[
+        NeteditObjectType | None,
+        Field(description="Persisted object type to inspect; provide together with object_id."),
+    ] = None,
+    object_id: Annotated[
+        str | None,
+        Field(description="Persisted object ID to inspect; provide together with object_type."),
+    ] = None,
+    label: Annotated[str, Field(description="Short label used in screenshot artifact names.")] = (
+        "observe"
+    ),
 ) -> ToriiToolResult:
     raw = sumo_netedit_session(
         operation="observe",
@@ -392,13 +571,23 @@ def torii_netedit_observe(
 
 
 def torii_netedit_act(
-    session_id: str,
-    action: NeteditAction,
-    expected_screenshot_sha256: str,
-    x: int | None = None,
-    y: int | None = None,
-    to_x: int | None = None,
-    to_y: int | None = None,
+    session_id: Annotated[str, Field(min_length=1, description="Active NetEdit session ID.")],
+    action: Annotated[
+        NeteditAction,
+        Field(description="One allowed NetEdit action. click needs x/y; drag needs all coordinates."),
+    ],
+    expected_screenshot_sha256: Annotated[
+        Sha256,
+        Field(description="SHA-256 from the latest observe result."),
+    ],
+    x: Annotated[int | None, Field(description="Start/click x coordinate in client pixels.")] = None,
+    y: Annotated[int | None, Field(description="Start/click y coordinate in client pixels.")] = None,
+    to_x: Annotated[int | None, Field(description="Drag destination x coordinate in client pixels.")] = (
+        None
+    ),
+    to_y: Annotated[int | None, Field(description="Drag destination y coordinate in client pixels.")] = (
+        None
+    ),
 ) -> ToriiToolResult:
     raw = sumo_netedit_session(
         operation="act",
@@ -418,18 +607,57 @@ def torii_netedit_act(
 
 
 def torii_netedit_close(
-    session_id: str,
-    reason: str = "caller_completed",
+    session_id: Annotated[str, Field(min_length=1, description="Active NetEdit session ID.")],
+    mode: Annotated[
+        NeteditCloseMode,
+        Field(description="finalize saves and audits; abort closes without saving."),
+    ],
+    expected_screenshot_sha256: Annotated[
+        Sha256 | None,
+        Field(
+            description=(
+                "Latest observe screenshot SHA-256. Required when mode='finalize'; "
+                "omit when mode='abort'."
+            )
+        ),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        Field(description="Optional abort reason; defaults to caller_aborted."),
+    ] = None,
 ) -> ToriiToolResult:
-    raw = sumo_netedit_session(
-        operation="finalize",
-        session_id=session_id,
-        reason=reason,
-    )
+    kwargs: dict[str, Any] = {"operation": mode, "session_id": session_id}
+    if reason is not None:
+        kwargs["reason"] = reason
+    if mode == "finalize":
+        if not expected_screenshot_sha256:
+            raise ValueError("expected_screenshot_sha256 is required when mode='finalize'")
+        kwargs["expected_screenshot_sha256"] = expected_screenshot_sha256
+    raw = sumo_netedit_session(**kwargs)
+    operation_passed = raw.get("operation_status", raw.get("status")) == "pass"
+    if operation_passed:
+        summary = (
+            "Finalized and closed the NetEdit review session."
+            if mode == "finalize"
+            else "Aborted and closed the NetEdit review session without saving."
+        )
+        next_actions = (
+            ["Review the finalize audits; promotion remains blocked."]
+            if mode == "finalize"
+            else []
+        )
+    else:
+        summary = (
+            f"NetEdit {mode} was {raw.get('status', 'not completed')}; "
+            "inspect payload before assuming the session state."
+        )
+        next_actions = [
+            "Review the payload reason and observe again before retrying if the session remains active."
+        ]
     return _result(
         raw,
-        summary="Finalized and closed the NetEdit review session.",
-        next_actions=["Review the finalize audits; promotion remains blocked."],
+        summary=summary,
+        next_actions=next_actions,
     )
 
 

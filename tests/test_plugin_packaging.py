@@ -64,14 +64,22 @@ def test_plugin_manifest_uses_app_logo_for_codex_icon() -> None:
     assert logo_path.read_bytes() == docs_logo_path.read_bytes()
 
 
-def test_mcp_config_uses_bundled_launcher() -> None:
+def test_mcp_config_uses_locked_checkout_launcher() -> None:
     mcp_config = load_json(PLUGIN / ".mcp.json")
 
     assert mcp_config == {
         "mcpServers": {
             "torii-sumo": {
-                "command": "python",
-                "args": ["./scripts/bootstrap_mcp.py"],
+                "command": "uv",
+                "args": [
+                    "run",
+                    "--isolated",
+                    "--frozen",
+                    "--project",
+                    "../..",
+                    "python",
+                    "./scripts/run_torii_sumo.py",
+                ],
             }
         }
     }

@@ -1,22 +1,39 @@
 # Torii MCP Tool Catalog
 
-Torii currently registers 74 legacy MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+Torii provides a focused default MCP profile and an explicit legacy compatibility profile. Use the default profile for normal work. Use the CLI for long, batch, and specialized workflows.
 
 ## MCP Profiles
 
 The server supports three profiles selected with `create_server(profile=...)` or `TORII_MCP_PROFILE`:
 
-- `legacy` (default): all 74 tools listed below.
-- `default`: the reduced 10-tool surface:
+- `default` (default): the 10-tool core surface:
   `torii.preflight`, `torii.config.inspect`, `torii.run.compare`,
   `torii.place.resolve`, `torii.intersection.classify`, `torii.signal.classify`,
   `torii.network.audit`, `torii.network.compare`, `torii.demand.audit`,
   `torii.review.create`.
+- `legacy`: all 74 historical tools listed below. Select this profile explicitly for compatibility.
 - `netedit`: the four-tool observation loop:
   `torii.netedit.open`, `torii.netedit.observe`, `torii.netedit.act`,
   `torii.netedit.close`.
 
-Default and NetEdit tools use stable names, titles, safety annotations, and a common structured result shape. Long-running, Hamburg-specific, batch, and candidate-generation workflows remain in the legacy profile and are being migrated to the `torii` CLI.
+Default and NetEdit tools use stable names, titles, safety annotations, and a common structured result shape.
+
+`torii.network.audit` accepts `profile=quick` or `profile=standard`. `quick`
+runs the topology check. `standard` runs topology, Connection Mode, and
+overlapping-junction checks. Neither profile runs SUMO routeability.
+
+Run routeability through the CLI:
+
+```powershell
+torii network routeability <network.net.xml> <output-dir> --json
+```
+
+Run an allowlisted long, batch, Hamburg-specific, or candidate-generation
+capability with a JSON request:
+
+```powershell
+torii workflow <tool> <request.json> --json
+```
 
 The implementation boundary is consistent across groups:
 
@@ -66,6 +83,11 @@ keeps automatic promotion blocked. Torii deliberately omits arbitrary Python,
 C#, shell, or caller-exposed raw Win32 execution surfaces. The current local Codex
 integration renders the screenshot artifact with its local image viewer; the tool
 does not yet embed pixels as generic MCP `ImageContent`.
+
+`torii.netedit.observe` writes a screenshot and report. It is therefore marked
+non-read-only and non-idempotent. `torii.netedit.close` accepts
+`mode=finalize` or `mode=abort`. Finalize requires the latest screenshot
+SHA-256. Abort does not require a screenshot hash and closes without saving.
 
 ## OSM Construction and User-Facing Review
 

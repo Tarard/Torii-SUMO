@@ -1,9 +1,15 @@
 {
   "mcpServers": {
     "torii-sumo": {
-      "command": "python",
+      "command": "uv",
       "args": [
-        "./scripts/bootstrap_mcp.py"
+        "run",
+        "--isolated",
+        "--frozen",
+        "--project",
+        "../..",
+        "python",
+        "./scripts/run_torii_sumo.py"
       ]
     }
   }

@@ -8,12 +8,15 @@ not spawn this CLI.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 import anyio
 
+from . import server as server_module
 from .server import create_server
 from .tools.mcp_contract_tools import (
     ToriiToolResult,
@@ -32,13 +35,90 @@ from .tools.mcp_contract_tools import (
     torii_run_compare,
     torii_signal_classify,
 )
+from .tools.osm_tools import sumo_network_routeability_audit
+
+
+_WORKFLOW_TOOL_NAMES = (
+    "sumo_run_config",
+    "sumo_run_minimal_smoke",
+    "sumo_collect_evidence",
+    "sumo_osm_build_network",
+    "sumo_osm_cleanup_workflow",
+    "sumo_tls_audit",
+    "sumo_tls_multisource_review",
+    "sumo_network_connected_core",
+    "sumo_network_routeability_probe",
+    "sumo_network_routeability_audit",
+    "sumo_network_connection_mode_audit",
+    "sumo_network_connection_mode_calibration",
+    "sumo_network_exact_semantic_regression_audit",
+    "sumo_network_overlapping_junction_audit",
+    "sumo_network_reference_join_audit",
+    "sumo_network_reference_hierarchy_audit",
+    "sumo_network_reference_scope_audit",
+    "sumo_network_tls_warning_parity",
+    "sumo_network_surface_overlap_audit",
+    "sumo_network_surface_overlap_comparison",
+    "sumo_network_junction_aggregation_variant",
+    "sumo_network_scope_pruning_variant",
+    "sumo_network_corridor_geometry_simplification_variant",
+    "sumo_network_corridor_edit_ledger",
+    "sumo_network_corridor_materialize_variant",
+    "sumo_network_corridor_candidate_gates",
+    "sumo_network_teacher_corridor_comparison",
+    "sumo_network_tls_reference_cleanup_variant",
+    "sumo_network_standard_nema_phase_binding",
+    "sumo_network_teacher_guided_junction_variant",
+    "sumo_network_teacher_guided_repair_queue",
+    "sumo_network_tls_aggregation_variant",
+    "sumo_intersection_model",
+    "sumo_intersection_clean",
+    "sumo_intersection_validate",
+    "sumo_nema_four_way_reference_workflow",
+    "sumo_intersection_scene_workflow",
+    "sumo_road_semantic_bridge",
+    "sumo_intersection_road_sumo_bind",
+    "sumo_detector_route_support",
+    "sumo_detector_count_constraints",
+    "sumo_detector_route_sampler_calibrate",
+    "sumo_hamburg_sandtorkai_digital_twin",
+    "sumo_hamburg_named_count_scope",
+    "sumo_hamburg_sandtorkai_signal_observations",
+    "sumo_hamburg_sandtorkai_named_replay",
+    "sumo_hamburg_sandtorkai_execution_plan",
+    "sumo_hamburg_2394_archetype_classify",
+    "sumo_hamburg_2394_compound_geometry_first_pass",
+    "sumo_hamburg_2394_tls_topology_materialize",
+    "sumo_hamburg_sandtorkai_corridor_geometry_materialize",
+    "sumo_hamburg_sandtorkai_mainline_scope_materialize",
+    "sumo_hamburg_sandtorkai_corridor_tls_materialize",
+    "sumo_hamburg_cached_detector_demand",
+    "sumo_hamburg_corridor_candidate_detector_demand",
+    "sumo_hamburg_corridor_candidate_map_bindings",
+    "sumo_hamburg_corridor_candidate_signal_bindings",
+    "sumo_hamburg_sandtorkai_corridor_candidate_package",
+    "sumo_hamburg_sandtorkai_geometry_safe_digital_twin",
+    "sumo_hamburg_official_tls_rebuild",
+    "sumo_digital_twin_replay_validate",
+)
+
+WORKFLOW_TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
+    name: getattr(server_module, name) for name in _WORKFLOW_TOOL_NAMES
+}
 
 
 def _exit_code(result: ToriiToolResult | dict[str, Any]) -> int:
     status = result.get("status") if isinstance(result, dict) else result.status
-    if status == "pass":
+    if status in {"pass", "ok", "success", "complete", "ready"}:
         return 0
-    if status in {"review_required", "partial", "unknown"}:
+    if status in {
+        "review_required",
+        "review_ready",
+        "topology_ready",
+        "partial",
+        "unknown",
+        "warn",
+    }:
         return 1
     return 3
 
@@ -48,8 +128,6 @@ def _emit(result: ToriiToolResult | dict[str, Any], *, json_output: bool) -> int
         if isinstance(result, ToriiToolResult):
             print(result.model_dump_json(indent=2))
         else:
-            import json
-
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         if isinstance(result, ToriiToolResult):
@@ -63,7 +141,19 @@ def _emit(result: ToriiToolResult | dict[str, Any], *, json_output: bool) -> int
 
 
 def _add_output_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--json", action="store_true", help="Emit a structured JSON result.")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emit a structured JSON result.",
+    )
+
+
+def _load_request(path: str) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("workflow request must be a JSON object")
+    return payload
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -72,14 +162,14 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     preflight = subparsers.add_parser("preflight", help="Check Python, SUMO, and Torii environment.")
-    preflight.add_argument("--json", action="store_true")
+    _add_output_argument(preflight)
 
     config = subparsers.add_parser("config", help="Inspect config pairs.")
     config_sub = config.add_subparsers(dest="config_command", required=True)
     inspect = config_sub.add_parser("inspect", help="Inspect a baseline and variant .sumocfg pair.")
     inspect.add_argument("baseline_config")
     inspect.add_argument("variant_config")
-    inspect.add_argument("--json", action="store_true")
+    _add_output_argument(inspect)
 
     run = subparsers.add_parser("run", help="Run bounded SUMO comparisons.")
     run_sub = run.add_subparsers(dest="run_command", required=True)
@@ -88,14 +178,14 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--baseline-tripinfo")
     compare.add_argument("--variant-summary")
     compare.add_argument("--variant-tripinfo")
-    compare.add_argument("--json", action="store_true")
+    _add_output_argument(compare)
 
     place = subparsers.add_parser("place", help="Resolve OSM places.")
     place_sub = place.add_subparsers(dest="place_command", required=True)
     resolve = place_sub.add_parser("resolve", help="Resolve a place name to a candidate OSM area.")
     resolve.add_argument("place_name")
     resolve.add_argument("--limit", type=int, default=1)
-    resolve.add_argument("--json", action="store_true")
+    _add_output_argument(resolve)
 
     intersection = subparsers.add_parser("intersection", help="Intersection classification.")
     intersection_sub = intersection.add_subparsers(dest="intersection_command", required=True)
@@ -104,29 +194,42 @@ def _build_parser() -> argparse.ArgumentParser:
     classify.add_argument("seed_osm_node_id")
     classify.add_argument("--traffic-side", default="right", choices=("left", "right"))
     classify.add_argument("--road-network-evidence-file")
-    classify.add_argument("--json", action="store_true")
+    _add_output_argument(classify)
 
     signal = subparsers.add_parser("signal", help="Signal inventory classification.")
     signal_sub = signal.add_subparsers(dest="signal_command", required=True)
     signal_classify = signal_sub.add_parser("classify", help="Classify one OCIT-C signal inventory.")
     signal_classify.add_argument("ocit_file")
     signal_classify.add_argument("--expected-node-id")
-    signal_classify.add_argument("--json", action="store_true")
+    _add_output_argument(signal_classify)
 
     network = subparsers.add_parser("network", help="Network audits and comparisons.")
     network_sub = network.add_subparsers(dest="network_command", required=True)
     audit = network_sub.add_parser("audit", help="Audit one local SUMO network.")
     audit.add_argument("net_file")
     audit.add_argument("output_dir")
-    audit.add_argument("--profile", default="standard", choices=("quick", "standard", "promotion"))
+    audit.add_argument("--profile", default="standard", choices=("quick", "standard"))
     audit.add_argument("--prefix", default="network_audit")
-    audit.add_argument("--json", action="store_true")
+    _add_output_argument(audit)
     network_compare = network_sub.add_parser("compare", help="Compare source and candidate networks.")
     network_compare.add_argument("source_net_file")
     network_compare.add_argument("candidate_net_file")
     network_compare.add_argument("output_dir")
     network_compare.add_argument("--prefix", default="network_compare")
-    network_compare.add_argument("--json", action="store_true")
+    _add_output_argument(network_compare)
+    routeability = network_sub.add_parser(
+        "routeability",
+        help="Run the long completion-aware SUMO routeability audit outside MCP.",
+    )
+    routeability.add_argument("net_file")
+    routeability.add_argument("output_dir")
+    routeability.add_argument("--prefix", default="routeability_audit")
+    routeability.add_argument("--vehicle-count", type=int, default=100)
+    routeability.add_argument("--seed", type=int, default=42)
+    routeability.add_argument("--initial-end", type=int, default=300)
+    routeability.add_argument("--max-end", type=int, default=2400)
+    routeability.add_argument("--timeout-seconds", type=float, default=240.0)
+    _add_output_argument(routeability)
 
     demand = subparsers.add_parser("demand", help="Demand and detector audits.")
     demand_sub = demand.add_subparsers(dest="demand_command", required=True)
@@ -135,7 +238,7 @@ def _build_parser() -> argparse.ArgumentParser:
     audit_counts.add_argument("detector_output_xml")
     audit_counts.add_argument("output_dir")
     audit_counts.add_argument("--prefix", default="demand_audit")
-    audit_counts.add_argument("--json", action="store_true")
+    _add_output_argument(audit_counts)
 
     review = subparsers.add_parser("review", help="Create review artifacts.")
     review_sub = review.add_subparsers(dest="review_command", required=True)
@@ -150,7 +253,7 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument("--topology-audit-report-file")
     create.add_argument("--junction-aggregation-report-file")
     create.add_argument("--routeability-audit-report-file")
-    create.add_argument("--json", action="store_true")
+    _add_output_argument(create)
 
     netedit = subparsers.add_parser("netedit", help="NetEdit observation-action loop.")
     netedit_sub = netedit.add_subparsers(dest="netedit_command", required=True)
@@ -163,12 +266,12 @@ def _build_parser() -> argparse.ArgumentParser:
     netedit_open.add_argument("--selection-file")
     netedit_open.add_argument("--target-source-junction-ids", nargs="*")
     netedit_open.add_argument("--target-candidate-junction-ids", nargs="*")
-    netedit_open.add_argument("--json", action="store_true")
+    _add_output_argument(netedit_open)
     netedit_observe = netedit_sub.add_parser("observe", help="Observe the active NetEdit session.")
     netedit_observe.add_argument("session_id")
     netedit_observe.add_argument("--object-type", choices=("junction", "edge", "lane", "connection", "tlLogic"))
     netedit_observe.add_argument("--object-id")
-    netedit_observe.add_argument("--json", action="store_true")
+    _add_output_argument(netedit_observe)
     netedit_act = netedit_sub.add_parser("act", help="Execute one whitelisted NetEdit action.")
     netedit_act.add_argument("session_id")
     netedit_act.add_argument("action")
@@ -177,11 +280,24 @@ def _build_parser() -> argparse.ArgumentParser:
     netedit_act.add_argument("--y", type=int)
     netedit_act.add_argument("--to-x", type=int)
     netedit_act.add_argument("--to-y", type=int)
-    netedit_act.add_argument("--json", action="store_true")
-    netedit_close = netedit_sub.add_parser("close", help="Finalize and close the active NetEdit session.")
+    _add_output_argument(netedit_act)
+    netedit_close = netedit_sub.add_parser(
+        "close",
+        help="Finalize or abort the active NetEdit session.",
+    )
     netedit_close.add_argument("session_id")
-    netedit_close.add_argument("--reason", default="caller_completed")
-    netedit_close.add_argument("--json", action="store_true")
+    netedit_close.add_argument("--mode", choices=("finalize", "abort"), required=True)
+    netedit_close.add_argument("--expected-screenshot-sha256")
+    netedit_close.add_argument("--reason")
+    _add_output_argument(netedit_close)
+
+    workflow = subparsers.add_parser(
+        "workflow",
+        help="Run an allowlisted long or specialized workflow from a JSON request file.",
+    )
+    workflow.add_argument("tool", choices=tuple(WORKFLOW_TOOLS), metavar="TOOL")
+    workflow.add_argument("request_file")
+    _add_output_argument(workflow)
 
     mcp = subparsers.add_parser("mcp", help="Run the Torii MCP server.")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
@@ -245,6 +361,20 @@ def _dispatch(args: argparse.Namespace) -> int:
                 args.candidate_net_file,
                 args.output_dir,
                 prefix=args.prefix,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "network" and args.network_command == "routeability":
+        return _emit(
+            sumo_network_routeability_audit(
+                net_file=args.net_file,
+                output_dir=args.output_dir,
+                prefix=args.prefix,
+                vehicle_count=args.vehicle_count,
+                seed=args.seed,
+                initial_end=args.initial_end,
+                max_end=args.max_end,
+                timeout_seconds=args.timeout_seconds,
             ),
             json_output=json_output,
         )
@@ -313,9 +443,19 @@ def _dispatch(args: argparse.Namespace) -> int:
             )
         if args.netedit_command == "close":
             return _emit(
-                torii_netedit_close(args.session_id, reason=args.reason),
+                torii_netedit_close(
+                    args.session_id,
+                    mode=args.mode,
+                    expected_screenshot_sha256=args.expected_screenshot_sha256,
+                    reason=args.reason,
+                ),
                 json_output=json_output,
             )
+    if args.command == "workflow":
+        return _emit(
+            WORKFLOW_TOOLS[args.tool](**_load_request(args.request_file)),
+            json_output=json_output,
+        )
     if args.command == "mcp" and args.mcp_command == "serve":
         server = create_server(args.profile)
 
@@ -337,8 +477,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _dispatch(args)
     except Exception as exc:  # noqa: BLE001 - CLI boundary must not leak tracebacks.
         if getattr(args, "json", False):
-            import json
-
             print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
         else:
             print(f"error: {exc}", file=sys.stderr)

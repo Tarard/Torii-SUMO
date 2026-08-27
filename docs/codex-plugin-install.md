@@ -7,11 +7,13 @@
 
 The skill is the reasoning layer. The MCP server is the execution layer.
 
-The bundled `.mcp.json` starts `scripts/bootstrap_mcp.py`, which uses the
-repository `uv.lock` when run from a checkout and falls back to the installed
-`torii_sumo` package otherwise. Plugin-launched MCP sessions default to the
-10-tool `default` profile. Set `TORII_MCP_PROFILE=legacy` to expose all 74
-legacy tools, or `TORII_MCP_PROFILE=netedit` for only the NetEdit loop.
+The bundled `.mcp.json` starts `scripts/run_torii_sumo.py` through
+`uv run --isolated --frozen --project ../..`. This command uses the checkout's
+`uv.lock` and does not depend on a `python` command from `PATH`. The retained
+`scripts/bootstrap_mcp.py` entry point supports manual startup checks and an
+installed-package fallback. Plugin-launched MCP sessions default to the 10-tool
+`default` profile. Set `TORII_MCP_PROFILE=legacy` to expose all 74 legacy tools,
+or `TORII_MCP_PROFILE=netedit` for only the NetEdit loop.
 
 ## Repository Layout
 

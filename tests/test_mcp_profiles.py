@@ -14,8 +14,8 @@ async def _list_tools(profile: str | None = None) -> list[object]:
     return await create_server(profile).list_tools()
 
 
-def test_legacy_profile_is_still_the_compatible_default() -> None:
-    assert DEFAULT_MCP_PROFILE == "legacy"
+def test_reduced_profile_is_the_safe_default() -> None:
+    assert DEFAULT_MCP_PROFILE == "default"
     assert SUPPORTED_MCP_PROFILES == ("legacy", "default", "netedit")
 
 
@@ -48,7 +48,11 @@ def test_netedit_profile_exposes_four_observation_loop_tools() -> None:
         "torii.netedit.close",
     ]
     assert all(tool.annotations is not None for tool in tools)
-    assert next(tool for tool in tools if tool.name == "torii.netedit.observe").annotations.readOnlyHint is True
+    assert (
+        next(tool for tool in tools if tool.name == "torii.netedit.observe")
+        .annotations.readOnlyHint
+        is False
+    )
     assert next(tool for tool in tools if tool.name == "torii.netedit.act").annotations.destructiveHint is True
 
 

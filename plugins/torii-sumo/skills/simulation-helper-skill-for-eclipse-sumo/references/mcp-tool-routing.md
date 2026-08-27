@@ -11,8 +11,8 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 ## Tool Profiles
 
 Plugin-launched MCP sessions default to the 10-tool `default` profile. The
-legacy tables below still use the historical tool names; use this mapping when
-the session exposes only the default tools:
+`legacy` profile is an explicit compatibility mode for the 74 historical tool
+names. Use this mapping when the session exposes only the default tools:
 
 | Default tool | Legacy name in this reference |
 |---|---|
@@ -22,21 +22,35 @@ the session exposes only the default tools:
 | `torii.place.resolve` | `sumo_osm_resolve_place` |
 | `torii.intersection.classify` | `sumo_intersection_archetype_classify` |
 | `torii.signal.classify` | `sumo_signal_device_profile_classify` |
-| `torii.network.audit` | `sumo_network_topology_audit` / `sumo_network_routeability_audit` |
+| `torii.network.audit` | `sumo_network_topology_audit`, `sumo_network_connection_mode_audit`, and `sumo_network_overlapping_junction_audit` |
 | `torii.network.compare` | `sumo_network_connection_mode_regression_audit` |
 | `torii.demand.audit` | `sumo_detector_count_audit` |
 | `torii.review.create` | `sumo_network_review_html` |
 | `torii.netedit.open/observe/act/close` | `sumo_netedit_session` operations |
 
-Long workflows, Hamburg-specific stages, candidate generation, and batch runs
-are not in the default MCP profile. Route them to the `torii` CLI, or use the
-`legacy` profile only when an interactive MCP diagnostic is justified.
+`torii.network.audit` has `quick` and `standard` profiles. `quick` runs only
+the topology check. `standard` also runs Connection Mode and
+overlapping-junction checks. Neither profile runs routeability.
+
+Run routeability with:
+
+```powershell
+torii network routeability <network.net.xml> <output-dir> --json
+```
+
+This CLI command runs the legacy `sumo_network_routeability_audit` capability.
+
+Run an allowlisted long, batch, or specialized legacy capability with:
+
+```powershell
+torii workflow <tool> <request.json> --json
+```
 
 ## Tool Selection
 
 | Situation | Tool | Required interpretation |
 |---|---|---|
-| One-sentence or ambiguous SUMO request | `torii_auto_workflow` | Let Torii classify the workflow, ask only blocking questions, and run safe MCP steps when required evidence is available |
+| One-sentence or ambiguous SUMO request | Skill routing first | Classify the request and collect required inputs before selecting a default tool or CLI workflow |
 | Unknown machine, uncertain SUMO install, or missing runnable proof | `sumo_preflight` | Report environment pass/block status before any experiment claim |
 | Need raw environment details for handoff | `sumo_get_environment` | Treat versions and missing binaries as construction evidence |
 | Existing baseline and variant `.sumocfg` files | `sumo_config_pair_preflight` | Check missing inputs and shared outputs before running or comparing |
@@ -48,14 +62,14 @@ are not in the default MCP profile. Route them to the `torii` CLI, or use the
 | Need to identify a local OSM junction type before deciding joins, channelization, or signal ownership | `sumo_intersection_archetype_classify` | Use the hash-bound finite composable profile plus physical-cell, topology, and movement evidence; familiar T3/X4/roundabout names are derived aliases, and every network mutation remains blocked |
 | Need to classify physical signal heads and non-visual accessibility outputs from a German OCIT-C supply file before binding or controller design | `sumo_signal_device_profile_classify` | Use the source-hash-bound device inventory; keep logical groups, physical heads, visual displays, audible/tactile outputs, runtime state, and control methods separate; preserve unknown symbols/placement and keep automatic binding/control blocked |
 | Need an HTML human-review cockpit for a generated or partially edited SUMO network | `sumo_network_review_html` | Treat the HTML as a review/navigation artifact that points to gates, warnings, topology, junction aggregation, and routeability evidence; it does not by itself make the network clean |
-| Need NetEdit screenshots or direct mouse/keyboard control | background review, then `sumo_netedit_session` only if the actual Inspect attribute pane is required | Screenshots default to the hash-bound `netedit_background_review.py` path without global input. A claim that the left pane shows `Net: junction` must instead use the existing hash-bound session: real click, optional `Ctrl+J`, observe, then abort without saving. Interactive editing opens the exact network with Torii's CLI launcher or `netedit -s <absolute-net-file>`; never use desktop automation for launch/file selection or auto-promote a GUI candidate. |
+| Need NetEdit screenshots or direct mouse/keyboard control | `torii.netedit.open/observe/act/close` | `observe` writes a screenshot and report. Observe again before each action. Use `close(mode=abort)` to discard changes. Use `close(mode=finalize)` only with the latest screenshot SHA-256. |
 | Need OSM/netconvert traffic-light cleanup review | `sumo_tls_audit` | Extract TLS candidates, cluster nearby candidates, and create first-pass map review fields |
 | Need traffic-light evidence from OSM, public map links, official inventory, signal plans, or field photos | `sumo_tls_multisource_review` | Use the correct regional current-network baseline; use Google Maps where appropriate, Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, and field photos for mainland China, and keep every row at `needs_manual_review` until a human confirms it |
 | Need a non-destructive redundant-TLS cleanup artifact | `sumo_network_tls_aggregation_variant` | Use a TLS audit report to build a separate `netconvert --tls.discard-loaded --tls.set` review network with one real SUMO TLS junction per physical cluster; do not adopt it without Netedit and map review |
 | Need to detect suspicious overlapping top-level junctions before editing | `sumo_network_overlapping_junction_audit` | Keep the network read-only, ignore valid SUMO internal crossing/walkingarea layers, and prioritize groups with TLS, pedestrian/bike interaction, or reference-join support |
 | Need a reusable 100% passenger-connected core from an existing `.net.xml` | `sumo_network_connected_core` | Extract the largest passenger component into a `connected-core` network, keep the raw network as audit evidence, and report discarded fragments before routeability claims |
 | Need routeability probes for named roads or bridges | `sumo_network_routeability_probe` | Check missing key edges, generated routes, and later SUMO completion before claim escalation |
-| Need to prove random passenger routes finish before saying a network is usable | `sumo_network_routeability_audit` | Generate random passenger routes, run SUMO, parse `summary.xml`/`tripinfo.xml`, auto-extend the horizon when vehicles remain running, and fail rather than overclaim incomplete runs |
+| Need to prove random passenger routes finish before saying a network is usable | `torii network routeability <network.net.xml> <output-dir> --json` | Generate random passenger routes, run SUMO, parse `summary.xml`/`tripinfo.xml`, auto-extend the horizon when vehicles remain running, and fail rather than overclaim incomplete runs |
 | Need to explain high-hierarchy road differences against a reference network | `sumo_network_reference_hierarchy_audit` | Separate over-split corridors, out-of-reference-scope high roads, hierarchy mismatches, protected link/slip-lane cases, and same-name corridor evidence before merge, prune, or downgrade decisions |
 | Need to compare reference visual-detail scope before pruning candidate detail roads | `sumo_network_reference_scope_audit` | Compare reference and candidate `highway.*` type counts, flag absent or overrepresented short dead-end detail fragments, and treat the result as review evidence |
 | Need a non-destructive physical-junction aggregation review artifact | `sumo_network_junction_aggregation_variant` | Use topology, reference-join, or overlapping-junction audit reports to create a SUMO plain-nodes `<join>` / `<joinExclude>` patch and separate review network; overlap groups are joined only when reference or human review confirms the core nodes |
@@ -115,7 +129,7 @@ machine audits pass.
 
 Examples:
 
-- Low arrived count can mean the horizon is too short, insertion failed, routes are disconnected, or a controller blocked movement. Use `sumo_network_routeability_audit` before treating a random-route smoke run as usable evidence.
+- Low arrived count can mean the horizon is too short, insertion failed, routes are disconnected, or a controller blocked movement. Run `torii network routeability <network.net.xml> <output-dir> --json` before treating a random-route smoke run as usable evidence.
 - High waiting time can mean demand is outside the intended scope, phase-lane mapping is wrong, TLS were joined incorrectly, or the controller policy is unsuitable.
 - Teleports indicate construction or control feedback requiring lane, route, capacity, conflict, and controller checks.
 - `connected-core` means Torii preserved the raw network but routed downstream checks through a netconvert-built largest passenger component with strict connectivity passing.
