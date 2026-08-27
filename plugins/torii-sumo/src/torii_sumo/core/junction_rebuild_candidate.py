@@ -356,8 +356,6 @@ BOUNDARY_LANE_OPERATIONAL_ATTRS = (
 TURNAROUND_DIR = "t"
 
 
-
-
 def build_teacher_guided_repair_queue(
     *,
     teacher_net_file: Path,
@@ -521,30 +519,6 @@ def build_teacher_guided_repair_queue(
     queue_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     _write_teacher_guided_queue_csv(queue_csv_file, repair_candidates)
     return report
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def write_teacher_target_internal_replay_net(
@@ -3012,16 +2986,6 @@ def write_shared_teacher_tls_controller_replay_net(
     }
 
 
-
-
-
-
-
-
-
-
-
-
 def build_teacher_guided_junction_variant(
     *,
     raw_node_file: Path,
@@ -3668,24 +3632,6 @@ def build_teacher_guided_junction_variant(
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def run_teacher_guided_repair_queue(
@@ -5146,28 +5092,6 @@ def run_teacher_guided_repair_queue(
     return report
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def run_teacher_guided_repair_matrix(
     *,
     queue_report: dict[str, Any],
@@ -5302,206 +5226,6 @@ def run_teacher_guided_repair_matrix(
     return report
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _clone_transformed_net_element(
     element: ET.Element,
     dx: float,
@@ -5547,92 +5271,6 @@ def _clone_transformed_boundary_edge(
     return clone
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
     changed = any(
         int(report.get(key, 0) or 0)
@@ -5655,8 +5293,6 @@ def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
         return True
     internal_report = report.get("internal_artifact_restore")
     return isinstance(internal_report, dict) and _non_target_internal_restore_changed(internal_report)
-
-
 
 
 def write_reanchored_normal_junction_movements(
@@ -6489,10 +6125,6 @@ def write_authorized_junction_shapes_from_reference(
             "same-topology reference; preserve every candidate edge, lane, movement, and TLS"
         ),
     }
-
-
-
-
 
 
 def _junction_shape_repair_topology_sha256(root: ET.Element) -> str:
