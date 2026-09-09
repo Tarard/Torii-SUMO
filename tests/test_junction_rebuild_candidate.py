@@ -13823,7 +13823,8 @@ def test_write_teacher_target_internal_replay_net_replays_mapped_boundary_edge_s
 
 
 def test_stage_file_shortens_long_output_names(tmp_path: Path) -> None:
-    output_dir = tmp_path / ("x" * 120)
+    # Fix the absolute path length so Windows user-profile names do not change the case.
+    output_dir = tmp_path / ("x" * (224-len(str(tmp_path.resolve()))-1))
     output_dir.mkdir()
     path = _stage_file(output_dir, "very_long_teacher_guided_prefix", "target_internal_normalized.net.xml")
 

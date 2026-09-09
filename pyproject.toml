@@ -8,6 +8,7 @@ version = "1.2.0"
 description = "Torii agent plugin for evidence-aware Eclipse SUMO, OSM cleanup, and public-data corridor digital twins."
 readme = "README.md"
 requires-python = ">=3.11"
+classifiers = ["Operating System :: Microsoft :: Windows"]
 license = "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
 license-files = ["LICENSE", "LICENSE-CODE", "LICENSE-DOCS", "NOTICE.md"]
 authors = [
@@ -29,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-native = ["eclipse-sumo==1.27.1"]
+native = ["eclipse-sumo==1.27.1; platform_system == 'Windows'"]
 dev = [
   "pytest>=8.0",
   "PyYAML>=6.0",

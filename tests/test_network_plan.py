@@ -244,7 +244,7 @@ def test_direct_local_teacher_replay_shortens_generated_net_paths_for_windows(tm
             ],
         },
         source_net_file=source_net,
-        output_dir=tmp_path / ("output_" + "y" * 100),
+        output_dir=tmp_path / ("output_" + "y" * (195-len(str(tmp_path.resolve()))-8)),
         prefix="very_long_teacher_guided_direct_replay_prefix",
         netconvert_binary="netconvert",
         sumo_binary="sumo",

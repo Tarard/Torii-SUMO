@@ -165,7 +165,8 @@ codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 
-Start a new Codex session.  Requires Python 3.11+ and Eclipse SUMO
+Torii supports 64-bit Windows only. Start a new Codex session after installation.
+Requires Python 3.11+ and Eclipse SUMO
 (`sumo`, `netconvert`, `netedit`).  See the
 [installation guide](docs/codex-plugin-install.md).
 

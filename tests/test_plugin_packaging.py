@@ -111,6 +111,14 @@ def test_plugin_contains_bundled_mcp_package() -> None:
     assert (PLUGIN / "src" / "torii_sumo" / "server.py").is_file()
 
 
+def test_supported_platform_and_product_test_runners_are_windows_only() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert "Operating System :: Microsoft :: Windows" in project["classifiers"]
+    for name in ("full-suite.yml", "corridor-contracts.yml"):
+        workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"))
+        assert all(job["runs-on"].startswith("windows-") for job in workflow["jobs"].values())
+
+
 def test_mcp_package_is_not_installed_at_repo_root() -> None:
     assert not (ROOT / "src" / "torii_sumo").exists()
 

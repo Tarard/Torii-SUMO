@@ -19,6 +19,7 @@ from typing import Any
 
 from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.core.candidate_contracts import file_sha256
+from torii_sumo.core.netedit import _which_netedit
 from torii_sumo.core.tls_ownership import audit_tls_ownership_rebuild
 
 
@@ -1431,7 +1432,7 @@ def run_background_review(
     target = read_target_junction(candidate, identity.target_junction_id)
     viewport = fitted_viewport(candidate, target=target, center=center, zoom=zoom)
     view_center, zoom = tuple(viewport["center"]), viewport["zoom"]
-    executable = shutil.which(netedit_binary) or netedit_binary
+    executable = _which_netedit(netedit_binary) or netedit_binary
     captures = [
         _capture_request(
             request=request,
@@ -1556,7 +1557,7 @@ def run_direct_background_review(
     target = read_target_junction(candidate, target_junction_id)
     viewport = fitted_viewport(candidate, target=target, center=center, zoom=zoom)
     view_center, zoom = tuple(viewport["center"]), viewport["zoom"]
-    executable = shutil.which(netedit_binary) or netedit_binary
+    executable = _which_netedit(netedit_binary) or netedit_binary
     safe_target = re.sub(r"[^A-Za-z0-9_.-]+", "_", target.junction_id).strip("._-")
     if not safe_target:
         raise ValueError("Target junction id cannot be represented as a safe artifact name.")
@@ -1695,7 +1696,7 @@ def run_hamburg_background_review(
         raise SystemExit("Background NetEdit capture is currently Windows-only.")
     destination = output_dir.resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    executable = shutil.which(netedit_binary) or netedit_binary
+    executable = _which_netedit(netedit_binary) or netedit_binary
     target_rows: list[dict[str, Any]] = []
     captures: list[dict[str, Any]] = []
     for target_identity in identity.targets:

@@ -5,6 +5,8 @@
 - the `simulation-helper-skill-for-eclipse-sumo` expert skill;
 - the `torii-sumo` local stdio MCP server.
 
+Torii supports 64-bit Windows only. Linux and macOS are not supported targets.
+
 The skill is the reasoning layer. The MCP server is the execution layer.
 
 The bundled `.mcp.json` starts `scripts/run_torii_sumo.py` through
@@ -38,7 +40,7 @@ persistent NetEdit MCP profile for multi-step edits. Separate CLI `open`, `obser
 The Windows runtime explicitly includes pywin32 for the target-window session.
 SUMO programs must still be available on `PATH`. Developers can install the tested
 native binaries with `uv sync --extra dev --extra native`; CI uses SUMO 1.27.1 on
-Windows and Linux and verifies its binaries before running tests.
+Windows and verifies its binaries before running tests.
 
 ## Repository Layout
 

@@ -36,6 +36,8 @@ uv run --isolated --frozen --script <插件目录>/scripts/run_torii_sumo.py --c
 
 下文 `torii ...` 命令可用同一启动方式执行。Windows 单次截图使用 `netedit review`；多步编辑使用同一个常驻 MCP 会话。
 
+Torii 仅支持 64 位 Windows，测试与发布均以 Windows 为准。
+
 Torii 有两层：
 
 | 层级 | 作用 |

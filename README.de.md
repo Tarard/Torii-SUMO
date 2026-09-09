@@ -24,6 +24,8 @@
 
 ## Evidence-Aware OSM-to-SUMO Construction
 
+Torii unterstützt ausschließlich 64-Bit-Windows. Tests und Veröffentlichungen richten sich nach dieser Plattform.
+
 Torii ist fuer SUMO-Netzkonstruktion gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten, evidence-aware und reference-comparable OSM-zu-SUMO-Workflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks, Review-Artefakten und klarer Aussagegrenze.
 
 Das Plugin startet jetzt mit einem Workflow Router: `torii_auto_workflow` klassifiziert die Anfrage, waehlt Skills, erstellt Plaene und fuehrt sichere MCP-Schritte aus, um das SUMO-Netz zu erzeugen oder zu aendern.

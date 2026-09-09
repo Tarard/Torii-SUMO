@@ -316,11 +316,6 @@ dependencies = [
     { name = "sumo-data" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/6e/fef6f21243e6f58b57e8356af0d03e45733bf7817afc059b20aec375f431/eclipse_sumo-1.27.1-py3-none-macosx_14_0_arm64.whl", hash = "sha256:2255536237d81383efe5e53862b030e2dee6e18025210ff6ba4819f11edbb0d4", size = 53827663, upload-time = "2026-06-25T09:47:57.01Z" },
-    { url = "https://files.pythonhosted.org/packages/2d/bc/4377e881434460531762e16cffb41a49a5c625e902193642e1af8d8e2a31/eclipse_sumo-1.27.1-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:e557879511b66511943f0fa1b0f95d2c135d26e2b681665546deb8001133edd5", size = 77553233, upload-time = "2026-06-25T09:48:02.481Z" },
-    { url = "https://files.pythonhosted.org/packages/b2/00/0b88a931c50e277a46ee6110216ef8ca299b064cca82d1fc481d4155754a/eclipse_sumo-1.27.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:97abddcb7395c25538f22a272ef67ca77c8a625d3eec6010eed5b62dfac011f3", size = 89032738, upload-time = "2026-06-25T09:48:07.868Z" },
-    { url = "https://files.pythonhosted.org/packages/31/ff/ac71562ad6dade48642c475c80d2c159ec7a83907e8ab9bb2d2f7fb59bda/eclipse_sumo-1.27.1-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:4b56e8bb331bee39d5a102feda7b3441fdfca4704a9ba4f7ed2cdf99ac19d915", size = 126468252, upload-time = "2026-06-25T09:48:15.001Z" },
-    { url = "https://files.pythonhosted.org/packages/ba/13/401d9a7f8dbd404c7ec9cef95a7762a38d71088c38bf964789bc012428ce/eclipse_sumo-1.27.1-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:fd96ace26bccb78312c8c04464c0894a5432db8e2c072388b73e8ae3a6a43586", size = 147105795, upload-time = "2026-06-25T09:48:22.856Z" },
     { url = "https://files.pythonhosted.org/packages/d7/c4/f12aa67ed92aae1b52de68c4dd73398119c16a2e4921050161d829bc8566/eclipse_sumo-1.27.1-py3-none-win_amd64.whl", hash = "sha256:80f68e916d10696a677a60db81f13d5340efae9451eaa8f3088e67e89870d6aa", size = 165702015, upload-time = "2026-06-25T09:48:30.96Z" },
 ]
 
@@ -1459,7 +1454,6 @@ version = "1.27.1"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/9d/1c4e7bb11044372fdeafad36a753b2c919b328d280820a14e1ac74f18290/sumo_data-1.27.1-py3-none-any.whl", hash = "sha256:2e547fd20558e07d6004d576eeaf85f4aa061efb4a9bab7675233726364fba61", size = 16189121, upload-time = "2026-06-25T09:50:30.943Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/f9/0ed46d6d8bed8d96f5901907903baea2200196741b579b1b6768396a9f7c/sumo_data-1.27.1-py3-none-macosx_14_0_arm64.whl", hash = "sha256:cc3f71bbeac8dc45a67ef90b023fa8d7ee4bd25c7f62f8006c5c036d545a9527", size = 116182082, upload-time = "2026-06-25T09:50:39.363Z" },
     { url = "https://files.pythonhosted.org/packages/6c/54/7cfac7fe78b9393ffc0487d799bbeebbdd508147cb84da1c43f19e33e63f/sumo_data-1.27.1-py3-none-win_amd64.whl", hash = "sha256:fa53a3cd34c2f9fd7137d055451b19c44b8972b65dcc15328d2f469647d6d38d", size = 129615571, upload-time = "2026-06-25T09:50:46.708Z" },
 ]
 
@@ -1500,13 +1494,13 @@ dev = [
     { name = "ruff" },
 ]
 native = [
-    { name = "eclipse-sumo" },
+    { name = "eclipse-sumo", marker = "sys_platform == 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.0" },
-    { name = "eclipse-sumo", marker = "extra == 'native'", specifier = "==1.27.1" },
+    { name = "eclipse-sumo", marker = "sys_platform == 'win32' and extra == 'native'", specifier = "==1.27.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.0.0,<2" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "osmium", specifier = ">=4.3,<5" },
