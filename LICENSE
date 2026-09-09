@@ -1,39 +1,21 @@
-Torii-SUMO License Notice
+MIT License
 
-Copyright (c) 2026 Tarard and Torii contributors.
+Copyright (c) 2026 Tarard and Torii contributors
 
-This repository uses separate licenses for code and non-code material. It is
-not dual-licensed. Each license applies only to the scope stated below.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-## Code
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Except for the material listed in the non-code scope, source code, executable
-scripts, tests, build files, and automation are licensed under the PolyForm
-Noncommercial License 1.0.0.
-
-SPDX identifier: PolyForm-Noncommercial-1.0.0
-License text: LICENSE-CODE
-Canonical URL: https://polyformproject.org/licenses/noncommercial/1.0.0
-
-## Non-code material
-
-The non-code scope is an explicit exception to the code scope. It includes all
-repository-authored material in `skills/`, `docs/`, `examples/`, and `schemas/`.
-It also includes repository-authored checklists, manifests, protocol text,
-prompts, README files, architecture text, citation metadata, and visual assets.
-This material is licensed under the Creative Commons Attribution-NonCommercial
-4.0 International license.
-
-SPDX identifier: CC-BY-NC-4.0
-License text: LICENSE-DOCS
-Canonical URL: https://creativecommons.org/licenses/by-nc/4.0/
-
-## Exceptions and prior versions
-
-File-level notices and third-party notices take priority over this scope
-notice. This includes bundled Eclipse SUMO material, OpenStreetMap data, and
-other third-party data or assets. See NOTICE.md and nearby license files.
-
-These licenses do not grant trademark rights. This notice applies to versions
-that include it. It does not revoke licenses already granted for earlier
-versions.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
