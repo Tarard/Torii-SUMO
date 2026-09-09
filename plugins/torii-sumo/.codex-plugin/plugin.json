@@ -1,6 +1,6 @@
 {
   "name": "torii-sumo",
-  "version": "1.1.0+codex.20260719132050",
+  "version": "1.2.0",
   "description": "Torii bundles SUMO expertise, OSM cleanup, and public-data corridor digital-twin MCP tools.",
   "author": {
     "name": "Torii contributors"

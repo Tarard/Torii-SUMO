@@ -25,6 +25,7 @@ def torii_auto_workflow(
     official_inventory_csv: str | None = None,
     signal_plan_csv: str | None = None,
     field_evidence_csv: str | None = None,
+    workflow_selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return run_auto_workflow(
         user_request=user_request,
@@ -44,5 +45,6 @@ def torii_auto_workflow(
         official_inventory_csv=Path(official_inventory_csv) if official_inventory_csv else None,
         signal_plan_csv=Path(signal_plan_csv) if signal_plan_csv else None,
         field_evidence_csv=Path(field_evidence_csv) if field_evidence_csv else None,
+        workflow_selection=workflow_selection,
         cleanup_workflow_func=sumo_osm_cleanup_workflow,
     )

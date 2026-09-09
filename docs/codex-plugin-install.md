@@ -16,6 +16,30 @@ plugin-local runner and lock file. Plugin-launched MCP sessions default to the
 10-tool `default` profile. Set `TORII_MCP_PROFILE=legacy` to expose all 73 legacy
 tools, or `TORII_MCP_PROFILE=netedit` for only the NetEdit loop.
 
+## CLI from an installed plugin
+
+The plugin runner also provides the CLI. From the installed plugin root, use:
+
+```powershell
+uv run --isolated --frozen --script ./scripts/run_torii_sumo.py --cli workflows --json
+uv run --isolated --frozen --script ./scripts/run_torii_sumo.py --cli workflow selected selection.json --json
+```
+
+Use an absolute runner path when another directory is current. Commands written
+as `torii ...` in this guide and the bundled skill are shorthand for this runner
+with `--cli`. A separate global `torii` installation is not required.
+
+For a Windows NetEdit capture, `netedit review <source.net.xml> <new-output-dir>
+<source-sha256>` opens a diagnostic copy, observes it, and closes it in one process.
+The copied network and review artifacts remain in the output directory. Use the
+persistent NetEdit MCP profile for multi-step edits. Separate CLI `open`, `observe`,
+`act`, and `close` calls do not preserve a session and are rejected before action.
+
+The Windows runtime explicitly includes pywin32 for the target-window session.
+SUMO programs must still be available on `PATH`. Developers can install the tested
+native binaries with `uv sync --extra dev --extra native`; CI uses SUMO 1.27.1 on
+Windows and Linux and verifies its binaries before running tests.
+
 ## Repository Layout
 
 The installable plugin root is:

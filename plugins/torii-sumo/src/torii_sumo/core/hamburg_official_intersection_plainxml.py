@@ -256,7 +256,7 @@ def materialize_hamburg_official_intersection_plainxml(
 
     netconvert_report: dict[str, Any]
     compiled_audit: dict[str, Any]
-    if compile_net:
+    if compile_net and not plan["permission_review_lane_ids"]:
         command = [str(netconvert_binary), "-c", paths["netconvert_config"].name]
         command_result = _result_dict(
             command_runner(command, cwd=destination, timeout_seconds=timeout_seconds)
@@ -281,6 +281,9 @@ def materialize_hamburg_official_intersection_plainxml(
         compiled_audit = {"status": "not_run"}
 
     structural_status = (
+        "review_required"
+        if plan["permission_review_lane_ids"]
+        else
         "pass"
         if not compile_net or (
             netconvert_report["status"] == "pass" and compiled_audit["status"] == "pass"
@@ -375,6 +378,11 @@ def materialize_hamburg_official_intersection_plainxml(
             },
         },
         "lane_groups": plan["manifest_lane_groups"],
+        "vehicle_permissions": {
+            "status": "review_required" if plan["permission_review_lane_ids"] else "pass",
+            "unresolved_lane_ids": plan["permission_review_lane_ids"],
+            "policy": "Explicit MAP bus/taxi restrictions override compiler defaults. Unresolved lanes remain closed in the PlainXML draft and network compilation is deferred.",
+        },
         "movements": plan["manifest_movements"],
         "excluded_modal_features": excluded,
         "structural_compiler_defaults": {
@@ -400,6 +408,7 @@ def materialize_hamburg_official_intersection_plainxml(
             "exact_kml_mapem_connection_identity": "pass",
             "ocit_vetted_vehicle_movements": ocit_movement_gate,
             "official_lane_orientation": "pass",
+            "official_vehicle_permissions": "review_required" if plan["permission_review_lane_ids"] else "pass",
             "official_drive_line_clipping": "pass",
             "explicit_lane_to_lane_connections": "pass",
             "distinct_control_expression_link_indices": "pass",
@@ -452,6 +461,7 @@ def _build_plan(
         ) from exc
 
     bound_lane_by_id = {str(row["lane_id"]): dict(row) for row in binding["lanes"]}
+    permission_by_id = {lane.lane_id: lane.permission_metadata for lane in map_lanes if lane.is_vehicle}
     if len(bound_lane_by_id) != len(binding["lanes"]):
         raise HamburgOfficialIntersectionPlainXmlError("bound KML lanes are not unique")
     vehicle_lane_ids = {
@@ -527,6 +537,7 @@ def _build_plan(
                 "endpoint_a": endpoint_a,
                 "endpoint_b": endpoint_b,
                 "source_coordinates": row["coordinates"],
+                "permission_metadata": permission_by_id[lane_id],
             }
         )
 
@@ -570,6 +581,7 @@ def _build_plan(
             row["lane_index"] = index
             row["sumo_lane_id"] = f"{edge_id}_{index}"
             lane_mapping[row["lane_id"]] = {
+                **row["permission_metadata"],
                 "edge_id": edge_id,
                 "lane_index": index,
                 "sumo_lane_id": row["sumo_lane_id"],
@@ -729,6 +741,7 @@ def _build_plan(
         "approach_nodes": approach_nodes,
         "edge_groups": edge_groups,
         "lane_mapping": lane_mapping,
+        "permission_review_lane_ids": sorted(lane_id for lane_id, permission in permission_by_id.items() if permission["permission_status"] in {"unknown", "review_required"}),
         "movements": movements,
         "link_index_count": len(control_indices),
         "control_key_to_link_index": dict(sorted(control_indices.items(), key=lambda item: item[1])),
@@ -907,12 +920,18 @@ def _write_edges(path: Path, plan: Mapping[str, Any]) -> None:
             },
         )
         for lane in group["lanes"]:
+            permission = lane["permission_metadata"]
+            lane_access = (
+                {"allow": " ".join(permission["allowed_vehicle_classes"] or _MOTOR_VCLASSES.split())}
+                if permission["permission_status"] in {"unrestricted", "restricted"}
+                else {"disallow": "all"}
+            )
             ET.SubElement(
                 edge,
                 "lane",
                 {
                     "index": str(lane["lane_index"]),
-                    "allow": _MOTOR_VCLASSES,
+                    **lane_access,
                     "speed": _number(plan["structural_speed_mps"]),
                     "width": _number(plan["structural_lane_width_m"]),
                     "shape": _shape(lane["shape"]),
@@ -1061,6 +1080,11 @@ def _audit_compiled_network(
         for lane in root.iter("lane")
         if lane.attrib.get("id")
     }
+    for lane_id, binding in plan["lane_mapping"].items():
+        lane = lane_by_id.get(binding["sumo_lane_id"])
+        expected_access = set(binding["allowed_vehicle_classes"] or _MOTOR_VCLASSES.split())
+        if lane is None or set(lane.get("allow", "").split()) != expected_access:
+            return {"status": "blocked", "reason": "compiled_lane_permissions_differ_from_map", "lane_id": lane_id}
     geometry_rows: list[dict[str, Any]] = []
     max_connection_deviation = 0.0
     for movement in plan["movements"]:

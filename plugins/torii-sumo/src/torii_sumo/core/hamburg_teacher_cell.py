@@ -1055,9 +1055,9 @@ def _select_official_approach_cross_section(
 
 
 def _lane_allows_passenger(lane: ET.Element) -> bool:
-    allow = set(lane.attrib.get("allow", "").split())
-    disallow = set(lane.attrib.get("disallow", "").split())
-    return (not allow or "passenger" in allow) and "passenger" not in disallow
+    from .osm_access import _permission_set
+
+    return "passenger" in _permission_set(lane.attrib)
 
 
 def _lane_edge_id(lane_id: str) -> str:

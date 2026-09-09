@@ -76,6 +76,12 @@ class _GuiThreadInfo(ctypes.Structure):
     )
 
 
+def _which_netedit(name: str) -> str | None:
+    # A wheel's console launcher has a different PID from the native GUI window.
+    from sumolib import checkBinary
+    return shutil.which(checkBinary(name) if name == "netedit" else name)
+
+
 def _netedit_input_mode(input_file: Path | str) -> str:
     """Return the Netedit input mode for a supported SUMO file."""
     path = Path(input_file)
@@ -162,7 +168,7 @@ def launch_netedit(
     window_pos: str | None = None,
     netedit_binary: str = "netedit",
     detach_console: bool = False,
-    which_func: Callable[[str], str | None] = shutil.which,
+    which_func: Callable[[str], str | None] = _which_netedit,
     popen_func: Callable[..., Any] = subprocess.Popen,
     platform_name: str = os.name,
 ) -> dict[str, Any]:
@@ -758,7 +764,7 @@ class NeteditTargetSession:
         settle_seconds: float = 0.5,
         window_timeout_seconds: float = 20.0,
         platform_name: str = sys.platform,
-        which_func: Callable[[str], str | None] = shutil.which,
+        which_func: Callable[[str], str | None] = _which_netedit,
         popen_func: Callable[..., Any] = subprocess.Popen,
     ) -> None:
         self.source = Path(source_net_file).resolve()

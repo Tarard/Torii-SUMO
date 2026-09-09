@@ -7,7 +7,7 @@ def test_collect_environment_report_uses_runner_and_reports_tools(tmp_path: Path
     calls: list[list[str]] = []
 
     def fake_which(name: str) -> str | None:
-        if name in {"sumo", "netgenerate", "duarouter"}:
+        if name in {"sumo", "netconvert", "netgenerate", "duarouter"}:
             return f"C:/SUMO/bin/{name}.exe"
         return None
 
@@ -35,6 +35,7 @@ def test_collect_environment_report_uses_runner_and_reports_tools(tmp_path: Path
 
     assert report.status == "pass"
     assert report.sumo_binary == "C:/SUMO/bin/sumo.exe"
+    assert report.netconvert_binary == "C:/SUMO/bin/netconvert.exe"
     assert report.netgenerate_binary == "C:/SUMO/bin/netgenerate.exe"
     assert report.duarouter_binary == "C:/SUMO/bin/duarouter.exe"
     assert ["C:/SUMO/bin/sumo.exe", "--version"] in calls
@@ -49,7 +50,7 @@ def test_collect_environment_report_blocks_when_sumo_missing() -> None:
 
 def test_collect_environment_report_blocks_when_python_packages_missing() -> None:
     def fake_which(name: str) -> str | None:
-        if name in {"sumo", "netgenerate", "duarouter"}:
+        if name in {"sumo", "netconvert", "netgenerate", "duarouter"}:
             return f"C:/SUMO/bin/{name}.exe"
         return None
 

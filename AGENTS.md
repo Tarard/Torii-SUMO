@@ -1,6 +1,11 @@
 # Torii Repository Instructions
 
 These instructions apply to the whole repository.
+Read this file before starting work on Torii.
+
+## NetEdit Default
+
+- Use TORII's CLI by default to open NetEdit and capture screenshots. Open networks with `torii-netedit`. Capture screenshots with `plugins/torii-sumo/scripts/netedit_background_review.py`, using the repository's `.venv` Python. Do not default to desktop clicking, typing, or menu navigation. If the CLI cannot perform the task, explain the limitation before using another method.
 
 ## Start Here
 

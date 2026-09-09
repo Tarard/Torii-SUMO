@@ -5,7 +5,11 @@ import json
 import re
 from pathlib import Path
 
-from torii_sumo.core.detector_demand import Detector, build_detector_anchored_routes
+from torii_sumo.core.detector_demand import (
+    Detector,
+    active_detectors,
+    build_detector_anchored_routes,
+)
 from torii_sumo.tools.demand_tools import (
     sumo_detector_count_audit,
     sumo_detector_count_constraints,
@@ -14,6 +18,23 @@ from torii_sumo.tools.demand_tools import (
 
 
 PRIVATE_MARKERS = ["private_project_name", "private_sensor_vendor", "closed_bridge_name"]
+
+
+def test_active_detectors_excludes_review_only_mappings() -> None:
+    active = Detector("active", "test", "", "e", "e_0", 0.0, "900", "high", "active")
+    review = Detector(
+        "review",
+        "test",
+        "",
+        "e",
+        "e_0",
+        0.0,
+        "900",
+        "low",
+        "needs_review",
+    )
+
+    assert active_detectors([active, review]) == [active]
 
 
 def test_detector_anchored_routes_include_reachable_turning_exits() -> None:
@@ -265,3 +286,62 @@ def test_count_audit_tool_compares_expected_counts_to_e1_output(tmp_path: Path) 
     assert "diff_entered_minus_expected" in comparison
     _assert_outputs_are_sanitized(output_dir)
     json.dumps(report)
+
+
+def test_default_count_audit_keeps_missing_intervals_out_of_metrics(tmp_path: Path) -> None:
+    from torii_sumo.mcp_contract_tools import torii_demand_audit
+
+    expected = tmp_path / "expected.csv"
+    detector = tmp_path / "e1.xml"
+    expected.write_text("detector_id,begin,end,expected_total\nd,0,900,0\n", encoding="utf-8")
+    detector.write_text("<detector/>", encoding="utf-8")
+    result = torii_demand_audit(str(expected), str(detector), str(tmp_path / "audit"))
+    assert result.status == "review_required"
+    report = result.payload
+    assert report["measurement_attribute"] == "nVehEntered"
+    assert report["missing_measurement_rows"] == 1
+    assert report["edge_rows"] == report["matched_rows"] == 0
+    assert report["measured_total"] is None
+    assert report["MAE"] is report["RMSE"] is report["GEH_lt5_percent"] is None
+    with Path(report["comparison_file"]).open(encoding="utf-8", newline="") as stream:
+        row = next(csv.DictReader(stream))
+    assert row["measurement_status"] == "missing"
+    assert row["measured_nVehEntered"] == row["diff_entered_minus_expected"] == ""
+
+
+def test_count_audit_preserves_entered_count_and_marks_missing_rows(tmp_path: Path) -> None:
+    expected = tmp_path / "expected.csv"
+    detector = tmp_path / "e1.xml"
+    expected.write_text("detector_id,begin,end,expected_total\nd,0,900,8\nmissing,0,900,12\n", encoding="utf-8")
+    detector.write_text('<detector><interval id="d" begin="0" end="900" nVehEntered="8" nVehContrib="3"/></detector>', encoding="utf-8")
+    report = sumo_detector_count_audit(str(expected), str(detector), str(tmp_path / "audit"))
+    assert report["status"] == "review_required"
+    assert report["measurement_attribute"] == "nVehEntered"  # Preserve the public default; do not silently switch counts.
+    assert report["expected_rows"] == 2
+    assert report["matched_rows"] == report["missing_measurement_rows"] == 1
+    assert report["requested_expected_total"] == 20
+    assert report["expected_total"] == report["measured_total"] == 8
+    assert report["MAE"] == report["RMSE"] == 0
+    assert report["metric_scope"] == "matched_detector_intervals_only"
+
+
+def test_count_audit_rejects_duplicate_or_incomplete_e1_intervals(tmp_path: Path) -> None:
+    expected = tmp_path / "expected.csv"
+    detector = tmp_path / "e1.xml"
+    expected.write_text("detector_id,begin,end,expected_total\nd,0,900,0\n", encoding="utf-8")
+    entered = '<interval id="d" begin="0" end="900" nVehEntered="0"/>'
+    for index, content in enumerate((entered + entered, '<interval id="d" begin="0" end="900" nVehContrib="0"/>')):
+        detector.write_text(f"<detector>{content}</detector>", encoding="utf-8")
+        report = sumo_detector_count_audit(str(expected), str(detector), str(tmp_path / f"audit-{index}"))
+        assert report["status"] == "fail"
+
+
+def test_count_audit_cannot_replace_its_expected_input(tmp_path):
+    source = tmp_path / "detector_demand_detector_comparison.csv"
+    source.write_text("detector_id,begin,end,expected_total\nd,0,900,0\n", encoding="utf-8")
+    before = source.read_bytes()
+    detector = tmp_path / "detector.xml"
+    detector.write_text('<detector><interval id="d" begin="0" end="900" nVehEntered="0"/></detector>', encoding="utf-8")
+    report = sumo_detector_count_audit(str(source), str(detector), str(tmp_path))
+    assert report["status"] == "fail"
+    assert source.read_bytes() == before

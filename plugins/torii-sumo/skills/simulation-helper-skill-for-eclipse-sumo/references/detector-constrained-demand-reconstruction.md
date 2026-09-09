@@ -19,6 +19,16 @@ Creating vehicles directly at detector edges is only a detector smoke test. Do n
 
 ## Tool Boundary
 
+For the default count audit, missing intervals are unknown measurements, not
+zero flow. Review `missing_measurement_rows` and `metric_scope` before using
+MAE or GEH. This entry keeps its existing `nVehEntered` definition; strict
+replay comparison separately uses `nVehContrib`.
+
+For route sampling, use a new output directory or prefix. The executor rejects
+existing fixed output files and checks that its inputs remain unchanged. Both
+new demand and mismatch files are required. Empty mismatch evidence cannot
+establish a perfect fit.
+
 This reference is a workflow and audit protocol. It can guide Torii, Codex, Claude, or a human reviewer, but it is not proof that the current plugin can automatically run the full reconstruction.
 
 Before claiming automated support, verify the required tool path exists for:

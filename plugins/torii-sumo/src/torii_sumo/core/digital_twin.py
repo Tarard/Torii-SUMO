@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 
@@ -83,6 +83,17 @@ class CanonicalCount:
     quality_status: str
 
 
+_VEHICLE_ATTRIBUTE_FLAGS = (
+    "isVehicleRevocableLane", "isVehicleFlyOverLane", "hovLaneUseOnly", "restrictedToBusUse",
+    "restrictedToTaxiUse", "restrictedFromPublicUse", "hasIRbeaconCoverage", "permissionOnRequest",
+)
+_LANE_SHARING_FLAGS = (
+    "overlappingLaneDescriptionProvided", "multipleLanesTreatedAsOneLane", "otherNonMotorizedTrafficTypes",
+    "individualMotorizedVehicleTraffic", "busVehicleTraffic", "taxiVehicleTraffic", "pedestriansTraffic",
+    "cyclistVehicleTraffic", "trackedVehicleTraffic", "pedestrianTraffic",
+)
+
+
 @dataclass(frozen=True)
 class MapLane:
     node_id: str
@@ -93,6 +104,8 @@ class MapLane:
     ref_longitude: float
     ref_latitude: float
     points_m: tuple[tuple[float, float], ...]
+    vehicle_attribute_bits: str = ""
+    shared_with_bits: str = ""
 
     @property
     def is_ingress(self) -> bool:
@@ -101,6 +114,24 @@ class MapLane:
     @property
     def is_vehicle(self) -> bool:
         return self.lane_type.lower() == "vehicle"
+
+    @property
+    def permission_metadata(self) -> dict[str, Any]:
+        """Decode SAE/ETSI bit positions without treating sharing as an allow list."""
+        flags = [name for bit, name in zip(self.vehicle_attribute_bits, _VEHICLE_ATTRIBUTE_FLAGS) if bit == "1"]
+        sharing = [name for bit, name in zip(self.shared_with_bits, _LANE_SHARING_FLAGS) if bit == "1"]
+        allowed = None
+        status = "unrestricted" if self.vehicle_attribute_bits else "unknown"
+        unresolved = {"isVehicleFlyOverLane", "hovLaneUseOnly", "restrictedFromPublicUse", "permissionOnRequest"}.intersection(flags)
+        bus, taxi = "restrictedToBusUse" in flags, "restrictedToTaxiUse" in flags
+        if unresolved or (bus and taxi) or "1" in self.vehicle_attribute_bits[8:]:
+            status = "review_required"
+        elif bus or taxi:
+            allowed, status = (["bus"] if bus else ["taxi"]), "restricted"
+        return {"vehicle_attribute_bits": self.vehicle_attribute_bits, "shared_with_bits": self.shared_with_bits,
+                "vehicle_attribute_flags": flags, "shared_with_flags": sharing,
+                "revocable": "isVehicleRevocableLane" in flags, "allowed_vehicle_classes": allowed,
+                "permission_status": status if self.is_vehicle else "not_applicable"}
 
 
 @dataclass(frozen=True)
@@ -400,6 +431,8 @@ def parse_mapem(path: Path) -> tuple[list[MapLane], list[MapConnection]]:
                     ref_longitude=ref_longitude,
                     ref_latitude=ref_latitude,
                     points_m=tuple(points),
+                    vehicle_attribute_bits=_map_bit_string(lane_type_element, 8, "vehicle", extensible=True) if lane_type.lower() == "vehicle" else "",
+                    shared_with_bits=_map_bit_string(_child(lane_attributes, "sharedWith"), 10, "sharedWith"),
                 )
             )
             connects_to = _child(lane_element, "connectsTo")
@@ -418,6 +451,13 @@ def parse_mapem(path: Path) -> tuple[list[MapLane], list[MapConnection]]:
                     )
                 )
     return lanes, connections
+
+
+def _map_bit_string(element: ET.Element | None, width: int, label: str, *, extensible: bool = False) -> str:
+    bits = "".join(_text(element).split())
+    if bits and (set(bits) - {"0", "1"} or (len(bits) < width if extensible else len(bits) != width)):
+        raise ValueError(f"MAP {label} bit string must contain {'at least ' if extensible else ''}{width} binary digits")
+    return bits
 
 
 def _mapem_node_id(geometry: ET.Element, identifier: ET.Element | None) -> str:

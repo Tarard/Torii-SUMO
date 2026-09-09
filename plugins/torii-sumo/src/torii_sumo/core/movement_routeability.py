@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+import json
+import math
 from typing import Any, Mapping, Protocol
 from xml.etree import ElementTree as ET
+
+import sumolib
 
 from torii_sumo.evidence.output_inspection import inspect_run_outputs
 
 from .artifact_io import write_json_atomic, write_text_atomic
 from .candidate_contracts import file_sha256
 from .command_runner import run_command
+from .connection_mode_audit import audit_network_connection_mode
 
 
 class CommandRunner(Protocol):
@@ -19,6 +26,201 @@ class CommandRunner(Protocol):
         cwd: Path | None = None,
         timeout_seconds: float = 60.0,
     ) -> Any: ...
+
+
+def verify_lane_chain(
+    movement: Mapping[str, Any], states: list[dict], expected_chain: list[str], *,
+    terminal_tripinfo: Mapping[str, Any] | None = None, expected_vehicle_id: str = "probe",
+    completed_without_collision_or_teleport: bool = False, step_length_s: float | None = None,
+) -> dict:
+    """Verify the observed inlet, complete internal chain, and first outlet lane."""
+    source, source_lane, target, target_lane = movement["sumo_connection"]
+    starts = [i for i, row in enumerate(states) if row["lane"].rsplit("_", 1)[0] == source]
+    ends = [i for i, row in enumerate(states) if row["lane"].rsplit("_", 1)[0] == target]
+    if not starts or ends and starts[-1] >= ends[0]:
+        return {"pass": False, "reason": "ordered_inlet_and_outlet_not_observed"}
+    outlet_source = "fcd"
+    if not ends:
+        terminal = terminal_tripinfo or {}
+        try:
+            depart, arrival = float(terminal.get("depart", "nan")), float(terminal.get("arrival", "nan"))
+            times = [(float(row["time"]), float(row["last_time"])) for row in states]
+            ordered = all(math.isfinite(value) for span in times for value in span) and all(a <= b for a, b in times) and all(a[1] < b[0] for a, b in zip(times, times[1:]))
+            timing = ordered and math.isfinite(depart) and math.isfinite(arrival) and 0 <= depart <= times[0][0] and step_length_s is not None and math.isfinite(step_length_s) and step_length_s > 0 and 0 < arrival - times[-1][1] <= step_length_s + 1e-6
+        except (KeyError, TypeError, ValueError):
+            timing = False
+        if not (completed_without_collision_or_teleport and terminal.get("id") == expected_vehicle_id
+                and all(row.get("id") == expected_vehicle_id for row in states)
+                and terminal.get("vaporized") == "" and terminal.get("arrivalLane") == f"{target}_{target_lane}" and timing):
+            return {"pass": False, "reason": "terminal_arrival_missing_or_inconsistent"}
+        outlet_source = "tripinfo"
+    start, end = starts[-1], ends[0] if ends else len(states)
+    observed = [row["lane"] for row in states[start + 1:end]]
+    passed = bool(expected_chain) and observed == expected_chain and states[start]["lane"] == f"{source}_{source_lane}" and (not ends or states[end]["lane"] == f"{target}_{target_lane}")
+    return {"pass": passed, "expected_internal_lane_chain": expected_chain,
+            "observed_internal_lane_chain": observed,
+            "outlet_evidence_source": outlet_source, "internal_evidence_source": "fcd",
+            "reason": ("complete_internal_chain_and_terminal_arrival_observed" if outlet_source == "tripinfo" else "complete_requested_connection_observed") if passed else "lane_chain_mismatch_or_unobserved_segment"}
+
+
+def run_candidate_movement_probes(
+    *, candidate_manifest: Path | str, output_dir: Path | str, sumo_binary: str = "sumo",
+    seed: int = 104, end_time_s: int = 600, step_length_s: float = 0.1,
+    timeout_seconds: float = 120.0,
+    junction_movements_only: bool = False,
+) -> dict[str, Any]:
+    """Exercise declared official movements separately without detector data."""
+    manifest_path = Path(candidate_manifest).resolve(strict=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    plan_based = manifest.get('schema') == 'torii.engineering-topology-build/v1'
+    if not plan_based and manifest.get("schema") != "torii.hamburg-aerial-corridor-candidate/v1":
+        raise ValueError("candidate manifest schema is invalid")
+    network_record = manifest["artifacts"]["network"]
+    network_path = Path(network_record["path"])
+    if not network_path.is_absolute():
+        network_path = manifest_path.parent / network_path
+    network_path = network_path.resolve(strict=True)
+    network_hash = file_sha256(network_path)
+    if network_hash != str(network_record["sha256"]).lower():
+        raise ValueError("candidate network SHA-256 does not match its manifest")
+    destination = Path(output_dir).resolve()
+    if destination.exists():
+        raise ValueError("output_dir must not already exist")
+    if any(not math.isfinite(value) or value <= 0 for value in (end_time_s, step_length_s, timeout_seconds)):
+        raise ValueError("run duration, step, and timeout must be finite and positive")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a nonnegative integer")
+    if plan_based:
+        topology_record = manifest['sources']['topology']
+        topology_path = Path(topology_record['path'])
+        topology_path = (topology_path if topology_path.is_absolute() else manifest_path.parent / topology_path).resolve(strict=True)
+        if file_sha256(topology_path) != topology_record['sha256']:
+            raise ValueError('The interpreted construction plan changed.')
+        topology = json.loads(topology_path.read_text(encoding='utf-8'))
+        if topology != manifest.get('declared_topology'):
+            raise ValueError('The declared topology differs from its bound source.')
+        required = [{'sumo_connection': [c['from'], c['fromLane'], c['to'], c['toLane']],
+                     'evidence': c.get('evidence'), 'movement_authority': 'construction_plan'} for c in topology['connections']
+                    if not (junction_movements_only and c.get('role') == 'continuous_road_boundary')]
+        total, unresolved, connection_audit = len(required), [], {}
+    else:
+        connection_audit = manifest['official_connection_audit']
+        required = connection_audit['required']
+        total = int(manifest['counts']['official_vehicle_movements'])
+        unresolved = connection_audit.get('ambiguous', [])
+    if len(required) + len(unresolved) != total or total < 1:
+        raise ValueError("official movement coverage counts do not agree")
+    requested_pairs = {tuple(row["sumo_connection"]) for row in required}
+    extra_probes = [row for row in connection_audit.get("boundary_connections", []) if tuple(row["sumo_connection"]) not in requested_pairs]
+    probes = [{**row, "probe_role": "plan_declared_movement" if plan_based else "official_movement"} for row in required] + [{**row, "probe_role": "additional_composed_boundary_connection"} for row in extra_probes]
+    network = sumolib.net.readNet(str(network_path), withInternal=True)
+    structural = audit_network_connection_mode(ET.parse(network_path).getroot(), endpoint_tolerance_m=0.1)
+    chains = {}
+    for junction in structural["junctions"]:
+        for row in junction["connection_mode_audit"]["movement_checks"]:
+            path = row.get("internal_path", {})
+            if path.get("status") == "pass":
+                key = (row["from"], int(row["fromLane"]), row["to"], int(row["toLane"]))
+                chains[key] = path["internal_lane_chain"]
+    owners = Counter(tuple(chain) for chain in chains.values())
+    chains = {key: chain for key, chain in chains.items() if chain and owners[tuple(chain)] == 1}
+    destination.mkdir(parents=True)
+
+    def probe(index_and_row):
+        index, row = index_and_row
+        directory = destination / f"movement-{index:04d}"
+        directory.mkdir()
+        pair = (str(row["sumo_connection"][0]), int(row["sumo_connection"][1]), str(row["sumo_connection"][2]), int(row["sumo_connection"][3]))
+        chain = chains.get(pair, [])
+        record = {**row, "network_sha256": network_hash, "directory": str(directory), "status": "review_required"}
+        if not chain:
+            record["reason"] = "no_unique_structurally_valid_internal_chain"
+        else:
+            lanes = [network.getLane(name) for name in [f"{pair[0]}_{pair[1]}", *chain, f"{pair[2]}_{pair[3]}"]]
+            restriction = row.get("allowed_vehicle_classes")
+            modes = ("passenger", "delivery", "bus", "taxi", "truck", "motorcycle", "private", "coach", "emergency") + (("bicycle",) if plan_based else ())
+            vehicle_class = next((mode for mode in modes if (restriction is None or mode in restriction) and all(lane.allows(mode) for lane in lanes)), None)
+            record["vehicle_class"] = vehicle_class
+            if vehicle_class is None:
+                record["reason"] = "no_common_motor_vehicle_permission"
+            else:
+                routes = ET.Element("routes")
+                ET.SubElement(routes, "vType", id="permitted", vClass=vehicle_class,
+                    laneChangeModel="LC2013", lcStrategic="-1", lcCooperative="-1", lcSpeedGain="0", lcKeepRight="0")
+                vehicle = ET.SubElement(routes, "vehicle", id="probe", type="permitted", depart="0", departLane=str(pair[1]), arrivalLane=str(pair[3]))
+                ET.SubElement(vehicle, "route", edges=f"{pair[0]} {pair[2]}")
+                route_path = directory / "probe.rou.xml"
+                _write_xml(route_path, routes)
+                summary_path, tripinfo_path, fcd_path = (directory / name for name in ("summary.xml", "tripinfo.xml", "fcd.xml"))
+                command = [sumo_binary, "--net-file", str(network_path), "--route-files", str(route_path), "--begin", "0", "--end", str(end_time_s), "--step-length", str(step_length_s), "--seed", str(seed), "--summary-output", str(summary_path), "--tripinfo-output", str(tripinfo_path), "--fcd-output", str(fcd_path), "--collision.check-junctions", "true", "--no-step-log", "true"]
+                result = run_command(command, cwd=directory, timeout_seconds=timeout_seconds)
+                write_text_atomic(directory / "stdout.txt", result.stdout)
+                write_text_atomic(directory / "stderr.txt", result.stderr)
+                states, parse_error, terminal = [], None, None
+                try:
+                    fcd_root = ET.parse(fcd_path).getroot()
+                    for step in fcd_root:
+                        for car in step:
+                            if car.get("id") == "probe":
+                                time = float(step.get("time"))
+                                if not states or states[-1]["lane"] != car.get("lane"):
+                                    states.append({"id": car.get("id"), "time": time, "last_time": time, "lane": car.get("lane", "")})
+                                else:
+                                    states[-1]["last_time"] = time
+                    summary_root = ET.parse(summary_path).getroot()
+                    summary = dict(summary_root[-1].attrib) if len(summary_root) else {}
+                    trips = ET.parse(tripinfo_path).getroot().findall("tripinfo")
+                    terminal = dict(trips[0].attrib) if len(trips) == 1 else None
+                except (OSError, ET.ParseError, ValueError) as error:
+                    summary, parse_error = {}, str(error)
+                completed = result.returncode == 0 and summary.get("arrived") == "1" and summary.get("collisions") == "0" and summary.get("teleports") == "0" and terminal is not None and terminal.get("id") == "probe" and terminal.get("vaporized") == ""
+                proof = verify_lane_chain(row, states, chain, terminal_tripinfo=terminal,
+                    expected_vehicle_id="probe", completed_without_collision_or_teleport=completed, step_length_s=step_length_s)
+                record.update({"command": result.to_dict(), "summary": summary, "parse_error": parse_error,
+                    "lane_sequence": states, "connection_chain_proof": proof, "completed_without_collision_or_teleport": completed,
+                    "fcd_sha256": file_sha256(fcd_path) if fcd_path.is_file() else None,
+                    "terminal_tripinfo": terminal, "tripinfo_sha256": file_sha256(tripinfo_path) if tripinfo_path.is_file() else None,
+                    "status": "pass" if completed and proof["pass"] else "review_required"})
+        write_json_atomic(directory / "result.json", record, sort_keys=True)
+        return record
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        records = list(pool.map(probe, enumerate(probes)))
+    official_records = records[:len(required)]
+    passed = sum(record["status"] == "pass" for record in official_records)
+    composed = [row for row in official_records if "composition_geometry_status" in row]
+    composed_passed = sum(row["status"] == "pass" and row["composition_geometry_status"] == "pass" for row in composed)
+    boundary_reviews = connection_audit.get("composed_boundary_path_reviews", [])
+    unchanged = file_sha256(network_path) == network_hash
+    report = {"schema": "torii.official-movement-routeability/v1", "status": "pass" if passed == total and composed_passed == len(composed) and all(row["status"] == "pass" for row in records) and not boundary_reviews and unchanged else "review_required",
+        "official_total": total, "mapped_and_tested": len(required), "passed_exact_lane_transition": passed,
+        "probe_count": len(records), "additional_boundary_probe_count": len(extra_probes),
+        "composed_official_movement_count": len(composed), "passed_composed_spatial_movements": composed_passed,
+        "composed_boundary_path_review_count": len(boundary_reviews),
+        "unmapped_not_tested": len(unresolved), "not_tested": unresolved, "results": records,
+        "vehicle_class_counts": dict(Counter(record.get("vehicle_class", "not_run") for record in records)),
+        "outlet_evidence_counts": dict(Counter(record.get("connection_chain_proof", {}).get("outlet_evidence_source", "not_proved") for record in records)),
+        "network": str(network_path), "network_sha256": network_hash, "source_immutable": unchanged,
+        "candidate_manifest": str(manifest_path), "candidate_manifest_sha256": file_sha256(manifest_path),
+        "seed": seed, "horizon_s": end_time_s, "step_length_s": step_length_s,
+        "lane_change_policy": "Autonomous lane changes disabled only for isolated connection probes; source permissions, car following, signals and collision checks remain active.",
+        "lane_change_source": "https://sumo.dlr.de/docs/Definition_of_Vehicles%2C_Vehicle_Types%2C_and_Routes.html#lane-changing_models",
+        "claim_boundary": "Each official movement is exercised alone using a permitted motor vehicle. The full internal chain must be observed in FCD. Only an unsampled terminal exit may use a matching normal tripinfo arrival within one simulation step of the last FCD frame. This does not validate multi-vehicle signal control or field timing."}
+    if plan_based:
+        report['schema'] = 'torii.engineering-plan-movement-routeability/v1'
+        report['declared_total'] = report.pop('official_total')
+        report['composed_declared_movement_count'] = report.pop('composed_official_movement_count')
+        report['movement_authority'] = 'construction_plan'
+        report['junction_movements_only'] = junction_movements_only
+        report['continuous_boundaries_checked_separately'] = [
+            [c['from'], c['fromLane'], c['to'], c['toLane']] for c in topology['connections']
+            if junction_movements_only and c.get('role') == 'continuous_road_boundary']
+        report['claim_boundary'] = ('Each selected declared plan movement is tested alone with a permitted native SUMO vehicle, '
+                                   'including bicycle-only lanes. Exact FCD lane chains do not verify drawing interpretation, '
+                                   'full-body clearance, field implementation, or historical signal timing.')
+    report_file = destination / "summary.json"
+    write_json_atomic(report_file, report, sort_keys=True)
+    return {**report, "report_file": str(report_file)}
 
 
 def run_all_turn_movement_smoke(

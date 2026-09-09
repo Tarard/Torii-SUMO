@@ -533,7 +533,11 @@ def compare_tls_via_path_semantics(
     movement_equal = not missing_keys and not extra_keys
     phase_equal = phase_states_teacher == phase_states_candidate
     via_geometry_status = "pass" if not path_failure_count else "needs_review"
-    status = "pass" if movement_equal and phase_equal and not missing_via_count else "fail"
+    status = (
+        "pass"
+        if movement_equal and phase_equal and not missing_via_count and not path_failure_count
+        else "fail"
+    )
     return {
         "status": status,
         "claim_status": "diagnostic-demo",

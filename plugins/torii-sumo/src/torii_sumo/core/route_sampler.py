@@ -494,6 +494,7 @@ def run_route_sampler(
     interval: int = 900,
     seed: int = 42,
     optimize: str | None = None,
+    minimize_vehicles: float = 0.0,
     route_sampler_script: Path | None = None,
     timeout_seconds: float = 300.0,
     command_runner: CommandRunner = run_command,
@@ -504,12 +505,28 @@ def run_route_sampler(
         optimize = optimize.strip()
         if optimize != "full" and (not optimize.isdigit() or int(optimize) <= 0):
             raise ValueError("routeSampler optimize must be 'full' or a positive integer boundary")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if not math.isfinite(minimize_vehicles) or not 0 <= minimize_vehicles < 1:
+        raise ValueError("routeSampler minimize_vehicles must be finite, nonnegative, and less than 1")
+    if not prefix or Path(prefix).name != prefix or any(c in prefix for c in "\\/:"):
+        raise ValueError("routeSampler prefix must be a filename prefix without directory components")
+    output_dir = Path(output_dir).resolve()
+    candidate_manifest_csv = Path(candidate_manifest_csv).resolve(strict=True)
+    edge_data_file = Path(edge_data_file).resolve(strict=True)
     candidate_routes = output_dir / f"{prefix}_candidate_routes.rou.xml"
     demand_file = output_dir / f"{prefix}_demand.rou.xml"
     mismatch_file = output_dir / f"{prefix}_route_sampler_mismatch.xml"
     command_file = output_dir / f"{prefix}_route_sampler_command.json"
+    outputs = (candidate_routes, demand_file, mismatch_file, command_file)
+    script = resolve_route_sampler_script(route_sampler_script)
+    inputs = [candidate_manifest_csv, edge_data_file, *([script] if script is not None else [])]
+    if any(output.resolve() == source or output.exists() and output.samefile(source) for output in outputs for source in inputs):
+        raise ValueError("routeSampler output must not overlap a source input")
+    if any(path.exists() for path in outputs):
+        raise ValueError("routeSampler outputs already exist; choose a new directory or prefix")
+    input_hashes = {path: sha256_file(path) for path in inputs}
+    output_dir.mkdir(parents=True, exist_ok=True)
     route_count = write_candidate_routes(candidate_manifest_csv, candidate_routes)
+    input_hashes[candidate_routes] = sha256_file(candidate_routes)
     edge_stats = validate_route_sampler_edge_counts(edge_data_file, begin=begin, end=end, interval=interval)
     constraint_structure = audit_route_constraint_structure(
         candidate_manifest_csv,
@@ -519,7 +536,6 @@ def run_route_sampler(
         interval=interval,
     )
     identifiability = audit_route_sensor_incidence(candidate_manifest_csv, edge_data_file)
-    script = resolve_route_sampler_script(route_sampler_script)
     if script is None:
         report = {
             "status": "blocked",
@@ -556,6 +572,8 @@ def run_route_sampler(
     ]
     if optimize:
         command.extend(["--optimize", optimize])
+    if minimize_vehicles:
+        command.extend(["--minimize-vehicles", str(minimize_vehicles)])
     command.extend(
         [
         "--mismatch-output",
@@ -569,16 +587,16 @@ def run_route_sampler(
     manifest = {
         "tool": "Eclipse SUMO tools/routeSampler.py",
         "script": str(script),
-        "script_sha256": sha256_file(script),
+        "script_sha256": input_hashes[script],
         "command": command,
         "command_result": result_dict,
         "inputs": {
             "candidate_manifest_csv": str(candidate_manifest_csv),
-            "candidate_manifest_sha256": sha256_file(candidate_manifest_csv),
+            "candidate_manifest_sha256": input_hashes[candidate_manifest_csv],
             "candidate_routes": str(candidate_routes),
-            "candidate_routes_sha256": sha256_file(candidate_routes),
+            "candidate_routes_sha256": input_hashes[candidate_routes],
             "edge_data": str(edge_data_file),
-            "edge_data_sha256": sha256_file(edge_data_file),
+            "edge_data_sha256": input_hashes[edge_data_file],
         },
         "constraint_structure": constraint_structure,
         "identifiability": identifiability,
@@ -588,14 +606,22 @@ def run_route_sampler(
             "interval": interval,
             "seed": seed,
             "optimize": optimize,
+            "minimize_vehicles": minimize_vehicles,
         },
     }
+    inputs_unchanged = all(path.is_file() and sha256_file(path) == digest for path, digest in input_hashes.items())
+    missing_outputs = [str(path) for path in (demand_file, mismatch_file) if not path.is_file()]
+    manifest.update(output_policy="new_files_only", inputs_unchanged=inputs_unchanged,
+                    missing_output_files=missing_outputs,
+                    outputs={path.name: {"path": str(path), "sha256": sha256_file(path)}
+                             for path in (demand_file, mismatch_file) if path.is_file()})
     command_file.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if result_dict.get("status") != "pass" or not demand_file.is_file():
+    if result_dict.get("status") != "pass" or result_dict.get("returncode") != 0 or missing_outputs or not inputs_unchanged:
         return {
             "status": "fail",
             "claim_status": "construction-invalid",
-            "reason": "routeSampler failed or did not create the demand route file",
+            "reason": "routeSampler failed, did not create both outputs, or changed its inputs",
+            "inputs_unchanged": inputs_unchanged, "missing_output_files": missing_outputs,
             "command_manifest": str(command_file),
             "command_result": result_dict,
             "candidate_route_file": str(candidate_routes),
@@ -603,10 +629,7 @@ def run_route_sampler(
             "constraint_structure": constraint_structure,
             "identifiability": identifiability,
         }
-    mismatch = parse_route_sampler_mismatch(mismatch_file) if mismatch_file.is_file() else {
-        "row_count": 0,
-        "absolute_deficit": None,
-    }
+    mismatch = parse_route_sampler_mismatch(mismatch_file)
     absolute_deficit = mismatch.get("absolute_deficit")
     mismatch_complete = absolute_deficit == 0
     total_count = int(edge_stats["total_count"])
@@ -615,8 +638,15 @@ def run_route_sampler(
         if absolute_deficit is not None and total_count > 0
         else None
     )
+    solution = summarize_route_sampler_solution(
+        demand_file,
+        begin=begin,
+        end=end,
+        interval=interval,
+    )
     return {
         "status": "pass" if mismatch_complete else "partial",
+        "inputs_unchanged": inputs_unchanged, "output_policy": "new_files_only",
         "claim_status": (
             "detector-constrained-plausible-demand" if mismatch_complete else "construction-incomplete"
         ),
@@ -624,6 +654,8 @@ def run_route_sampler(
         "candidate_route_file": str(candidate_routes),
         "demand_route_file": str(demand_file),
         "demand_route_sha256": sha256_file(demand_file),
+        "demand_vehicle_count": solution["vehicle_count"],
+        "solution": solution,
         "edge_data_file": str(edge_data_file),
         "mismatch_file": str(mismatch_file) if mismatch_file.is_file() else "",
         "mismatch": mismatch,
@@ -857,11 +889,13 @@ def parse_route_sampler_mismatch(path: Path) -> dict[str, object]:
         if "deficit" not in element.attrib:
             continue
         deficit = float(element.attrib["deficit"])
+        if not math.isfinite(deficit):
+            raise ValueError("routeSampler deficit must be finite")
         absolute_deficit += abs(deficit)
         overflow += max(0.0, -deficit)
         row_count += 1
     return {
         "row_count": row_count,
-        "absolute_deficit": absolute_deficit,
-        "overflow": overflow,
+        "absolute_deficit": absolute_deficit if row_count else None,
+        "overflow": overflow if row_count else None,
     }

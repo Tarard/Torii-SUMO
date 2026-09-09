@@ -252,6 +252,22 @@ def test_osm_cleanup_reference_profile_runs_read_only_reference_audits(tmp_path:
     assert report["network_profile"] == "reference_matched"
 
 
+def test_cleanup_uses_permission_candidate_and_keeps_raw_build_identity(tmp_path, monkeypatch):
+    mocks = _patch_cleanup_stages(monkeypatch, tmp_path, {
+        "status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1,
+        "passenger_component_count": 1, "largest_component_edge_count": 1, "warnings": []})
+    candidate = tmp_path / "permissions.net.xml"
+    candidate.write_text("<net/>", encoding="utf-8")
+    mocks["apply_service_passenger_permissions"].return_value = {
+        "status": "pass", "changed_lane_count": 1, "net_file": str(candidate), "warnings": []}
+    report = run_osm_cleanup_workflow(output_dir=tmp_path / "out", bbox="13.6,50.9,13.9,51.1",
+                                      profile="standard", traffic_layers="passenger")
+    assert mocks["audit_tls"].call_args_list[0].kwargs["net_file"] == candidate
+    assert mocks["build_tls_aggregation_variant"].call_args_list[0].kwargs["net_file"] == candidate
+    assert report["raw_net_file"] == str(tmp_path / "network.net.xml")
+    assert report["build"]["net_file"] == str(tmp_path / "network.net.xml")
+
+
 def test_osm_cleanup_preserves_partial_and_severe_connectivity_classes(tmp_path: Path, monkeypatch) -> None:
     cases = (
         (992, 4, "partial-main-component", "partial"),
@@ -967,7 +983,7 @@ def test_filter_osm_by_highways_keeps_nodes_and_restrictions_for_kept_ways(tmp_p
     }
 
 
-def test_filter_osm_by_highways_clips_way_nodes_to_bbox(tmp_path: Path) -> None:
+def test_filter_osm_by_highways_selects_whole_ways_intersecting_bbox(tmp_path: Path) -> None:
     source = tmp_path / "source.osm.xml"
     target = tmp_path / "filtered.osm.xml"
     source.write_text(
@@ -994,12 +1010,48 @@ def test_filter_osm_by_highways_clips_way_nodes_to_bbox(tmp_path: Path) -> None:
     root = ET.parse(target).getroot()
     kept_node_ids = [node.attrib["id"] for node in root.findall("node")]
     kept_refs = [node.attrib["ref"] for node in root.find("way").findall("nd")]
-    assert kept_node_ids == ["2", "3"]
-    assert kept_refs == ["2", "3"]
-    assert stats["kept_nodes"] == 2
+    assert kept_node_ids == ["1", "2", "3", "4"]
+    assert kept_refs == ["1", "2", "3", "4"]
+    assert stats["kept_nodes"] == 4
     assert stats["kept_ways"] == 1
-    assert stats["trimmed_ways"] == 1
-    assert stats["dropped_nodes_outside_bbox"] == 2
+    assert stats["trimmed_ways"] == 0
+    assert stats["dropped_nodes_outside_bbox"] == 0
+    assert stats["bbox_selection_mode"] == "whole_ways_intersecting_bbox"
+    assert stats["retained_nodes_outside_bbox"] == 2
+
+
+def test_bbox_selection_preserves_reentry_crossings_and_restriction_nodes(tmp_path: Path) -> None:
+    source, target = tmp_path / "source.osm.xml", tmp_path / "selected.osm.xml"
+    root = ET.Element("osm", version="0.6")
+    shapes = {
+        "reentry": [(0.2, 0.2), (2, 0.5), (0.8, 0.8)],
+        "through": [(-1, 0.5), (2, 0.5)],
+        "corner": [(-1, 1), (1, -1)],
+        "bbox_overlap_only": [(-1, 0.5), (0.5, 2)],
+        "outside": [(2, 2), (3, 3)],
+    }
+    for identifier, points in shapes.items():
+        way = ET.SubElement(root, "way", id=identifier)
+        for index, (lon, lat) in enumerate(points):
+            ref = f"{identifier}_{index}"
+            ET.SubElement(root, "node", id=ref, lon=str(lon), lat=str(lat))
+            ET.SubElement(way, "nd", ref=ref)
+        ET.SubElement(way, "tag", k="highway", v="primary")
+    relation = ET.SubElement(root, "relation", id="restriction")
+    ET.SubElement(relation, "member", type="way", ref="reentry", role="from")
+    ET.SubElement(relation, "member", type="node", ref="reentry_1", role="via")
+    ET.SubElement(relation, "tag", k="type", v="restriction")
+    ET.ElementTree(root).write(source, encoding="utf-8")
+    original = source.read_bytes()
+    stats = filter_osm_by_highways(source, target, {"primary"}, bbox=parse_bbox("0,0,1,1"))
+    selected = ET.parse(target).getroot()
+    assert {way.get("id") for way in selected.findall("way")} == {"reentry", "through", "corner"}
+    for way in selected.findall("way"):
+        assert ET.tostring(way) == ET.tostring(root.find(f"way[@id='{way.get('id')}']"))
+    assert selected.find("node[@id='reentry_1']") is not None
+    assert ET.tostring(selected.find("relation")) == ET.tostring(relation)
+    assert stats["dropped_ways_outside_bbox"] == 2
+    assert source.read_bytes() == original
 
 
 def test_filter_osm_by_highways_limits_to_reference_way_scope(tmp_path: Path) -> None:
@@ -1316,8 +1368,11 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
         "allowed_way_ids_count": None,
         "bbox": "13.6000,50.9800,13.9000,51.1500",
         "clip_source_ways_to_bbox": True,
+        "bbox_selection_mode": "whole_ways_intersecting_bbox",
+        "geo_boundary": None,
         "include_railway": False,
         "road_classes": ["primary"],
+        "tls_join_distance_m": 35.0,
         "traffic_side": "right",
     }
     assert manifest["netconvert"]["output_original_names"]["requested"] is True
@@ -1350,6 +1405,41 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
             "--verbose",
         ]
     ]
+
+
+def test_build_osm_network_passes_geo_boundary_to_netconvert(tmp_path: Path) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <way id="10"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/></way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_runner(command: list[str], *, cwd: Path, timeout_seconds: float) -> CommandResult:
+        calls.append(command)
+        output = cwd / command[command.index("--output-file") + 1]
+        output.write_text("<net/>", encoding="utf-8")
+        return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+    boundary = "13.69,50.99,13.72,50.99,13.72,51.01,13.69,51.01"
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        geo_boundary=boundary,
+        tls_join_distance_m=75.0,
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        command_runner=fake_runner,
+    )
+
+    command = calls[0]
+    assert command[command.index("--keep-edges.in-geo-boundary") + 1] == boundary
+    assert command[command.index("--tls.join-dist") + 1] == "75"
+    assert report["geo_boundary"] == boundary
 
 
 def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tls_structure(
@@ -1743,6 +1833,24 @@ def test_build_routeability_probe_uses_user_supplied_road_queries(tmp_path: Path
     assert route_root.find("route").attrib["edges"] == "pre main post"
     assert cfg_root.find("input/net-file").attrib["value"] == "../network.net.xml"
     assert "main_road,arterial,n1,n2,main" in key_rows
+
+
+def test_all_permissions_agree_for_route_generation_and_passenger_components(tmp_path: Path) -> None:
+    net_file = tmp_path / "permissions.net.xml"
+    net_file.write_text('''<net>
+      <edge id="pre" from="n0" to="n1"><lane id="pre_0" allow="all"/></edge>
+      <edge id="main" from="n1" to="n2" name="Main Road"><lane id="main_0" allow="all"/></edge>
+      <edge id="post" from="n2" to="n3"><lane id="post_0" allow="all"/></edge>
+      <edge id="closed" from="x" to="y"><lane id="closed_0" disallow="all"/></edge>
+      <connection from="pre" to="main"/><connection from="main" to="post"/>
+    </net>''', encoding="utf-8")
+    report = build_routeability_probe(net_file=net_file, output_dir=tmp_path / "probe",
+        key_edge_queries=[{"label": "main", "role": "arterial", "search_terms": ["Main Road"]}])
+    assert report["status"] == "pass"
+    assert ET.parse(report["route_file"]).find("route").get("edges") == "pre main post"
+    connectivity = summarize_passenger_connectivity(net_file=net_file)
+    assert connectivity["passenger_edge_count"] == 3
+    assert connectivity["passenger_component_count"] == 1
 
 
 def test_summarize_passenger_connectivity_passes_single_component(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ import os
 import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from html.parser import HTMLParser
 from pathlib import Path
@@ -686,14 +686,15 @@ def fetch_hamburg_count_streams(
     streams: list[CountStream] = []
     raw_pages: dict[str, Any] = {}
     request_urls: list[str] = []
-    for node_id in node_ids:
+    requested, _requested_by_api_id = _hamburg_count_node_ids(node_ids)
+    for node_id, api_node_id in requested:
         values, pages, urls = client.collection(
             "Datastreams",
             params={
                 "$top": 100,
                 "$expand": "Thing($expand=Locations)",
                 "$filter": (
-                    f"properties/knotenName eq '{node_id}' and "
+                    f"properties/knotenName eq '{api_node_id}' and "
                     f"properties/serviceName eq '{HAMBURG_COUNT_SERVICE}' and "
                     f"properties/layerName eq '{HAMBURG_COUNT_LAYER}'"
                 ),
@@ -701,7 +702,13 @@ def fetch_hamburg_count_streams(
         )
         raw_pages[node_id] = pages
         request_urls.extend(urls)
-        streams.extend(parse_hamburg_count_streams(values))
+        for stream in parse_hamburg_count_streams(values):
+            returned_api_id = _hamburg_count_api_node_id(stream.node_id)
+            if returned_api_id != api_node_id:
+                raise ValueError(
+                    f"Hamburg count metadata returned node {stream.node_id!r} for requested node {node_id!r}"
+                )
+            streams.append(replace(stream, node_id=node_id))
     unique = {stream.stream_id: stream for stream in streams}
     if len(unique) != len(streams):
         raise ValueError("Hamburg count metadata returned duplicate datastream ids")
@@ -717,9 +724,8 @@ def fetch_hamburg_count_station_streams(
 ) -> tuple[list[CountStream], dict[str, Any]]:
     """Fetch official 15-minute cross-section streams for declared signal nodes."""
 
-    requested = tuple(dict.fromkeys(str(node_id).strip() for node_id in node_ids))
-    if not requested or any(not node_id for node_id in requested):
-        raise ValueError("Hamburg count station node_ids must be non-empty")
+    requested_pairs, requested_by_api_id = _hamburg_count_node_ids(node_ids)
+    requested = tuple(node_id for node_id, _api_node_id in requested_pairs)
     values, pages, request_urls = client.collection(
         "Datastreams",
         params={
@@ -731,7 +737,7 @@ def fetch_hamburg_count_station_streams(
             ),
         },
     )
-    requested_set = set(requested)
+    requested_api_ids = set(requested_by_api_id)
     selected_values = []
     excluded_off_scope_unsupported_streams = []
     for value in values:
@@ -742,7 +748,12 @@ def fetch_hamburg_count_station_streams(
             for member in composition.split(",")
             if "-" in member
         }
-        if not composition_nodes or composition_nodes & requested_set:
+        composition_api_ids = {
+            _hamburg_count_api_node_id(node_id)
+            for node_id in composition_nodes
+            if node_id.isdecimal()
+        }
+        if not composition_nodes or composition_api_ids & requested_api_ids:
             selected_values.append(value)
             continue
         try:
@@ -757,7 +768,11 @@ def fetch_hamburg_count_station_streams(
                 }
             )
     parsed = parse_hamburg_count_streams(selected_values)
-    selected = [stream for stream in parsed if stream.node_id in requested]
+    selected = [
+        replace(stream, node_id=requested_by_api_id[api_node_id])
+        for stream in parsed
+        if (api_node_id := _hamburg_count_api_node_id(stream.node_id)) in requested_by_api_id
+    ]
     unique = {stream.stream_id: stream for stream in selected}
     if len(unique) != len(selected):
         raise ValueError("Hamburg count station metadata returned duplicate datastream ids")
@@ -776,6 +791,30 @@ def fetch_hamburg_count_station_streams(
         "requested_node_ids": list(requested),
         "layer": HAMBURG_COUNT_STATION_LAYER,
     }
+
+
+def _hamburg_count_node_ids(
+    node_ids: Sequence[str],
+) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
+    requested: list[tuple[str, str]] = []
+    requested_by_api_id: dict[str, str] = {}
+    for raw_node_id in node_ids:
+        node_id = str(raw_node_id).strip()
+        api_node_id = _hamburg_count_api_node_id(node_id)
+        if api_node_id in requested_by_api_id:
+            raise ValueError(f"duplicate Hamburg count node id: {node_id!r}")
+        requested.append((node_id, api_node_id))
+        requested_by_api_id[api_node_id] = node_id
+    if not requested:
+        raise ValueError("Hamburg count node_ids must be non-empty")
+    return tuple(requested), requested_by_api_id
+
+
+def _hamburg_count_api_node_id(node_id: str) -> str:
+    value = str(node_id).strip()
+    if not value or not value.isdecimal():
+        raise ValueError("Hamburg count node ids must be decimal")
+    return str(int(value)).zfill(4)
 
 
 def parse_hamburg_count_streams(values: Iterable[Mapping[str, Any]]) -> list[CountStream]:

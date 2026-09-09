@@ -200,3 +200,39 @@ def test_map_kml_preserves_multiple_merge_points_for_one_lane(tmp_path: Path) ->
     assert result["counts"]["merge_point_count"] == 2
     lane_1 = [item for item in result["merge_points"] if item["lane_id"] == 1]
     assert len(lane_1) == 2
+
+
+def test_map_kml_accepts_current_pedestrian_and_bike_way_names(tmp_path: Path) -> None:
+    crossings = """<Folder><name>Crosswalks</name>
+      <Placemark><name>Pedestrian way 3</name><LineString><coordinates>9,53,0 9.1,53.1,0</coordinates></LineString></Placemark>
+      <Placemark><name>Bike way 4</name><LineString><coordinates>9.1,53.1,0 9.2,53.2,0</coordinates></LineString></Placemark>
+    </Folder>"""
+    points = """<Placemark><name>Pedestrian way 3 A</name><Point><coordinates>9,53,0</coordinates></Point></Placemark>
+      <Placemark><name>Pedestrian way 3 B</name><Point><coordinates>9.1,53.1,0</coordinates></Point></Placemark>
+      <Placemark><name>Bike way 4 A</name><Point><coordinates>9.1,53.1,0</coordinates></Point></Placemark>
+      <Placemark><name>Bike way 4 B</name><Point><coordinates>9.2,53.2,0</coordinates></Point></Placemark>"""
+    candidate = _write_synthetic_map_kml(
+        tmp_path,
+        SYNTHETIC_MAP_KML.replace(
+            '<Folder><name>Crosswalks</name></Folder>',
+            crossings,
+        ).replace(
+            '<Placemark><name>Lane 2 B</name><Point><coordinates>9.2,53.2,0</coordinates></Point></Placemark>',
+            '<Placemark><name>Lane 2 B</name><Point><coordinates>9.2,53.2,0</coordinates></Point></Placemark>'
+            + points,
+        ),
+    )
+
+    result = parse_hamburg_map_kml(candidate)
+
+    assert [item["lane_id"] for item in result["crossing_lanes"]] == [3, 4]
+    assert {
+        (item["feature_kind"], item["lane_id"], item["endpoint"])
+        for item in result["endpoints"]
+        if item["lane_id"] in {3, 4}
+    } == {
+        ("crosswalk", 3, "A"),
+        ("crosswalk", 3, "B"),
+        ("crosswalk", 4, "A"),
+        ("crosswalk", 4, "B"),
+    }

@@ -4,6 +4,18 @@ This project treats public OSM repositories as source-pattern evidence for Torii
 
 ## Source Map
 
+The legacy `clip_source_ways_to_bbox` option selects complete ways whose
+original segments intersect the requested box. It keeps their original node
+order, including portions outside the box. It does not cut their geometry or
+connect the two sides of a removed excursion. Filter reports record
+`bbox_selection_mode=whole_ways_intersecting_bbox` and `geometry_clipped=false`.
+
+An explicit service-road permission policy now creates a separate netconvert
+candidate. The workflow uses that candidate for later checks and keeps the
+original build file and its recorded identity. External and internal vehicle
+permissions, existing connections, external geometry, and signals are checked
+before the candidate is accepted.
+
 | Project | Torii role | Pattern to borrow | Boundary |
 |---|---|---|---|
 | OSMnx | Online Overpass network acquisition | Overpass subdivision, network-type presets, rate-limit pause, cache, retry on API pressure | Keep a lightweight local implementation; do not require heavy geospatial dependencies for the MVP |

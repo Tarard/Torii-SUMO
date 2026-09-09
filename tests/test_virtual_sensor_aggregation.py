@@ -127,6 +127,16 @@ def test_same_lane_fields_become_one_virtual_detector_and_summed_counts(tmp_path
     assert [row["diff_nVehContrib_minus_expected"] for row in audit] == [0, 0]
 
 
+def test_same_lane_fields_can_use_max_policy_for_conservative_demand() -> None:
+    result = build_virtual_sensor_aggregation(
+        [_mapping(1), _mapping(2)],
+        [_count(1, 7), _count(2, 5)],
+        group_policies={("0228", "west_in_0"): "max"},
+    )
+
+    assert result.expected_counts[0].expected_total == 7
+
+
 def test_distinct_lanes_remain_distinct_virtual_detectors() -> None:
     result = build_virtual_sensor_aggregation(
         [_mapping(1, lane_id="west_in_0"), _mapping(2, lane_id="west_in_1")],

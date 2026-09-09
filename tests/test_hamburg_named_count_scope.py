@@ -150,6 +150,33 @@ def test_lsa_identity_loader_requires_requested_points(tmp_path: Path) -> None:
     assert references["2394"].official_name == "Am Sandtorkai/Am Sandtorpark"
 
 
+def test_lsa_identity_loader_accepts_official_geojson_snapshot(tmp_path: Path) -> None:
+    path = tmp_path / "lsa.geojson"
+    path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "MultiPoint", "coordinates": [[9.995, 53.5435]]},
+                        "properties": {
+                            "knoten": 2394,
+                            "art": "K-LSA",
+                            "LSA_Name": "Am Sandtorkai/Am Sandtorpark",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    references = load_lsa_node_references(path, expected_node_ids=["2394"])
+
+    assert references["2394"].official_name == "Am Sandtorkai/Am Sandtorpark"
+
+
 def test_corridor_aggregate_writer_keeps_unknown_direction_as_own_group(tmp_path: Path) -> None:
     rows = [
         CanonicalCount(

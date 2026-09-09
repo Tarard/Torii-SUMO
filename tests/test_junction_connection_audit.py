@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from torii_sumo.core.junction_connection_audit import (
     build_connection_signature,
     build_teacher_guided_owner_semantics_probe,
@@ -477,6 +479,48 @@ def test_tls_via_path_semantics_accepts_netconvert_internal_suffix_renumbering(
     assert report["status"] == "pass"
     assert report["movement_key_equal"] is True
     assert report["via_geometry_status"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("changed_side", "change", "missing_via_count"),
+    [
+        ("candidate", "displaced_shape", 0),
+        ("candidate", "changed_length", 0),
+        ("candidate", "missing_lane", 1),
+        ("teacher", "missing_lane", 0),
+    ],
+)
+def test_tls_via_path_semantics_rejects_one_bad_path_among_valid_movements(
+    tmp_path: Path, changed_side: str, change: str, missing_via_count: int
+) -> None:
+    net = """<net>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" length="4" shape="0,0 4,0"/></edge>
+  <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0" length="4" shape="0,1 4,1"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="o"/>
+  <connection from="in" to="out" fromLane="1" toLane="1" via=":j_1_0" tl="j" linkIndex="1" dir="s" state="o"/>
+  <tlLogic id="j"><phase duration="10" state="GG"/></tlLogic>
+</net>"""
+    changes = {
+        "displaced_shape": ('shape="0,1 4,1"', 'shape="1000,1 1004,1"'),
+        "changed_length": ('id=":j_1_0" index="0" length="4"', 'id=":j_1_0" index="0" length="1004"'),
+        "missing_lane": ('<lane id=":j_1_0" index="0" length="4" shape="0,1 4,1"/>', ""),
+    }
+    old, new = changes[change]
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(net.replace(old, new) if changed_side == "teacher" else net, encoding="utf-8")
+    candidate.write_text(net.replace(old, new) if changed_side == "candidate" else net, encoding="utf-8")
+
+    report = compare_tls_via_path_semantics(teacher, candidate, "j", "j")
+
+    assert report["movement_key_equal"] is True
+    assert report["tl_logic_phase_states_equal"] is True
+    assert len(report["via_checks"]) == 2
+    assert report["via_path_failure_count"] == 1
+    assert report["missing_via_count"] == missing_via_count
+    assert report["via_geometry_status"] != "pass"
+    assert report["status"] == "fail"
 
 
 def test_tls_movement_compare_maps_teacher_external_edges(tmp_path: Path) -> None:

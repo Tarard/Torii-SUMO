@@ -69,6 +69,8 @@ def sumo_osm_build_network(
     bbox: str,
     output_dir: str,
     prefix: str = "sumo_osm_network",
+    geo_boundary: str | None = None,
+    tls_join_distance_m: float = 35.0,
     source_osm_path: str | None = None,
     clip_source_ways_to_bbox: bool = True,
     highway_classes: str | None = None,
@@ -82,6 +84,8 @@ def sumo_osm_build_network(
 ) -> dict[str, Any]:
     return build_osm_network(
         bbox=bbox,
+        geo_boundary=geo_boundary,
+        tls_join_distance_m=tls_join_distance_m,
         output_dir=Path(output_dir),
         prefix=prefix,
         source_osm_path=Path(source_osm_path) if source_osm_path else None,

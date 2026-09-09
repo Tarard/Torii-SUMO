@@ -133,7 +133,7 @@ def test_netedit_observe_annotations_report_its_write_side_effects() -> None:
     assert observe.annotations.idempotentHint is False
 
 
-def test_cli_netedit_close_finalize_passes_mode_and_screenshot_hash(monkeypatch, capsys) -> None:
+def test_cli_cannot_finalize_a_session_from_another_process(monkeypatch, capsys) -> None:
     calls: list[dict[str, object]] = []
 
     def fake_close(
@@ -169,18 +169,11 @@ def test_cli_netedit_close_finalize_passes_mode_and_screenshot_hash(monkeypatch,
     )
     capsys.readouterr()
 
-    assert exit_code == 0
-    assert calls == [
-        {
-            "session_id": "session-3",
-            "mode": "finalize",
-            "expected_screenshot_sha256": SCREENSHOT_SHA256,
-            "reason": None,
-        }
-    ]
+    assert exit_code == 3
+    assert not calls
 
 
-def test_cli_netedit_close_abort_does_not_require_screenshot_hash(monkeypatch, capsys) -> None:
+def test_cli_cannot_abort_a_session_from_another_process(monkeypatch, capsys) -> None:
     calls: list[dict[str, object]] = []
 
     def fake_close(
@@ -216,12 +209,5 @@ def test_cli_netedit_close_abort_does_not_require_screenshot_hash(monkeypatch, c
     )
     capsys.readouterr()
 
-    assert exit_code == 0
-    assert calls == [
-        {
-            "session_id": "session-4",
-            "mode": "abort",
-            "expected_screenshot_sha256": None,
-            "reason": "review_rejected",
-        }
-    ]
+    assert exit_code == 3
+    assert not calls

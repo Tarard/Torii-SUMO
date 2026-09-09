@@ -9,9 +9,8 @@ from torii_sumo.core.detector_demand import (
     boundary_edges,
     build_boundary_routes,
     build_detector_anchored_routes,
-    compare_expected_to_e1,
+    audit_expected_to_e1_strict,
     constraint_rows,
-    e1_counts_by_detector_interval,
     merge_routes,
     read_csv_rows,
     read_detector_mapping,
@@ -165,9 +164,13 @@ def sumo_detector_count_audit(
         out_dir = _output_dir(output_dir)
         clean_prefix = safe_id(prefix)
 
-        detector_counts = e1_counts_by_detector_interval(detector_path)
-        comparison_rows = compare_expected_to_e1(read_csv_rows(expected_path), detector_counts)
+        comparison_rows = audit_expected_to_e1_strict(read_csv_rows(expected_path), detector_path, count_attribute="nVehEntered")
+        for row in comparison_rows:
+            row["diff_entered_minus_expected"] = row.pop("diff_nVehEntered_minus_expected")
         comparison_file = out_dir / f"{clean_prefix}_detector_comparison.csv"
+        if any(comparison_file.resolve() == source.resolve() or comparison_file.exists() and comparison_file.samefile(source)
+               for source in (expected_path, detector_path)):
+            raise ValueError("The comparison output must not replace a source input.")
         write_csv(
             comparison_file,
             comparison_rows,
@@ -179,16 +182,24 @@ def sumo_detector_count_audit(
                 "expected_total",
                 "measured_nVehEntered",
                 "diff_entered_minus_expected",
+                "measurement_attribute",
+                "measurement_status",
             ],
         )
-        summary = summarize_comparison(comparison_rows)
-        status = "pass" if comparison_rows else "fail"
+        matched = [row for row in comparison_rows if row["measurement_status"] == "matched"]
+        missing = len(comparison_rows)-len(matched)
+        summary = summarize_comparison(matched)
+        status = "fail" if not comparison_rows else "review_required" if missing else "pass"
         return {
             "status": status,
-            "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+            "claim_status": "diagnostic-demo" if comparison_rows else "construction-invalid",
             **summary,
+            "measurement_attribute": "nVehEntered",
+            "expected_rows": len(comparison_rows), "matched_rows": len(matched), "missing_measurement_rows": missing,
+            "requested_expected_total": sum(row["expected_total"] for row in comparison_rows),
+            "metric_scope": "matched_detector_intervals_only",
             "comparison_file": str(comparison_file),
-            "warnings": [] if status == "pass" else ["no comparable detector rows found"],
+            "warnings": [f"{missing} expected detector intervals have no measurement"] if missing else [] if comparison_rows else ["no comparable detector rows found"],
         }
     except (OSError, ValueError) as exc:
         return _construction_invalid(str(exc))

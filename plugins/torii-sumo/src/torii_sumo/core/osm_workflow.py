@@ -3650,6 +3650,7 @@ def _workflow_reference_visual_detail_section(
     reference_visual_detail_build_report: dict[str, Any],
     reference_visual_detail_net_file: Path | None,
     reference_visual_detail_service_permission_report: dict[str, Any],
+    sumo_binary: str = "sumo",
 ) -> dict[str, Any]:
     reference_visual_detail_comparison_net_file = _WORKFLOW_UNSET
     reference_visual_detail_comparison_selection_reason = _WORKFLOW_UNSET
@@ -3737,6 +3738,8 @@ def _workflow_reference_visual_detail_section(
         reference_visual_detail_service_permission_report = service_permission_func(
             reference_visual_detail_net_file,
             policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+            output_dir=output_dir / "reference_visual_detail_service_permissions",
+            netconvert_binary=netconvert_binary, sumo_binary=sumo_binary, timeout_seconds=timeout_seconds,
         )
         if reference_visual_detail_service_permission_report.get("status") != "pass":
             return {
@@ -3776,6 +3779,7 @@ def _workflow_reference_visual_detail_section(
                 + list(reference_visual_detail_build_report.get("warnings", []))
                 + list(reference_visual_detail_service_permission_report.get("warnings", [])),
             }
+        reference_visual_detail_net_file = Path(str(reference_visual_detail_service_permission_report.get("net_file") or reference_visual_detail_net_file))
         reference_visual_detail_status = "built"
         reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
         reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
@@ -4177,6 +4181,8 @@ def run_osm_cleanup_workflow(
     service_permission_report = apply_service_passenger_permissions(
         raw_net_file,
         policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+        output_dir=output_dir / "service_permissions",
+        netconvert_binary=netconvert_binary, sumo_binary=sumo_binary, timeout_seconds=timeout_seconds,
     )
     if service_permission_report.get("status") != "pass":
         return {
@@ -4211,7 +4217,7 @@ def run_osm_cleanup_workflow(
             },
             "warnings": list(build_report.get("warnings", [])) + list(service_permission_report.get("warnings", [])),
         }
-    net_file = raw_net_file
+    net_file = Path(str(service_permission_report.get("net_file") or raw_net_file))
     reference_visual_detail_status = "not_applicable"
     reference_visual_detail_net_file: Path | None = None
     reference_visual_detail_comparison_net_file: Path | None = None
@@ -4437,6 +4443,7 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_build_report=reference_visual_detail_build_report,
         reference_visual_detail_net_file=reference_visual_detail_net_file,
         reference_visual_detail_service_permission_report=reference_visual_detail_service_permission_report,
+        sumo_binary=sumo_binary,
     )
     if _reference_visual_detail_section_result.get("status") == "fail":
         return _reference_visual_detail_section_result
@@ -4452,7 +4459,7 @@ def run_osm_cleanup_workflow(
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = audit_tls(
-        net_file=raw_net_file,
+        net_file=net_file,
         output_dir=output_dir / "tls_audit",
         prefix=f"{prefix}_tls_audit",
         osm_file=osm_file,
@@ -4461,7 +4468,7 @@ def run_osm_cleanup_workflow(
     )
     if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, build_tls_aggregation_variant):
         tls_aggregation_report = build_tls_aggregation_variant(
-            net_file=raw_net_file,
+            net_file=net_file,
             tls_audit_report=tls_report,
             output_dir=output_dir / "tls_aggregation",
             prefix=f"{prefix}_tls_aggregation",

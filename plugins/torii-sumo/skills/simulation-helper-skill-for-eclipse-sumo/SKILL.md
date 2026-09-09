@@ -1,21 +1,57 @@
 ---
 name: simulation-helper-skill-for-eclipse-sumo
-description: Use when planning, coding, debugging, auditing, comparing, or writing claims for Eclipse SUMO/TraCI traffic-signal experiments, including OSM/netconvert networks, TLS/NEMA, controllers, routes, demand, detectors, outputs, baselines, metrics, reproducibility, TDD changes, reusable field lessons, Hamburg SensorThings traffic data, or the Am Sandtorkai three-intersection digital twin.
+description: Use when planning, coding, debugging, auditing, comparing, or writing claims for Eclipse SUMO/TraCI traffic-signal experiments, including OSM/netconvert networks, TLS/NEMA, controllers, routes, demand, detectors, outputs, baselines, metrics, reproducibility, TDD changes, reusable field lessons, Hamburg road construction from reviewed construction drawings or OSM/MAP/aerial imagery, or traffic-count calibration on a fixed network.
 ---
 
 # Torii SUMO Expert Skill
 
 ## Purpose
 
-Use this skill as a router and evidence gate for Eclipse SUMO/TraCI traffic-signal experiments. Do not treat it as a full tutorial. First identify the user's scenario, then load only the reference files needed for that path.
+Use this skill to select SUMO work and interpret its evidence. The host model reads the executable catalog before choosing an entry. Load only the references needed for that choice.
 
 Default loop:
 
 ```text
-request -> classify scenario -> load minimal references -> ask or act -> verify evidence -> bound the claim
+request + dated sources -> read catalog -> host selects scenario -> check inputs -> execute or follow guidance -> evaluate evidence
 ```
 
+## Select Before Execution
+
+The commands below use `torii` as shorthand. In an installed plugin cache, run
+`uv run --isolated --frozen --script <plugin-root>/scripts/run_torii_sumo.py --cli`
+followed by the command arguments. Resolve `<plugin-root>` from this skill's
+location. This uses the plugin's locked environment and needs no repository
+checkout or globally installed `torii` command. For example, append
+`workflows --json` to read the catalog.
+
+1. Read `torii workflows --json` before selecting a scenario. Use `--scenario ID` to inspect its current arguments and reference.
+2. Match the user's objective, target year, primary source, existing artifacts, and requested action to the catalog description.
+3. Read the selected entry's reference. Distinguish a `workflow` entry, a bounded `check`, a `stage`, and `guidance` without a function.
+4. Record `user_request`, `scenario_id`, `reason`, and `arguments`. Preserve the original request and explain the choice from meaning and evidence.
+5. Check the selection with `torii workflow selected selection.json --json`. Missing inputs remain `needs_input`; do not invent files or values.
+6. For an authorized execution task, add `--execute`. A readiness result does not verify drawing contents or complete the selected work.
+7. For `guidance`, read the reference and continue the requested reasoning or intake. Do not claim a function was executed.
+
+The host model makes the semantic choice. Torii does not call another model API
+or classify that selection again with keywords. `core/workflow_catalog.py` is
+the only executable mapping; the reference tables below are reading guidance.
+Do not replace an unknown scenario or invalid argument with another workflow.
+Preserve `review_required`, `blocked`, and unresolved child results.
+
+Both `inspect-only` and `ask-first` stop before execution, including the older
+router. Use `torii netedit review <source.net.xml> <new-output-dir> <source-sha256>`
+for a one-shot Windows review. Multi-step NetEdit operations belong to one
+persistent MCP session, not separate CLI processes.
+
+Keep road construction separate from demand fitting on a fixed network.
+Planning an experiment does not request a simulation run. Reviewing existing
+results does not request a rerun. A synthetic scene cannot replace a real
+construction drawing. The user and source years govern each choice; an
+illustrative 2013 test does not change a supplied 2022 drawing's year.
+
 ## Start Here
+
+Use the catalog's reference first. This table selects further reading, not executable function names.
 
 | Scenario | Load | Expected output |
 |---|---|---|
@@ -29,6 +65,8 @@ request -> classify scenario -> load minimal references -> ask or act -> verify 
 | Public OSM import libraries, Overpass robustness, offline PBF import, SUMO OSM scripts, OpenDRIVE conversion, or source-code reuse decisions | `references/osm-source-patterns.md` | source-pattern map, integration ladder, no-vendoring boundary, and region-aware temporal baseline |
 | Detector-constrained SUMO demand reconstruction from real count sensors, route priors, route-incidence matrices, routeSampler residual correction, or month-long count-matched validation | `references/detector-constrained-demand-reconstruction.md` | workflow contract, detector/route/time-bin gates, public-data boundary, residual-correction ladder, and completion-first validation record |
 | Hamburg official count/signal APIs, the fixed Am Sandtorkai three-intersection corridor, busiest complete Saturday two-hour selection, or digital-twin replay | `references/hamburg-sandtorkai-digital-twin.md` plus `references/detector-constrained-demand-reconstruction.md` | official-source manifest, fixed-scope/window record, MAP-to-SUMO bindings, routeSampler demand, E1/E2/TLS replay evidence, and non-identifiability boundary |
+| Hamburg road construction from reviewed drawings with supporting OSM/Google Maps, including historical target years, or the existing MAP/KML and aerial mode | `references/hamburg-five-intersection-aerial-workflow.md` | one `torii hamburg build-network` request, drawing-led or MAP/aerial input mode, dated sources, and separate construction checks |
+| Hamburg count fitting or demand reconstruction on an already checked road network | `references/hamburg-count-calibration-workflow.md` | fixed network hash, signal/count bindings, plausible demand, and independent comparison evidence |
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/route-project-workflow.md` | `Project Control Screen` and next-step plan |
 | New, vague, or assumption-heavy experiment | `references/interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
 | Confirmed experiment intake ready for planning | `references/plan-experiment.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
@@ -47,13 +85,15 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 ## Core Rules
 
 - Load the minimum reference set for the scenario; do not bulk-load every file.
+- Keep Hamburg road construction separate from count calibration. Use raw source inputs for `build-network`; missing counts or historical signals do not prevent road construction. Start calibration only when requested, after the road network has been checked and frozen.
+- When a construction drawing leads the task, preserve its reviewed lane counts, uses, and connections. Use maps only for missing details. Preserve the user's target year; newer maps do not override a historical scenario. Record missing Google Maps references as not supplied.
 - Preserve the one-sentence workflow. Infer safe defaults, run bounded diagnostic steps, and ask only truly blocking questions; missing map/TLS reality evidence should block clean/experiment-ready claims without preventing construction, routeability checks, SUMO-GUI, or Netedit review artifacts.
 - Confirm missing experiment assumptions before formal execution or comparison.
 - Prove the SUMO environment before formal experiment work when `sumo`, `duarouter`, `SUMO_HOME`, Python, `traci`, or output generation has not been verified.
 - Separate what SUMO loaded, what the controller did, what outputs were written, what warnings/failures occurred, and what claim is supportable.
 - Compare controllers only with paired route, demand, seed, horizon, outputs, and completion criteria.
 - Do not use GUI inspection, clean execution, or arrived-only metrics as sufficient evidence.
-- Open an existing `.net.xml` only through Torii's CLI launcher or `netedit -s <absolute-net-file>` (`--sumo-net-file` is equivalent). Never use MCP or desktop automation to launch NetEdit or choose the network file. NetEdit screenshots must default to the hash-bound `netedit_background_review.py` path, which uses no global keyboard or mouse input; use the CLI-opened foreground window only for explicitly requested interactive editing.
+- Open an existing `.net.xml` through Torii's CLI launcher or `netedit -s <absolute-net-file>` (`--sumo-net-file` is equivalent). For snapshots, use `torii netedit review` or the hash-bound `netedit_background_review.py` path. Do not use desktop clicking to choose the network file. Use the persistent NetEdit MCP session only for explicitly requested interactive editing, and keep all operations in that same server process.
 - If completion differs across methods, report completion/unfinished/teleport status before travel-time, waiting-time, or delay averages.
 - Treat bad metrics, warnings, teleports, unfinished vehicles, and controller logs as feedback signals. Diagnose what the metric implies before changing code, routes, networks, signal plans, or controller parameters.
 - Use these claim labels: `formal-evidence`, `diagnostic-demo`, `stress-diagnostic`, `construction-invalid`, `claim-overreach`, `blocked`.
@@ -77,6 +117,8 @@ Load these only when the scenario requires them:
 - Public OSM source patterns from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, or osm-to-xodr: `references/osm-source-patterns.md`.
 - Detector-constrained SUMO demand reconstruction from real sensor counts, routeSampler residual correction, detector-route incidence matrices, anti-replay route priors, workflow gates, public-data boundaries, and month-long validation: `references/detector-constrained-demand-reconstruction.md`.
 - Hamburg SensorThings counts/signals, the fixed Am Sandtorkai three-intersection preset, complete Saturday two-hour selection, MAP/MAPEM lane binding, routeSampler demand, TLS event replay, and non-identifiability: `references/hamburg-sandtorkai-digital-twin.md`.
+- Hamburg construction drawings with supporting maps, historical road scenarios, or MAP/KML with geographic aerial images: `references/hamburg-five-intersection-aerial-workflow.md`.
+- Hamburg traffic-count fitting on a checked, fixed network, using the existing signal/count/demand commands: `references/hamburg-count-calibration-workflow.md`.
 - SUMO semantics, official/forum lessons, and public-code patterns: `references/learn-sumo-knowledge.md`.
 - NEMA/TLS/TraCI controller identity and API-boundary checks: `references/audit-sumo-controllers.md`.
 - Controller-family application patterns inspired by sumolights, without copying GPL source: `references/sumolights-controller-patterns.md`.

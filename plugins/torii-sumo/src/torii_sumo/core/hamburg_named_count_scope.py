@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import math
 import csv
+import json
+import math
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
@@ -112,10 +113,31 @@ def load_lsa_node_references(
     """Load point identities from Torii's frozen official Hamburg LSA evidence."""
 
     source = path.resolve(strict=True)
-    import json
-
     payload = json.loads(source.read_text(encoding="utf-8"))
     selections = payload.get("selections")
+    if not selections and payload.get("type") == "FeatureCollection":
+        selections = []
+        for feature in payload.get("features", []):
+            properties = feature.get("properties") if isinstance(feature, Mapping) else None
+            geometry = feature.get("geometry") if isinstance(feature, Mapping) else None
+            coordinates = geometry.get("coordinates") if isinstance(geometry, Mapping) else None
+            if not isinstance(properties, Mapping) or str(properties.get("art", "")).strip() != "K-LSA":
+                continue
+            if isinstance(coordinates, list) and len(coordinates) == 1:
+                coordinates = coordinates[0]
+            try:
+                node_id = str(int(str(properties.get("knoten", "")).strip()))
+            except ValueError:
+                continue
+            selections.append(
+                {
+                    "selected_node": {
+                        "node_id": node_id,
+                        "official_name": str(properties.get("LSA_Name", "")).strip(),
+                        "point_geometry": {"coordinates": coordinates},
+                    }
+                }
+            )
     if not isinstance(selections, list) or not selections:
         raise HamburgNamedCountScopeError("LSA identity evidence has no selections")
     expected = {str(node_id) for node_id in (expected_node_ids or ())}
@@ -563,6 +585,7 @@ def materialize_hamburg_named_count_scope(
         "schema": NAMED_COUNT_SCOPE_SCHEMA,
         "scope_id": scope_id,
         "status": "blocked",
+        "claim_status": "diagnostic-demo",
         "automatic_promotion_gate": "blocked",
         "execution_gate": "blocked",
         "execution_gate_reason": "official detector window and diagnostics are not yet complete",
@@ -691,7 +714,7 @@ def materialize_hamburg_named_count_scope(
                 else "blocked"
             ),
             "execution_gate_reason": (
-                "official observation window is complete for all available detectors; missing 2349 remains an explicit diagnostic limitation"
+                "official observation window and detector metadata gates are complete for all requested nodes"
                 if not scope_evidence["over_distance_stream_ids"]
                 and not scope_evidence["unknown_direction_stream_ids"]
                 else "detector geometry or direction remains unresolved"
@@ -727,4 +750,5 @@ def materialize_hamburg_named_count_scope(
         base_manifest["artifacts"][key] = {"path": str(path), "sha256": sha256_file(path)}
     manifest_path = output_dir / "sensor-count-scope.manifest.json"
     write_json(manifest_path, base_manifest)
-    return {**base_manifest, "manifest_path": str(manifest_path)}
+    serialized_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return {**serialized_manifest, "manifest_path": str(manifest_path)}

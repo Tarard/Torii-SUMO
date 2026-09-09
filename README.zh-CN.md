@@ -26,7 +26,15 @@
 
 Torii 面向 SUMO 路网构建工作：一句简短的自然语言 prompt 可以变成一个有边界、证据驱动、可与参考路网对比的 OSM-to-SUMO 工作流，包含构建证据、路线可达性检查、审查 artifacts 和清晰的结论边界。
 
-插件现在从 workflow router 开始：`torii_auto_workflow` 会分类用户请求、选择 skill、制定计划，并运行安全的 MCP 步骤来为你生成或修改 SUMO 路网。
+宿主模型先读取 `torii workflows --json`，根据任务目标、资料和年份选择登记场景，再检查必要输入；参见[场景选择说明](docs/workflow-selection.md)。
+
+安装插件后，可通过其锁定环境运行命令，无需另装全局 `torii`：
+
+```powershell
+uv run --isolated --frozen --script <插件目录>/scripts/run_torii_sumo.py --cli workflows --json
+```
+
+下文 `torii ...` 命令可用同一启动方式执行。Windows 单次截图使用 `netedit review`；多步编辑使用同一个常驻 MCP 会话。
 
 Torii 有两层：
 
@@ -48,7 +56,26 @@ Torii 有两层：
 
 研究状态（2026-07-14）：Stage 1-M 已达到 **Machine REVIEW_READY**。30 个盲化 held-out 走廊包、完整机器 witness census、确定性抽样和 provenance 已冻结，可以进入真实人工验证。这不等于 Stage 1 退出、自动修复获得认证，也不证明任意 OSM 路网已经达到专家 NetEdit 质量。详见 [Stage 1-M 机器证据](docs/stage1-machine-review-ready-plan.md)。
 
-## 汉堡走廊数字孪生：证据报告
+## 汉堡道路建模
+
+以人工核对的施工图确定车道数量、用途和允许转向，OSM 与已提供的 Google Maps 资料作为补充。继续使用同一命令：
+
+```powershell
+torii hamburg build-network <request.json> <new-output-dir> --json
+```
+
+请求中的 `construction_plan` 绑定原始 PDF 和人工读图形成的 `topology.json`。
+Torii 据此新建 SUMO 路网并运行检查。它不声称能直接理解任意 PDF。
+地图不能覆盖图纸已确定的车道数量、用途和连接。OSM 可补充缺失坐标、道路名称或速度；采用异年坐标时，须明确说明其对目标年份仍然有效的依据。
+
+场景年份由用户目标与图纸所代表的年份确定。2013 年场景不会因存在较新的地图而自动改成当前道路。
+资料年份与文件日期分别记录。Google Maps 未提供时保持“未提供”，不声称用过。
+参见[施工图建网说明](examples/05_hamburg_topology/construction-plan.md)和[示例请求](examples/05_hamburg_topology/construction-plan.request.example.json)。其中 2013 年仅为示例，不改变已有 2022 年图纸的身份。
+
+原有 MAP/XML/KML、航片和 LSA 资料模式继续支持，见[汉堡建网示例](examples/05_hamburg_topology/README.md)。
+两种建网方式都不要求交通计数或历史信号配时。路网载入成功仍不能代替图纸、几何和车辆通过检查。
+
+## 汉堡走廊数字孪生：历史证据报告
 
 产品目标是 **Am Sandtorkai 2349 → 2394 → 2403** 三节点带支路走廊。OSM 负责连续道路骨架，Torii 只在有证据的范围内清洗；Hamburg MAP/OCIT-C/TLD 和官方道路数据决定 movement、信号与传感器身份；SUMO 在同一断面放置 E1/E2，并求解一种能解释官方观测的可行 route 组合。该 route 是非唯一逆问题的一种解，不是唯一 OD 或车辆轨迹真值。
 

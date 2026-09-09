@@ -8,6 +8,37 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 - The MCP server is the execution layer: run bounded checks and return structured observations.
 - MCP tool output is observation, not final interpretation.
 
+## Host-Selected Scenarios
+
+Read `torii workflows --json`, then inspect the selected entry with
+`torii workflows --scenario ID --json`. The host model chooses from the
+user's objective, source authority, target year, and available inputs.
+Executable IDs, signatures, and references come from `core/workflow_catalog.py`.
+Do not copy its mapping into a second tool table.
+
+Write the four selection fields: `user_request`, `scenario_id`, `reason`,
+and `arguments`. Use `torii workflow selected selection.json --json` to check
+readiness. Add `--execute` to invoke the registered entry when execution is
+within the user's task. `ready_not_executed` checks argument requirements and
+declared input-file presence, not source contents or completed road work.
+
+An entry may be a `workflow`, `check`, `stage`, or `guidance`. A check or stage
+does not establish completion of its larger workflow. Guidance has no callable
+entry; read its reference and perform the requested reasoning. The selection
+does not call another model or pass through a second keyword classifier.
+
+The legacy `torii_auto_workflow` tool and `run_auto_workflow` also accept
+`workflow_selection`. They dispatch that selection before legacy detection.
+`inspect-only` and `ask-first` do not execute it. Put the selected function's
+inputs inside `workflow_selection.arguments`; do not rely on unrelated outer
+legacy arguments. Its request must match the outer `user_request`.
+Calls without a selection retain the older regular-expression route for
+compatibility. Unknown IDs or extra arguments are blocked without fallback.
+Missing required values or input files return `needs_input`.
+
+Read the child's decision and evidence after execution. `executed=true`
+does not turn `review_required`, `blocked`, or an incomplete result into success.
+
 ## Tool Profiles
 
 Plugin-launched MCP sessions default to the 10-tool `default` profile. The
@@ -50,7 +81,7 @@ torii workflow <tool> <request.json> --json
 
 | Situation | Tool | Required interpretation |
 |---|---|---|
-| One-sentence or ambiguous SUMO request | Skill routing first | Classify the request and collect required inputs before selecting a default tool or CLI workflow |
+| One-sentence or ambiguous SUMO request | Read the scenario catalog first | Let the host model select from intent and evidence, then check required inputs before execution |
 | Unknown machine, uncertain SUMO install, or missing runnable proof | `sumo_preflight` | Report environment pass/block status before any experiment claim |
 | Need raw environment details for handoff | `sumo_get_environment` | Treat versions and missing binaries as construction evidence |
 | Existing baseline and variant `.sumocfg` files | `sumo_config_pair_preflight` | Check missing inputs and shared outputs before running or comparing |

@@ -19,6 +19,7 @@ class EnvironmentReport(BaseModel):
     platform: str
     sumo_home: str | None
     sumo_binary: str | None
+    netconvert_binary: str | None = None
     netgenerate_binary: str | None
     duarouter_binary: str | None
     traci_available: bool
@@ -42,12 +43,15 @@ def collect_environment_report(
     package_finder: Callable[[str], object | None] = find_spec,
 ) -> EnvironmentReport:
     sumo_binary = which_func("sumo")
+    netconvert_binary = which_func("netconvert")
     netgenerate_binary = which_func("netgenerate")
     duarouter_binary = which_func("duarouter")
 
     warnings: list[str] = []
     if sumo_binary is None:
         warnings.append("sumo binary not found")
+    if netconvert_binary is None:
+        warnings.append("netconvert binary not found")
     if netgenerate_binary is None:
         warnings.append("netgenerate binary not found")
     if duarouter_binary is None:
@@ -56,11 +60,14 @@ def collect_environment_report(
     versions: dict[str, dict[str, Any]] = {}
     for name, binary in {
         "sumo": sumo_binary,
+        "netconvert": netconvert_binary,
         "netgenerate": netgenerate_binary,
         "duarouter": duarouter_binary,
     }.items():
         if binary:
             versions[name] = version_runner([binary, "--version"], 10.0)
+            if versions[name].get("status") != "pass" or versions[name].get("returncode") != 0:
+                warnings.append(f"{name} version command failed")
 
     traci_available = package_finder("traci") is not None
     sumolib_available = package_finder("sumolib") is not None
@@ -76,6 +83,7 @@ def collect_environment_report(
         platform=platform.platform(),
         sumo_home=os.environ.get("SUMO_HOME"),
         sumo_binary=sumo_binary,
+        netconvert_binary=netconvert_binary,
         netgenerate_binary=netgenerate_binary,
         duarouter_binary=duarouter_binary,
         traci_available=traci_available,

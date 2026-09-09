@@ -354,6 +354,7 @@ def run_auto_workflow(
     official_inventory_csv: Path | None = None,
     signal_plan_csv: Path | None = None,
     field_evidence_csv: Path | None = None,
+    workflow_selection: dict[str, Any] | None = None,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
     intersection_scene_func: Callable[..., dict[str, Any]] = run_intersection_scene_workflow,
@@ -362,11 +363,19 @@ def run_auto_workflow(
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
+    if workflow_selection is not None:
+        from .workflow_catalog import run_selected_workflow
+        if autonomy_mode not in AUTONOMY_MODES:
+            return {'status': 'blocked', 'executed': False, 'error': 'Invalid autonomy_mode.'}
+        if not isinstance(workflow_selection, dict) or workflow_selection.get('user_request', user_request) != user_request:
+            return {'status': 'blocked', 'executed': False, 'error': 'Selection must preserve the original user request.'}
+        return run_selected_workflow({**workflow_selection, 'user_request': user_request},
+                                     execute=autonomy_mode not in {'inspect-only', 'ask-first'})
     if autonomy_mode not in AUTONOMY_MODES:
         return _invalid_mode(user_request, autonomy_mode)
 
     workflow = detect_workflow(user_request)
-    if autonomy_mode == "inspect-only":
+    if autonomy_mode in {"inspect-only", "ask-first"}:
         return _plan_only(user_request, workflow, autonomy_mode)
 
     report = _base_report(user_request=user_request, detected_workflow=workflow, autonomy_mode=autonomy_mode)

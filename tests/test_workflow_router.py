@@ -176,7 +176,7 @@ def test_infer_seed_osm_node_id_requires_node_context() -> None:
     assert infer_seed_osm_node_id("Clean this bbox in 2026 for a conference paper") == ""
 
 
-def test_auto_workflow_blocks_osm_place_until_area_confirmation(tmp_path: Path) -> None:
+def test_auto_workflow_ask_first_returns_a_plan_before_place_resolution(tmp_path: Path) -> None:
     def fake_resolver(_place_name: str):
         return {
             "status": "pass",
@@ -198,13 +198,11 @@ def test_auto_workflow_blocks_osm_place_until_area_confirmation(tmp_path: Path) 
         place_resolver=fake_resolver,
     )
 
-    assert report["status"] == "blocked"
-    assert report["claim_status"] == "blocked"
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
     assert report["detected_workflow"] == "osm_to_sumo"
-    assert report["execution_status"] == "needs_user_confirmation"
-    assert report["inferred_place_name"] == "Altstadt, Dresden"
-    assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
-    assert report["next_question"] == "Confirm this OSM area and bbox before network construction?"
+    assert report["execution_status"] == "plan-only"
+    assert not report.get("candidate_bbox")
     assert report["tool_chain"][:2] == ["sumo_osm_resolve_place", "sumo_osm_cleanup_workflow"]
 
 

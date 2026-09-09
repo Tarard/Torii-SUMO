@@ -24,6 +24,7 @@ from torii_sumo.core.digital_twin_mapping import (
 )
 from torii_sumo.core.hamburg_official import (
     SensorThingsClient,
+    fetch_hamburg_count_streams,
     fetch_hamburg_count_station_streams,
     parse_hamburg_count_streams,
 )
@@ -136,6 +137,35 @@ def test_parse_mapem_uses_hamburg_asset_name_when_intersection_id_is_zero(tmp_pa
     assert lanes[0].node_id == "5"
 
 
+@pytest.mark.parametrize("vehicle_bits,expected_classes,expected_status", [
+    ("10010000", ["bus"], "restricted"),
+    ("00001000", ["taxi"], "restricted"),
+    ("00000000", None, "unrestricted"),
+    ("00000100", None, "review_required"),
+    ("00100000", None, "review_required"),
+])
+def test_mapem_vehicle_restrictions_are_not_lost(tmp_path, vehicle_bits, expected_classes, expected_status):
+    source = tmp_path / "map.xml"
+    source.write_text('<MAPEM><IntersectionGeometry><id><id>1862</id></id><refPoint><lat>534510000</lat><long>99720000</long></refPoint><laneSet><GenericLane><laneID>26</laneID><ingressApproach>5</ingressApproach><laneAttributes><directionalUse>10</directionalUse><sharedWith>0000100000</sharedWith><laneType><vehicle>' + vehicle_bits + '</vehicle></laneType></laneAttributes></GenericLane></laneSet></IntersectionGeometry></MAPEM>', encoding="utf-8")
+    lanes, _ = parse_mapem(source)
+    lane = lanes[0]
+    assert lane.vehicle_attribute_bits == vehicle_bits
+    assert lane.shared_with_bits == "0000100000"
+    assert lane.permission_metadata["shared_with_flags"] == ["busVehicleTraffic"]
+    assert lane.permission_metadata["allowed_vehicle_classes"] == expected_classes
+    assert lane.permission_metadata["permission_status"] == expected_status
+    assert lane.permission_metadata["revocable"] == vehicle_bits.startswith("1")
+    if expected_classes == ["bus"]:
+        assert lane.permission_metadata["vehicle_attribute_flags"] == ["isVehicleRevocableLane", "restrictedToBusUse"]
+
+
+def test_mapem_rejects_malformed_vehicle_bitstring(tmp_path):
+    source = tmp_path / "map.xml"
+    source.write_text('<MAPEM><IntersectionGeometry><id><id>7</id></id><refPoint><lat>0</lat><long>0</long></refPoint><laneSet><GenericLane><laneID>1</laneID><laneAttributes><laneType><vehicle>1001x000</vehicle></laneType></laneAttributes></GenericLane></laneSet></IntersectionGeometry></MAPEM>')
+    with pytest.raises(ValueError, match="bit string"):
+        parse_mapem(source)
+
+
 def test_sensorthings_client_follows_only_server_pagination() -> None:
     pages = {
         "https://iot.example/v1.1/Things?%24top=1": {
@@ -183,6 +213,40 @@ def test_count_stream_parser_uses_official_thing_location_and_fields() -> None:
     assert streams[0].node_id == "0228"
     assert streams[0].asset_id == "Z.10"
     assert streams[0].longitude == 9.982568439
+
+
+def test_count_fetch_maps_unpadded_lsa_id_to_official_count_id() -> None:
+    seen: list[str] = []
+    page = {
+        "value": [
+            {
+                "@iot.id": 1,
+                "properties": {"knotenName": "0104", "assetID": "Z.1", "fahrspur": "Geradeaus"},
+                "Thing": {
+                    "@iot.id": 2,
+                    "properties": {"richtung": "Richtung 1"},
+                    "Locations": [
+                        {
+                            "location": {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [9.98, 53.55]},
+                            }
+                        }
+                    ],
+                },
+            }
+        ]
+    }
+
+    def transport(request: Request, _timeout: float) -> bytes:
+        seen.append(request.full_url)
+        return json.dumps(page).encode("utf-8")
+
+    client = SensorThingsClient("https://iot.example/v1.1/", transport=transport)
+    streams, _raw = fetch_hamburg_count_streams(client, ["104"])
+
+    assert "knotenName+eq+%270104%27" in seen[0]
+    assert [stream.node_id for stream in streams] == ["104"]
 
 
 def test_count_station_parser_uses_composition_node_and_thing_asset() -> None:
@@ -305,6 +369,18 @@ def test_station_fetch_keeps_target_related_inventory_errors_fail_closed() -> No
 
     with pytest.raises(ValueError, match="spans multiple official nodes"):
         fetch_hamburg_count_station_streams(client, ["2394"])
+
+
+def test_station_fetch_maps_unpadded_lsa_id() -> None:
+    page = {"value": [_station_value(1, "0104-Z.1")]}
+    client = SensorThingsClient(
+        "https://iot.example/v1.1/",
+        transport=lambda _request, _timeout: json.dumps(page).encode("utf-8"),
+    )
+
+    streams, _raw = fetch_hamburg_count_station_streams(client, ["104"])
+
+    assert [stream.node_id for stream in streams] == ["104"]
 
 
 def test_count_station_parser_accepts_official_suffix_field_ids() -> None:

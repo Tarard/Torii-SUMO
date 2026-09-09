@@ -121,7 +121,7 @@ def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
     auto = descriptions["torii_auto_workflow"].casefold()
     scene = descriptions["sumo_intersection_scene_workflow"].casefold()
 
-    assert all(term in auto for term in ("conditionally", "phase-1", "osm", "review"))
+    assert all(term in auto for term in ("workflow_selection", "catalog", "without keyword", "ask-first"))
     assert all(
         term in scene for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")
     )

@@ -15,6 +15,8 @@ EXISTING_PUBLIC_REFERENCES = {
     "develop-and-verify-code.md",
     "detector-constrained-demand-reconstruction.md",
     "evaluate-and-report-results.md",
+    "hamburg-count-calibration-workflow.md",
+    "hamburg-five-intersection-aerial-workflow.md",
     "hamburg-sandtorkai-digital-twin.md",
     "interactive-experiment-intake.md",
     "learn-sumo-knowledge.md",
@@ -279,3 +281,33 @@ def test_skill_routes_fixed_hamburg_sandtorkai_digital_twin() -> None:
     ]
     for term in required_contract_terms:
         assert term in reference
+
+
+def test_skill_routes_five_intersection_aerial_workflow() -> None:
+    body = read_skill()
+    reference = (
+        SKILL / "references" / "hamburg-five-intersection-aerial-workflow.md"
+    ).read_text(encoding="utf-8")
+
+    assert "references/hamburg-five-intersection-aerial-workflow.md" in body
+    for term in (
+        "torii hamburg build-network",
+        "torii hamburg aerial-movements",
+        "torii hamburg combine-aerial-movements",
+        "netedit_background_review.py",
+        "Connection -> Inspect",
+        "MAP/KML lane",
+        "Hamburg aerial imagery",
+        "review_required",
+        "diagnostic-demo",
+        "CLI-only",
+    ):
+        assert term in reference
+
+    calibration = (SKILL / "references" / "hamburg-count-calibration-workflow.md").read_text(encoding="utf-8")
+    assert "references/hamburg-count-calibration-workflow.md" in body
+    assert "hamburg-count-calibration-workflow.md" in reference
+    assert "network-handoff.json" in reference and "network-handoff.json" in calibration
+    for command in ("bind-aerial-signals", "bind-aerial-counts", "generate-aerial-demand"):
+        assert f"torii hamburg {command}" in calibration
+        assert f"torii hamburg {command}" not in reference

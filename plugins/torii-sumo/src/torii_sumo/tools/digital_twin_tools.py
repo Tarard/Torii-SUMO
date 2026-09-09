@@ -34,6 +34,9 @@ from torii_sumo.core.hamburg_named_count_scope import (
     load_lsa_node_references,
     materialize_hamburg_named_count_scope,
 )
+from torii_sumo.core.hamburg_named_detector_bindings import (
+    materialize_hamburg_named_detector_bindings,
+)
 from torii_sumo.core.hamburg_named_replay import materialize_hamburg_named_replay
 from torii_sumo.core.hamburg_named_signal_observations import (
     materialize_hamburg_named_signal_observations,
@@ -961,6 +964,44 @@ def sumo_hamburg_named_count_scope(
         return {
             "status": "fail",
             "claim_status": "count-scope-invalid",
+            "automatic_promotion_gate": "blocked",
+            "error": str(exc),
+        }
+
+
+def sumo_hamburg_named_detector_bindings(
+    net_file: str,
+    count_stream_file: str,
+    output_dir: str,
+    network_projection: str = "EPSG:25832",
+    period: int = 900,
+    max_distance_m: float = 5.0,
+    ambiguity_margin_m: float = 1.0,
+    map_files: list[str] | None = None,
+    movement_evidence_file: str | None = None,
+) -> dict[str, Any]:
+    """Bind a frozen Hamburg count inventory to nearby lanes in one candidate network."""
+
+    try:
+        return materialize_hamburg_named_detector_bindings(
+            net_file=_existing_file(net_file, "net_file"),
+            count_stream_file=_existing_file(count_stream_file, "count_stream_file"),
+            output_dir=_output_dir(output_dir),
+            network_projection=network_projection,
+            period=period,
+            max_distance_m=max_distance_m,
+            ambiguity_margin_m=ambiguity_margin_m,
+            map_files=tuple(_existing_file(path, "map_file") for path in map_files or []),
+            movement_evidence_file=(
+                _existing_file(movement_evidence_file, "movement_evidence_file")
+                if movement_evidence_file
+                else None
+            ),
+        )
+    except (OSError, ValueError, json.JSONDecodeError, ET.ParseError) as exc:
+        return {
+            "status": "fail",
+            "claim_status": "detector-binding-invalid",
             "automatic_promotion_gate": "blocked",
             "error": str(exc),
         }

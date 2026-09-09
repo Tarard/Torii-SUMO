@@ -1163,7 +1163,7 @@ def test_reference_bbox_uses_reference_geometry_not_stale_orig_boundary(tmp_path
     assert report["reference_orig_boundary"] == "0.000000,0.000000,99.000000,99.000000"
 
 
-def test_apply_service_passenger_permissions_adds_passenger_to_service_lanes(tmp_path: Path) -> None:
+def test_service_permissions_do_not_overwrite_an_invalid_network(tmp_path: Path) -> None:
     net_file = tmp_path / "network.net.xml"
     net_file.write_text(
         """<net>
@@ -1177,16 +1177,18 @@ def test_apply_service_passenger_permissions_adds_passenger_to_service_lanes(tmp
         encoding="utf-8",
     )
 
+    before = net_file.read_bytes()
     report = apply_service_passenger_permissions(net_file, policy="allow_vehicle_service")
 
     root = ET.parse(net_file).getroot()
     service_lane = root.find("./edge[@id='service_a']/lane")
     residential_lane = root.find("./edge[@id='residential_b']/lane")
-    assert report["status"] == "pass"
-    assert report["service_passenger_permission_status"] == "applied"
+    assert report["status"] == "blocked"
+    assert report["service_passenger_permission_status"] == "failed"
+    assert net_file.read_bytes() == before
     assert report["service_edge_count"] == 1
     assert report["changed_lane_count"] == 1
-    assert "passenger" in service_lane.attrib["allow"].split()
+    assert "passenger" not in service_lane.attrib["allow"].split()
     assert residential_lane.attrib["allow"] == "passenger"
 
 

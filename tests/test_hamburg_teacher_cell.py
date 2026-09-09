@@ -19,6 +19,7 @@ from torii_sumo.core.hamburg_teacher_cell import (
     build_hamburg_teacher_cell_contract,
     build_hamburg_teacher_expression_grouping_variant,
     build_hamburg_official_approach_components,
+    derive_hamburg_candidate_cell_boundary,
     materialize_hamburg_single_teacher_cell,
 )
 from torii_sumo.core.ocit_c import (
@@ -29,6 +30,19 @@ from torii_sumo.core.ocit_c import (
     parse_ocit_c,
 )
 from torii_sumo.intersection.compile_plain import compile_intersection_to_plain
+
+
+def test_candidate_boundary_uses_sumo_all_permissions(tmp_path: Path) -> None:
+    candidate = _write_candidate_net(tmp_path / "candidate.net.xml", west_lane_count=2)
+    tree = ET.parse(candidate)
+    tree.find("edge[@id='west_in']/lane[@index='0']").set("allow", "all")
+    closed = tree.find("edge[@id='west_in']/lane[@index='1']")
+    closed.attrib.pop("allow")
+    closed.set("disallow", "all")
+    tree.write(candidate, encoding="utf-8")
+    boundary = derive_hamburg_candidate_cell_boundary(candidate_net_file=candidate, node_id="0228",
+        map_lanes=_map_lanes(), movement_paths=_movement_paths())
+    assert boundary.passenger_lane_indices_by_edge["west_in"] == (0,)
 
 
 def test_hamburg_teacher_cell_encodes_official_movements_and_expression_groups(

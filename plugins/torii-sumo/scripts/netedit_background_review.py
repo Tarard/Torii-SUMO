@@ -5,6 +5,7 @@ import ctypes
 import ctypes.wintypes as wintypes
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -696,12 +697,172 @@ def parse_size(value: str) -> tuple[int, int]:
     return int(left), int(right)
 
 
-def viewsettings_text(center: tuple[float, float], *, zoom: float) -> str:
+def _view_shape_points(value: str) -> list[tuple[float, float]]:
+    return [parse_point(",".join(token.split(",")[:2])) for token in value.split()]
+
+
+def _view_bounds(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
+    if not points or any(not math.isfinite(value) for point in points for value in point):
+        raise ValueError("Cannot fit an empty or non-finite network viewport.")
+    return min(p[0] for p in points), min(p[1] for p in points), max(p[0] for p in points), max(p[1] for p in points)
+
+
+def _network_view_bounds(root: ET.Element) -> tuple[tuple[float, float, float, float], str]:
+    location = root.find("location")
+    if location is not None and location.attrib.get("convBoundary"):
+        values = [float(value) for value in location.attrib["convBoundary"].split(",")]
+        if len(values) != 4 or any(not math.isfinite(value) for value in values) or values[2] < values[0] or values[3] < values[1]:
+            raise ValueError("Network convBoundary must contain four ordered, finite coordinates.")
+        return tuple(values), "convBoundary_estimate"
+    points = []
+    for junction in root.findall("junction"):
+        if junction.get("x") is not None and junction.get("y") is not None:
+            points.append((float(junction.get("x")), float(junction.get("y"))))
+        points.extend(_view_shape_points(junction.get("shape", "")))
+    for edge in root.findall("edge"):
+        if edge.get("function") != "internal":
+            for lane in edge.findall("lane"):
+                points.extend(_view_shape_points(lane.get("shape", "")))
+    return _view_bounds(points), "network_geometry_estimate"
+
+
+def _view_lane_context(shape: list[tuple[float, float]], distance_m: float) -> list[tuple[float, float]]:
+    if len(shape) < 2:
+        return shape
+    points, remaining = [shape[0]], distance_m
+    for a, b in zip(shape, shape[1:]):
+        length = math.dist(a, b)
+        if length > remaining:
+            points.append(tuple(a[i] + remaining / length * (b[i] - a[i]) for i in (0, 1)))
+            break
+        points.append(b)
+        remaining -= length
+    return points
+
+
+def fitted_viewport(net_file: Path, *, target: TargetJunction | None = None,
+                    center: tuple[float, float] | None = None, zoom: float | None = None) -> dict[str, Any]:
+    """Fit world-coordinate bounds using SUMO's percentage zoom, not pixels."""
+    if zoom is not None and (not math.isfinite(zoom) or zoom <= 0):
+        raise ValueError("NetEdit zoom must be a positive, finite percentage.")
+    root = ET.parse(net_file).getroot()
+    reference, reference_basis = _network_view_bounds(root)
+    bounds = reference
+    context_distance = 30.0  # Display context, not a traffic-model parameter.
+    if target is not None:
+        points = _view_shape_points(target.junction_shape) or [(target.x, target.y)]
+        for edge in root.findall("edge"):
+            for attribute, reverse in (("to", True), ("from", False)):
+                if edge.get(attribute) != target.junction_id:
+                    continue
+                for lane in edge.findall("lane"):
+                    shape = _view_shape_points(lane.get("shape", ""))
+                    width = float(lane.get("width", "3.2"))
+                    if not math.isfinite(width) or width <= 0:
+                        raise ValueError("Lane width must be positive and finite for viewport fitting.")
+                    for x, y in _view_lane_context(list(reversed(shape)) if reverse else shape, context_distance):
+                        points.extend(((x - width / 2, y - width / 2), (x + width / 2, y + width / 2)))
+        bounds = _view_bounds(points)
+    chosen_center = center or ((target.x, target.y) if zoom is not None and target is not None else ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2))
+    if any(not math.isfinite(value) for value in chosen_center):
+        raise ValueError("Viewport center must contain finite coordinates.")
+    spans = [max(reference[i + 2] - reference[i], 1.0) for i in (0, 1)]
+    target_spans = [max(2 * max(abs(bounds[i] - chosen_center[i]), abs(bounds[i + 2] - chosen_center[i])), 1.0) for i in (0, 1)]
+    chosen_zoom = zoom if zoom is not None else 100 * 0.9 * min(spans[i] / target_spans[i] for i in (0, 1))
+    # GUIDanielPerspectiveChanger uses 100 * original width / viewport width.
+    # Aspect-ratio correction only expands this conservative raw viewport.
+    return {"center": list(chosen_center), "zoom": chosen_zoom,
+            "basis": "explicit_zoom_override" if zoom is not None else "conservative_world_span_fit",
+            "zoom_unit": "percent_of_initial_network_view", "reference_bounds": list(reference),
+            "reference_bounds_basis": reference_basis, "runtime_grid_measured": False,
+            "target_bounds": list(bounds), "connected_lane_context_m": context_distance if target is not None else None,
+            "content_fraction": 0.9 if zoom is None else None,
+            "limitation": "Initial NetEdit grid bounds are estimated, not measured. Check the actual Connection-mode image; explicit zoom can adjust its framing."}
+
+
+def network_fit_view(net_file: Path, window_size: str) -> tuple[tuple[float, float], float]:
+    """Fit the whole network; window_size remains compatible but is not a zoom unit."""
+    view = fitted_viewport(net_file)
+    return tuple(view["center"]), view["zoom"]
+
+
+def aerial_decal(*, net_file: Path, aerial_image: Path, bbox_epsg25832) -> dict[str, Any]:
+    """Place caller-declared north-up pixels without rewriting or warping the image."""
+    from PIL import Image
+    from pyproj import CRS, Transformer
+    from pyproj.exceptions import ProjError
+
+    if (not isinstance(bbox_epsg25832, (list, tuple)) or len(bbox_epsg25832) != 4
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in bbox_epsg25832)):
+        raise ValueError("Aerial bounds require four finite EPSG:25832 coordinates.")
+    try:
+        west, south, east, north = bbox = tuple(float(value) for value in bbox_epsg25832)
+    except OverflowError as error:
+        raise ValueError("Aerial bounds must be finite.") from error
+    if not all(math.isfinite(value) for value in bbox) or west >= east or south >= north:
+        raise ValueError("Aerial bounds must have positive width and height.")
+    image_path = Path(aerial_image).resolve(strict=True)
+    image_hash = file_sha256(image_path)
+    with Image.open(image_path) as image:
+        if image.format not in {"PNG", "JPEG"}:
+            raise ValueError("Use an original north-up PNG or JPEG aerial image.")
+        if image.getexif().get(274, 1) != 1:
+            raise ValueError("Aerial image orientation must be unrotated and unmirrored.")
+        image_size = list(image.size)
+        image.load()
+    location = ET.parse(net_file).getroot().find("location")
+    if location is None:
+        raise ValueError("Aerial background requires network projection and offset.")
+    try:
+        target = CRS.from_user_input(location.get("projParameter", "!"))
+        offset = tuple(float(value) for value in location.get("netOffset", "").split(","))
+        if (not target.is_projected or len(target.axis_info) != 2
+                or any(axis.unit_conversion_factor != 1 for axis in target.axis_info)
+                or len(offset) != 2 or not all(math.isfinite(value) for value in offset)):
+            raise ValueError("Network projection must use metres and a finite two-coordinate offset.")
+        source = CRS.from_epsg(25832)
+        geography = Transformer.from_crs(source, "EPSG:4326", always_xy=True)
+        transform = Transformer.from_crs(source, target, always_xy=True)
+        grid = []
+        for fx in (0, 0.5, 1):
+            for fy in (0, 0.5, 1):
+                x, y = west + fx * (east - west), south + fy * (north - south)
+                lon, lat = geography.transform(x, y, errcheck=True)
+                area = source.area_of_use
+                if not area.west <= lon <= area.east or not area.south <= lat <= area.north:
+                    raise ValueError("Aerial bounds lie outside the EPSG:25832 area of use.")
+                nx, ny = transform.transform(x, y, errcheck=True)
+                grid.append((fx, fy, nx + offset[0], ny + offset[1]))
+    except (ValueError, ProjError) as error:
+        raise ValueError(f"Cannot locate aerial background: {error}") from error
+    x0, y0 = grid[0][2:]
+    x1, y1 = grid[-1][2:]
+    if not all(math.isfinite(value) for point in grid for value in point) or x1 <= x0 or y1 <= y0:
+        raise ValueError("Aerial projection must preserve positive north-up bounds.")
+    residual = max(math.hypot(x - (x0 + fx * (x1 - x0)), y - (y0 + fy * (y1 - y0)))
+                   for fx, fy, x, y in grid)
+    # ponytail: one native rectangle, checked at nine points to 0.1 m; warped projections need a separate georeferenced raster.
+    if residual > 0.1:
+        raise ValueError("Aerial projection requires rotation or warping beyond the 0.1 m rectangle limit.")
+    if file_sha256(image_path) != image_hash:
+        raise ValueError("Aerial image changed while its background was prepared.")
+    return dict(image=dict(path=str(image_path), sha256=image_hash, size_pixels=image_size), bbox_epsg25832=list(bbox),
+                orientation="caller_declared_north_up", network_projection=location.get("projParameter"),
+                network_offset=list(offset), rectangle_fit_error_m=residual, rectangle_fit_limit_m=0.1,
+                decal=dict(file=str(image_path), centerX=f"{(x0 + x1) / 2:.12g}", centerY=f"{(y0 + y1) / 2:.12g}",
+                           width=f"{x1 - x0:.12g}", height=f"{y1 - y0:.12g}", rotation="0", layer="-100", screenRelative="false"),
+                claim_boundary="The declared EPSG:25832 bounds locate the original pixels. Image orientation and surveyed alignment remain caller-supplied evidence.")
+
+
+def viewsettings_text(center: tuple[float, float], *, zoom: float, aerial_background=None) -> str:
     x, y = center
     scheme = '  <scheme name="standard"/>\n'
+    decal = "" if aerial_background is None else "  " + ET.tostring(
+        ET.Element("decal", aerial_background["decal"]), encoding="unicode") + "\n"
     return (
         "<viewsettings>\n"
         f"{scheme}"
+        f"{decal}"
         f'  <viewport zoom="{zoom:g}" x="{x:g}" y="{y:g}" angle="0"/>\n'
         '  <delay value="100"/>\n'
         "</viewsettings>\n"
@@ -717,7 +878,7 @@ def selection_text(selection_type: str, selection_id: str) -> str:
 
 
 def mode_key(mode: str) -> str | None:
-    return {"inspect": None, "connection": "C", "tls": "T"}[mode]
+    return {"inspect": "CI", "connection": "C", "tls": "T"}[mode]
 
 
 def capture_requests(
@@ -861,10 +1022,6 @@ def _post_mode_key(hwnd: int, mode: str) -> dict[str, Any]:
     win32con, win32gui, _, _ = _windows_modules()
     target = _find_fxgl_canvas(hwnd) or hwnd
     foreground_before = _foreground_context()
-    virtual_key = ord(key)
-    scan_code = ctypes.windll.user32.MapVirtualKeyW(virtual_key, 0)
-    key_down = 1 | (scan_code << 16)
-    key_up = key_down | (1 << 30) | (1 << 31)
     # FOX ignores shortcut messages for an inactive top-level window. Giving
     # only the NetEdit canvas internal activation/focus messages lets FOX route
     # the shortcut while Windows keeps the user's foreground application.
@@ -875,19 +1032,28 @@ def _post_mode_key(hwnd: int, mode: str) -> dict[str, Any]:
         foreground_before["hwnd"],
     )
     win32gui.SendMessage(target, win32con.WM_SETFOCUS, foreground_before["hwnd"], 0)
-    for destination in {target, hwnd}:
-        win32gui.SendMessage(
-            destination,
-            win32con.WM_KEYDOWN,
-            virtual_key,
-            key_down,
-        )
-        win32gui.SendMessage(
-            destination,
-            win32con.WM_KEYUP,
-            virtual_key,
-            key_up,
-        )
+    virtual_keys = []
+    for character in key:
+        virtual_key = ord(character)
+        virtual_keys.append(virtual_key)
+        scan_code = ctypes.windll.user32.MapVirtualKeyW(virtual_key, 0)
+        key_down = 1 | (scan_code << 16)
+        key_up = key_down | (1 << 30) | (1 << 31)
+        for destination in {target, hwnd}:
+            win32gui.SendMessage(
+                destination,
+                win32con.WM_KEYDOWN,
+                virtual_key,
+                key_down,
+            )
+            win32gui.SendMessage(
+                destination,
+                win32con.WM_KEYUP,
+                virtual_key,
+                key_up,
+            )
+        if len(key) > 1:
+            time.sleep(0.2)
     win32gui.SendMessage(target, win32con.WM_KILLFOCUS, foreground_before["hwnd"], 0)
     win32gui.SendMessage(
         hwnd,
@@ -899,7 +1065,7 @@ def _post_mode_key(hwnd: int, mode: str) -> dict[str, Any]:
     return {
         "status": "pass",
         "mode": mode,
-        "virtual_key": virtual_key,
+        "virtual_keys": virtual_keys,
         "target_hwnd": target,
         "target_class": win32gui.GetClassName(target),
         "foreground_before": foreground_before,
@@ -1122,6 +1288,7 @@ def _capture_request(
     window_pos: str,
     settle_seconds: float,
     additional_file: Path | None,
+    aerial_background: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     dpi_awareness = _enable_dpi_awareness()
     win32con, win32gui, _, _ = _windows_modules()
@@ -1129,7 +1296,7 @@ def _capture_request(
     selection_file = output_dir / f"{request.name}.selection.txt"
     screenshot_file = output_dir / f"{request.name}.png"
     view_file.write_text(
-        viewsettings_text(center, zoom=zoom),
+        viewsettings_text(center, zoom=zoom, aerial_background=aerial_background),
         encoding="utf-8",
     )
     preselection_text = selection_text(request.selection_type, request.selection_id)
@@ -1245,7 +1412,7 @@ def run_background_review(
     output_dir: Path,
     netedit_binary: str,
     center: tuple[float, float] | None,
-    zoom: float,
+    zoom: float | None,
     window_size: str,
     window_pos: str,
     settle_seconds: float,
@@ -1262,7 +1429,8 @@ def run_background_review(
     destination = output_dir.resolve()
     destination.mkdir(parents=True, exist_ok=True)
     target = read_target_junction(candidate, identity.target_junction_id)
-    view_center = center or (target.x, target.y)
+    viewport = fitted_viewport(candidate, target=target, center=center, zoom=zoom)
+    view_center, zoom = tuple(viewport["center"]), viewport["zoom"]
     executable = shutil.which(netedit_binary) or netedit_binary
     captures = [
         _capture_request(
@@ -1323,6 +1491,7 @@ def run_background_review(
         },
         "view_center": list(view_center),
         "zoom": zoom,
+        "viewport_fit": viewport,
         "window_size": window_size,
         "mode_delivery": "target-window WM_KEYDOWN/WM_KEYUP",
         "capture_delivery": "target-window PrintWindow(PW_RENDERFULLCONTENT)",
@@ -1353,11 +1522,13 @@ def run_direct_background_review(
     output_dir: Path,
     netedit_binary: str,
     center: tuple[float, float] | None,
-    zoom: float,
+    zoom: float | None,
     window_size: str,
     window_pos: str,
     settle_seconds: float,
     neutral_overview: bool = False,
+    aerial_image: Path | None = None,
+    aerial_bbox_epsg25832: list[float] | tuple[float, ...] | None = None,
 ) -> dict[str, Any]:
     """Capture a hash-bound, non-promoting review of one candidate junction.
 
@@ -1374,13 +1545,17 @@ def run_direct_background_review(
     )
     if not target_junction_id.strip():
         raise ValueError("Direct review requires a non-empty target junction id.")
+    if (aerial_image is None) != (aerial_bbox_epsg25832 is None):
+        raise ValueError("Provide aerial_image and aerial_bbox_epsg25832 together.")
+    background = aerial_decal(net_file=candidate, aerial_image=aerial_image, bbox_epsg25832=aerial_bbox_epsg25832) if aerial_image is not None else None
     if sys.platform != "win32":
         raise SystemExit("Background NetEdit capture is currently Windows-only.")
 
     destination = output_dir.resolve()
     destination.mkdir(parents=True, exist_ok=True)
     target = read_target_junction(candidate, target_junction_id)
-    view_center = center or (target.x, target.y)
+    viewport = fitted_viewport(candidate, target=target, center=center, zoom=zoom)
+    view_center, zoom = tuple(viewport["center"]), viewport["zoom"]
     executable = shutil.which(netedit_binary) or netedit_binary
     safe_target = re.sub(r"[^A-Za-z0-9_.-]+", "_", target.junction_id).strip("._-")
     if not safe_target:
@@ -1389,27 +1564,43 @@ def run_direct_background_review(
     # ponytail: keep Windows MAX_PATH headroom; the full junction id remains in
     # the report, while filenames use the digest for collision resistance.
     artifact_token = f"{safe_target[:10]}-{target_digest}"
-    captures = [
-        _capture_request(
+    requests = capture_requests(
+        target,
+        name_prefix=f"direct-{artifact_token}",
+        include_neutral_overview=neutral_overview,
+    )
+    overview_fit = fitted_viewport(candidate) if neutral_overview else None
+    overview_center, overview_zoom = (tuple(overview_fit["center"]), overview_fit["zoom"]) if overview_fit else (view_center, zoom)
+    captures = []
+    for request in requests:
+        request_center, request_zoom = (
+            (overview_center, overview_zoom)
+            if request.selection_type == "none"
+            else (view_center, zoom)
+        )
+        captures.append(
+            _capture_request(
             request=request,
             net_file=candidate,
             netedit_binary=executable,
             output_dir=destination,
-            center=view_center,
-            zoom=zoom,
+            center=request_center,
+            zoom=request_zoom,
             window_size=window_size,
             window_pos=window_pos,
             settle_seconds=settle_seconds,
             additional_file=None,
+            aerial_background=background,
         )
-        for request in capture_requests(
-            target,
-            name_prefix=f"direct-{artifact_token}",
-            include_neutral_overview=neutral_overview,
         )
-    ]
     candidate_hash_after = file_sha256(candidate)
     candidate_unchanged = candidate_hash_after == candidate_hash_before
+    image_unchanged = True
+    if background is not None:
+        image_path = Path(background["image"]["path"])
+        after = file_sha256(image_path) if image_path.is_file() else None
+        image_unchanged = after == background["image"]["sha256"]
+        background.update(image_sha256_after=after, image_unchanged=image_unchanged)
     mode_capture_hashes = [
         item["sha256"] for item in captures if item["selection_type"] != "none"
     ]
@@ -1430,7 +1621,7 @@ def run_direct_background_review(
         "schema": "torii.netedit-background-review.direct/v1",
         "status": (
             "review_material_ready"
-            if capture_gates_pass and mode_images_distinct and candidate_unchanged
+            if capture_gates_pass and mode_images_distinct and candidate_unchanged and image_unchanged
             else "blocked"
         ),
         "review_scope": "single-hash-bound-candidate-junction",
@@ -1438,6 +1629,7 @@ def run_direct_background_review(
         "candidate_sha256_before": candidate_hash_before,
         "candidate_sha256_after": candidate_hash_after,
         "candidate_unchanged": candidate_unchanged,
+        "aerial_background": background,
         "netedit_binary": executable,
         "target_junction": {
             "id": target.junction_id,
@@ -1448,6 +1640,12 @@ def run_direct_background_review(
         },
         "view_center": list(view_center),
         "zoom": zoom,
+        "viewport_fit": viewport,
+        "neutral_overview_view": (
+            {"center": list(overview_center), "zoom": overview_zoom, "viewport_fit": overview_fit}
+            if neutral_overview
+            else None
+        ),
         "window_size": window_size,
         "mode_delivery": "target-window WM_KEYDOWN/WM_KEYUP",
         "capture_delivery": "target-window PrintWindow(PW_RENDERFULLCONTENT)",
@@ -1485,7 +1683,7 @@ def run_hamburg_background_review(
     output_dir: Path,
     netedit_binary: str,
     center: tuple[float, float] | None,
-    zoom: float,
+    zoom: float | None,
     window_size: str,
     window_pos: str,
     settle_seconds: float,
@@ -1505,7 +1703,8 @@ def run_hamburg_background_review(
             identity.candidate_file,
             target_identity.junction_id,
         )
-        view_center = center or (target.x, target.y)
+        viewport = fitted_viewport(identity.candidate_file, target=target, center=center, zoom=zoom)
+        view_center = tuple(viewport["center"])
         target_rows.append(
             {
                 "official_node_id": target_identity.official_node_id,
@@ -1516,6 +1715,8 @@ def run_hamburg_background_review(
                 "y": target.y,
                 "incoming_lanes": list(target.incoming_lanes),
                 "view_center": list(view_center),
+                "zoom": viewport["zoom"],
+                "viewport_fit": viewport,
             }
         )
         captures.extend(
@@ -1525,7 +1726,7 @@ def run_hamburg_background_review(
                 netedit_binary=executable,
                 output_dir=destination,
                 center=view_center,
-                zoom=zoom,
+                zoom=viewport["zoom"],
                 window_size=window_size,
                 window_pos=window_pos,
                 settle_seconds=settle_seconds,
@@ -1577,6 +1778,7 @@ def run_hamburg_background_review(
         "netedit_binary": executable,
         "target_junctions": target_rows,
         "zoom": zoom,
+        "zoom_mode": "automatic_per_junction" if zoom is None else "explicit_zoom_override",
         "window_size": window_size,
         "mode_delivery": "target-window WM_KEYDOWN/WM_KEYUP",
         "capture_delivery": "target-window PrintWindow(PW_RENDERFULLCONTENT)",
@@ -1616,6 +1818,9 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--manifest")
     parser.add_argument("--expected-net-sha256")
     parser.add_argument("--target-junction-id")
+    parser.add_argument("--aerial-image", help="Original north-up PNG/JPEG background for --net-file reviews.")
+    parser.add_argument("--aerial-bbox-epsg25832", nargs=4, type=float, metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+                        help="Declared image bounds in EPSG:25832 metres. Requires --aerial-image.")
     parser.add_argument(
         "--candidate-role",
         choices=("primary", "nema-topology"),
@@ -1624,20 +1829,27 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--netedit-binary", default="netedit")
     parser.add_argument("--view-center")
-    parser.add_argument("--zoom", type=float, default=500.0)
+    parser.add_argument(
+        "--zoom",
+        type=float,
+        default=None,
+        help="Override target-junction zoom as a percentage of the initial network view. Default: fit the junction and nearby lane sections.",
+    )
     parser.add_argument("--window-size", default="1400,1000")
     parser.add_argument("--window-pos", default="20,20")
     parser.add_argument("--settle-seconds", type=float, default=1.5)
     parser.add_argument(
         "--neutral-overview",
         action="store_true",
-        help="Also capture an unselected Inspect-mode overview for direct reviews.",
+        help="Also capture an automatically fitted full-network overview for direct reviews.",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _args()
+    if (args.aerial_image or args.aerial_bbox_epsg25832 is not None) and not args.net_file:
+        raise SystemExit("Aerial background arguments are only valid with --net-file.")
     if args.net_file:
         if args.manifest:
             raise SystemExit("--manifest is only valid with the isolated --summary workflow.")
@@ -1659,6 +1871,8 @@ def main() -> int:
             window_pos=args.window_pos,
             settle_seconds=args.settle_seconds,
             neutral_overview=args.neutral_overview,
+            aerial_image=Path(args.aerial_image) if args.aerial_image else None,
+            aerial_bbox_epsg25832=args.aerial_bbox_epsg25832,
         )
     elif args.hamburg_manifest:
         if args.neutral_overview:

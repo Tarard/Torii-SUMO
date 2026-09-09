@@ -89,6 +89,23 @@ def parse_bbox(value: str) -> Bbox:
     return Bbox(west=west, south=south, east=east, north=north)
 
 
+def parse_geo_boundary(value: str | None) -> str | None:
+    if value is None:
+        return None
+    boundary = value.strip()
+    parts = [part.strip() for part in boundary.split(",")]
+    if len(parts) < 6 or len(parts) % 2:
+        raise ValueError("geo_boundary must contain at least three lon,lat pairs")
+    coordinates = [float(part) for part in parts]
+    if not all(math.isfinite(part) for part in coordinates):
+        raise ValueError("geo_boundary coordinates must be finite")
+    if any(not -180 <= coordinates[index] <= 180 for index in range(0, len(coordinates), 2)):
+        raise ValueError("geo_boundary longitude outside valid range")
+    if any(not -90 <= coordinates[index] <= 90 for index in range(1, len(coordinates), 2)):
+        raise ValueError("geo_boundary latitude outside valid range")
+    return boundary
+
+
 def build_overpass_query(
     bbox: Bbox,
     *,
@@ -292,14 +309,31 @@ def _node_in_bbox(node: ET.Element, bbox: Bbox) -> bool:
     return bbox.west <= lon <= bbox.east and bbox.south <= lat <= bbox.north
 
 
-def _copy_way_with_node_refs(way: ET.Element, refs: list[str]) -> ET.Element:
-    clone = ET.Element("way", dict(way.attrib))
+def _way_intersects_bbox(refs: list[str], nodes: dict[str, ET.Element], bbox: Bbox) -> bool:
+    """Select by original segments, including crossings with both ends outside."""
+    points = []
     for ref in refs:
-        ET.SubElement(clone, "nd", {"ref": ref})
-    for child in way:
-        if child.tag != "nd":
-            clone.append(ET.Element(child.tag, dict(child.attrib)))
-    return clone
+        try:
+            point = tuple(float(nodes[ref].attrib[key]) for key in ("lon", "lat"))
+        except (KeyError, ValueError):
+            point = None
+        points.append(point if point is not None and all(map(math.isfinite, point)) else None)
+    for start, end in zip(points, points[1:]):
+        if start is None or end is None:
+            continue
+        lower, upper = 0.0, 1.0
+        for a, b, minimum, maximum in zip(start, end, (bbox.west, bbox.south), (bbox.east, bbox.north)):
+            if a == b:
+                if not minimum <= a <= maximum:
+                    break
+            else:
+                first, last = sorted(((minimum-a)/(b-a), (maximum-a)/(b-a)))
+                lower, upper = max(lower, first), min(upper, last)
+                if lower > upper:
+                    break
+        else:
+            return True
+    return False
 
 
 def _relation_way_refs(relation: ET.Element) -> set[str]:
@@ -321,9 +355,11 @@ def filter_osm_by_highways(
     include_railway: bool = False,
     allowed_railways: set[str] | None = None,
 ) -> dict[str, Any]:
+    """Select complete source ways; bbox selection never cuts their geometry."""
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
 
+    nodes_by_id = {node.attrib["id"]: node for node in root.findall("node")}
     bbox_node_refs = None
     if bbox is not None:
         bbox_node_refs = {node.attrib["id"] for node in root.findall("node") if _node_in_bbox(node, bbox)}
@@ -342,8 +378,6 @@ def filter_osm_by_highways(
     dropped_ways = 0
     dropped_ways_outside_bbox = 0
     dropped_ways_outside_reference_scope = 0
-    dropped_node_refs_outside_bbox = set()
-    trimmed_ways = 0
     kept_railway_ways = 0
     for way in root.findall("way"):
         way_id = way.attrib.get("id", "")
@@ -372,18 +406,12 @@ def filter_osm_by_highways(
                 dropped_ways_outside_reference_scope += 1
                 continue
             refs = _way_node_refs(way)
-            kept_refs = refs if bbox_node_refs is None else [ref for ref in refs if ref in bbox_node_refs]
-            if len(kept_refs) < 2:
+            if len(refs) < 2 or (bbox is not None and not _way_intersects_bbox(refs, nodes_by_id, bbox)):
                 dropped_ways_outside_bbox += 1
                 continue
-            if kept_refs != refs:
-                dropped_node_refs_outside_bbox.update(set(refs) - set(kept_refs))
-                trimmed_ways += 1
-                kept_ways.append(_copy_way_with_node_refs(way, kept_refs))
-            else:
-                kept_ways.append(way)
+            kept_ways.append(way)
             kept_way_ids.add(way.attrib["id"])
-            kept_node_refs.update(kept_refs)
+            kept_node_refs.update(refs)
             kept_railway_ways += int(keep_railway and highway is None)
         elif highway is not None:
             dropped_ways += 1
@@ -426,9 +454,12 @@ def filter_osm_by_highways(
     if bbox is not None:
         stats.update(
             {
-                "trimmed_ways": trimmed_ways,
+                "bbox_selection_mode": "whole_ways_intersecting_bbox",
+                "geometry_clipped": False,
+                "trimmed_ways": 0,
                 "dropped_ways_outside_bbox": dropped_ways_outside_bbox,
-                "dropped_nodes_outside_bbox": len(dropped_node_refs_outside_bbox),
+                "dropped_nodes_outside_bbox": 0,
+                "retained_nodes_outside_bbox": len(kept_node_refs - bbox_node_refs),
             }
         )
     if allowed_way_ids is not None:
@@ -732,6 +763,8 @@ def _traffic_side_options(traffic_side: str) -> tuple[str, list[str]]:
 def build_osm_network(
     *,
     bbox: str,
+    geo_boundary: str | None = None,
+    tls_join_distance_m: float = 35.0,
     output_dir: Path,
     prefix: str = "sumo_osm_network",
     source_osm_path: Path | None = None,
@@ -755,8 +788,16 @@ def build_osm_network(
     sumo_home: Path | None = None,
     traffic_side: str = "right",
 ) -> dict[str, Any]:
+    """Build from selected source ways, preserving every selected way's geometry.
+
+    The legacy clip_source_ways_to_bbox option selects whole intersecting ways;
+    it does not geometrically clip them at the rectangle boundary.
+    """
     try:
         parsed_bbox = parse_bbox(bbox)
+        parsed_geo_boundary = parse_geo_boundary(geo_boundary)
+        if not math.isfinite(tls_join_distance_m) or tls_join_distance_m < 0:
+            raise ValueError("tls_join_distance_m must be finite and non-negative")
         query = build_overpass_query(
             parsed_bbox,
             timeout=int(timeout_seconds),
@@ -912,9 +953,14 @@ def build_osm_network(
             OSM_ORIGINAL_NAME_OUTPUT_OPTION,
             "--tls.join",
             "--tls.join-dist",
-            "35",
+            f"{tls_join_distance_m:g}",
             *type_options,
             *profile_options,
+            *(
+                ["--keep-edges.in-geo-boundary", parsed_geo_boundary]
+                if parsed_geo_boundary is not None
+                else []
+            ),
             "--verbose",
         ]
         _write_text(
@@ -922,6 +968,8 @@ def build_osm_network(
             "\n".join(
                 [
                     f"bbox={bbox}",
+                    f"geo_boundary={parsed_geo_boundary or ''}",
+                    f"tls_join_distance_m={tls_join_distance_m:g}",
                     f"source_osm={source_osm}",
                     f"source_osm_sha256={source_osm_sha256}",
                     f"filtered_osm={filtered_osm}",
@@ -954,6 +1002,7 @@ def build_osm_network(
                     ),
                     f"include_railway={include_railway}",
                     f"clip_source_ways_to_bbox={clip_source_ways_to_bbox}",
+                    f"bbox_selection_mode={filter_stats.get('bbox_selection_mode', 'unrestricted')}",
                     f"traffic_side={normalized_traffic_side}",
                     "allowed_railways="
                     + ("all" if allowed_railways is None else ",".join(sorted(allowed_railways))),
@@ -986,13 +1035,27 @@ def build_osm_network(
                 ]
             ),
         )
+        from .osm_access import correct_osm_access_permissions
+
+        access_correction = (
+            correct_osm_access_permissions(
+                osm_file=filtered_osm,
+                net_file=net_file,
+                output_dir=logs_dir / f"{prefix}_osm_access",
+                netconvert_binary=netconvert_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            if result.get("status") == "pass" and net_file.is_file()
+            else {"status": "not_run", "changed_lane_count": 0}
+        )
     except (OSError, ET.ParseError, error.URLError, error.HTTPError, RuntimeError, ValueError) as exc:
         return _failure(
             f"{type(exc).__name__}: {exc}",
             artifacts={"query_file": str(query_file), "command_record": str(command_record)},
         )
 
-    status = "pass" if result.get("status") == "pass" and net_file.exists() else "fail"
+    status = "pass" if result.get("status") == "pass" and net_file.exists() and access_correction["status"] != "blocked" else "fail"
     warnings = list(type_warnings)
     if not net_file.exists():
         warnings.append(f"net file was not created: {net_file}")
@@ -1003,7 +1066,10 @@ def build_osm_network(
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "build_scope": {
             "bbox": bbox,
+            "geo_boundary": parsed_geo_boundary,
+            "tls_join_distance_m": tls_join_distance_m,
             "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
+            "bbox_selection_mode": filter_stats.get("bbox_selection_mode", "unrestricted"),
             "road_classes": sorted(allowed),
             "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
             "include_railway": include_railway,
@@ -1041,6 +1107,7 @@ def build_osm_network(
             "type_options": type_options,
             "output_original_names": origin_name_output,
         },
+        "osm_access_correction": access_correction,
         "artifacts": {
             "command_record": str(command_record.resolve()),
             "netconvert_log": str(netconvert_log.resolve()),
@@ -1068,11 +1135,14 @@ def build_osm_network(
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "bbox": bbox,
+        "geo_boundary": parsed_geo_boundary,
+        "tls_join_distance_m": tls_join_distance_m,
         "road_classes": sorted(allowed),
         "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
         **forced_way_report,
         "include_railway": include_railway,
         "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
+        "bbox_selection_mode": filter_stats.get("bbox_selection_mode", "unrestricted"),
         "traffic_side": normalized_traffic_side,
         "allowed_railways": None if allowed_railways is None else sorted(allowed_railways),
         "source_osm_file": str(source_osm),
@@ -1091,6 +1161,7 @@ def build_osm_network(
         "netconvert_profile": normalized_profile,
         "netconvert_profile_options": profile_options,
         "netconvert_output_original_names": origin_name_output,
+        "osm_access_correction": access_correction,
         **(
             {
                 "forced_construction_type_overlay_file": str(
@@ -1926,11 +1997,9 @@ def normalize_text(value: str) -> str:
 
 
 def _lane_allows_passenger(lane: ET.Element) -> bool:
-    allow = lane.attrib.get("allow")
-    disallow = lane.attrib.get("disallow", "")
-    if allow:
-        return "passenger" in allow.split() or "private" in allow.split()
-    return "passenger" not in disallow.split()
+    from .osm_access import _permission_set
+
+    return "passenger" in _permission_set(lane.attrib)
 
 
 def read_net_edges(path: Path) -> tuple[dict[str, EdgeInfo], dict[str, set[str]]]:

@@ -7,6 +7,10 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .core.hamburg_corridor_candidate import (
+    bind_hamburg_corridor_tls_clusters,
+    select_hamburg_corridor,
+)
 from .tools.environment_tools import sumo_get_environment, sumo_preflight
 from .tools.demand_tools import (
     sumo_detector_count_audit,
@@ -31,6 +35,7 @@ from .tools.digital_twin_tools import (
     sumo_hamburg_official_tls_rebuild,
     sumo_hamburg_sandtorkai_digital_twin,
     sumo_hamburg_named_count_scope,
+    sumo_hamburg_named_detector_bindings,
     sumo_hamburg_sandtorkai_signal_observations,
     sumo_hamburg_sandtorkai_named_replay,
     sumo_hamburg_sandtorkai_execution_plan,
@@ -94,6 +99,8 @@ from .tools.workflow_tools import torii_auto_workflow
 
 
 WORKFLOW_TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
+    "hamburg_corridor_bind_tls_clusters": bind_hamburg_corridor_tls_clusters,
+    "hamburg_corridor_select": select_hamburg_corridor,
     "sumo_run_config": sumo_run_config,
     "sumo_run_minimal_smoke": sumo_run_minimal_smoke,
     "sumo_collect_evidence": sumo_collect_evidence,
@@ -138,6 +145,7 @@ WORKFLOW_TOOLS: dict[str, Callable[..., dict[str, Any]]] = {
     "sumo_detector_route_sampler_calibrate": sumo_detector_route_sampler_calibrate,
     "sumo_hamburg_sandtorkai_digital_twin": sumo_hamburg_sandtorkai_digital_twin,
     "sumo_hamburg_named_count_scope": sumo_hamburg_named_count_scope,
+    "sumo_hamburg_named_detector_bindings": sumo_hamburg_named_detector_bindings,
     "sumo_hamburg_sandtorkai_signal_observations": sumo_hamburg_sandtorkai_signal_observations,
     "sumo_hamburg_sandtorkai_named_replay": sumo_hamburg_sandtorkai_named_replay,
     "sumo_hamburg_sandtorkai_execution_plan": sumo_hamburg_sandtorkai_execution_plan,
@@ -177,7 +185,7 @@ def register_legacy_mcp_tools(server: FastMCP) -> None:
     server.tool(description="Control the single hash-bound NetEdit diagnostic session with open, observe, act, finalize, or abort. Open requires immutable source/candidate/output paths and source SHA; F7 additionally requires a frozen selection and declared junction identities. Observe returns viewport evidence and persisted XML state. Act accepts one whitelisted mouse or shortcut action plus the last screenshot SHA. Finalize saves and runs SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits; abort closes the session. The source stays immutable and promotion is always blocked.")(
         sumo_netedit_session
     )
-    server.tool(description="Conditionally route one natural-language SUMO request to the narrow Phase-1 synthetic four-way scene workflow or existing OSM, TLS/network review, routeability, debugging, and experiment paths.")(
+    server.tool(description="Execute an explicit host-LLM workflow_selection from the registered scenario catalog without keyword reclassification. Inspect-only and ask-first retain a plan. Without workflow_selection, retain the older natural-language router for compatibility. Discover scenarios with torii workflows --json.")(
         torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(

@@ -7,8 +7,26 @@ The goal is to estimate the current state before choosing an action. Do not load
 ## Entry Decision
 
 ```text
-user request -> classify situation -> screen project state -> load minimum references -> produce next action or ask one focused question
+user request -> read scenario catalog -> screen project state -> select from intent and evidence -> load the selected reference -> act or identify missing inputs
 ```
+
+Read `torii workflows --json` before choosing an executable entry. The
+`project_triage` entry is guidance: the host reads this reference and reasons
+about the project. It does not run a hidden function. After identifying the
+actual task, inspect that entry's arguments with `--scenario ID` and create the
+four-field selection described in `mcp-tool-routing.md`.
+
+Keep these task boundaries explicit:
+
+- Building roads and fitting demand on a fixed network require different inputs and actions.
+- Experiment planning produces a plan. Run SUMO only when execution is part of the request.
+- Existing-result review uses the available outputs. A review request alone does not request new runs.
+- A real drawing defines a dated reconstruction target. A synthetic intersection does not substitute for that drawing.
+
+Match the target year and primary source before choosing an entry. Missing
+inputs remain missing. A failed selection must not fall back to a different
+task. Readiness checks do not validate the content of a drawing or prove that
+the selected work has completed.
 
 ## Project Screen
 

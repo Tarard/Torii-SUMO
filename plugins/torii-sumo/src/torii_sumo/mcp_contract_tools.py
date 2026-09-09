@@ -535,11 +535,17 @@ def torii_netedit_open(
         window_size=window_size,
         window_pos=window_pos,
     )
-    return _result(
+    return _netedit_operation_result(
         raw,
         summary="Opened the hash-bound NetEdit review session.",
         next_actions=["Observe the session, then use exactly one act per review step."],
     )
+
+
+def _netedit_operation_result(raw, *, summary, next_actions):
+    passed = raw.get("status") == "pass" and raw.get("operation_status", "pass") == "pass"
+    return _result(raw, summary=summary if passed else f"NetEdit {raw.get('operation', 'operation')} was {raw.get('status', 'not completed')}.",
+                   next_actions=next_actions if passed else ["Review the payload reason before retrying."])
 
 
 def torii_netedit_observe(
@@ -563,7 +569,7 @@ def torii_netedit_observe(
         object_id=object_id,
         label=label,
     )
-    return _result(
+    return _netedit_operation_result(
         raw,
         summary="Observed the active NetEdit session state.",
         next_actions=["Use the returned screenshot SHA as the guard for the next act."],
@@ -599,7 +605,7 @@ def torii_netedit_act(
         to_x=to_x,
         to_y=to_y,
     )
-    return _result(
+    return _netedit_operation_result(
         raw,
         summary="Executed one whitelisted NetEdit action.",
         next_actions=["Observe again after the action before another act or close."],

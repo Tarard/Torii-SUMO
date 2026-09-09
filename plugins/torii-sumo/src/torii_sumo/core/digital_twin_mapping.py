@@ -750,6 +750,7 @@ def build_virtual_sensor_aggregation(
     bin_seconds: int = 900,
     expected_begin: int | None = None,
     expected_end: int | None = None,
+    group_policies: Mapping[tuple[str, str], str] | None = None,
 ) -> VirtualSensorAggregation:
     """Collapse active official fields onto one E1 detector per ``(node_id, SUMO lane)``.
 
@@ -761,6 +762,10 @@ def build_virtual_sensor_aggregation(
 
     if bin_seconds <= 0:
         raise ValueError("bin_seconds must be positive")
+    policies = dict(group_policies or {})
+    invalid_policies = sorted({value for value in policies.values() if value not in {"sum", "max"}})
+    if invalid_policies:
+        raise ValueError(f"unsupported virtual detector group policies: {invalid_policies}")
     if (expected_begin is None) != (expected_end is None):
         raise ValueError("expected_begin and expected_end must be provided together")
     if expected_begin is not None and expected_end is not None:
@@ -866,6 +871,7 @@ def build_virtual_sensor_aggregation(
 
     expected_counts: list[VirtualExpectedCount] = []
     for group in groups:
+        policy = policies.get((group.node_id, group.sumo_lane), "sum")
         for begin, end in sorted_intervals:
             source_rows = [rows_by_stream[stream_id][(begin, end)] for stream_id in group.source_stream_ids]
             expected_counts.append(
@@ -876,7 +882,11 @@ def build_virtual_sensor_aggregation(
                     sumo_lane=group.sumo_lane,
                     begin=begin,
                     end=end,
-                    expected_total=sum(row.count for row in source_rows),
+                    expected_total=(
+                        max(row.count for row in source_rows)
+                        if policy == "max"
+                        else sum(row.count for row in source_rows)
+                    ),
                     source_detector_ids=group.source_detector_ids,
                     source_stream_ids=group.source_stream_ids,
                     source_row_count=len(source_rows),

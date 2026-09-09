@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -16,6 +17,97 @@ from torii_sumo.core.route_sampler import (
     run_route_sampler_ensemble,
     validate_route_sampler_edge_counts,
 )
+
+
+def _single_sampler_inputs(tmp_path: Path) -> dict:
+    manifest = tmp_path / "routes.csv"
+    counts = tmp_path / "counts.xml"
+    script = tmp_path / "routeSampler.py"
+    manifest.write_text("route_id,edges\nr0,a b\n", encoding="utf-8")
+    counts.write_text('<data><interval begin="0" end="900"><edge id="b" count="1"/></interval></data>', encoding="utf-8")
+    script.write_text("# synthetic process input\n", encoding="utf-8")
+    return dict(candidate_manifest_csv=manifest, edge_data_file=counts, output_dir=tmp_path / "out",
+                prefix="sample", begin=0, end=900, interval=900, route_sampler_script=script)
+
+
+@pytest.mark.parametrize("suffix", ["candidate_routes.rou.xml", "demand.rou.xml", "route_sampler_mismatch.xml", "route_sampler_command.json"])
+def test_single_sampler_rejects_reused_fixed_outputs_before_execution(tmp_path: Path, suffix: str) -> None:
+    arguments = _single_sampler_inputs(tmp_path)
+    output = arguments["output_dir"]
+    output.mkdir()
+    stale = output / f"sample_{suffix}"
+    stale.write_text("previous run must remain unchanged", encoding="utf-8")
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return CommandResult(command=command, cwd=str(kwargs["cwd"]), status="pass", returncode=0)
+
+    with pytest.raises(ValueError, match="new|exist"):
+        run_route_sampler(**arguments, command_runner=runner)
+    assert not calls
+    assert stale.read_text(encoding="utf-8") == "previous run must remain unchanged"
+    assert list(output.iterdir()) == [stale]
+
+
+@pytest.mark.parametrize("written", [(), ("-o",), ("--mismatch-output",)])
+def test_single_sampler_requires_new_demand_and_mismatch_outputs(tmp_path: Path, written: tuple[str, ...]) -> None:
+    arguments = _single_sampler_inputs(tmp_path)
+
+    def runner(command, **kwargs):
+        for option in written:
+            text = '<routes><vehicle id="v0" depart="0"><route edges="a b"/></vehicle></routes>' if option == "-o" else '<data><edge id="b" deficit="0"/></data>'
+            Path(command[command.index(option) + 1]).write_text(text, encoding="utf-8")
+        return CommandResult(command=command, cwd=str(kwargs["cwd"]), status="pass", returncode=0)
+
+    report = run_route_sampler(**arguments, command_runner=runner)
+    assert report["status"] == "fail"
+    assert report["missing_output_files"]
+    manifest = json.loads(Path(report["command_manifest"]).read_text(encoding="utf-8"))
+    assert manifest["output_policy"] == "new_files_only"
+
+
+def test_single_sampler_refuses_source_output_overlap_without_changing_source(tmp_path: Path) -> None:
+    arguments = _single_sampler_inputs(tmp_path)
+    output = arguments["output_dir"]
+    output.mkdir()
+    source = output / "sample_candidate_routes.rou.xml"
+    source.write_bytes(arguments["edge_data_file"].read_bytes())
+    arguments["edge_data_file"] = source
+    before = source.read_bytes()
+    with pytest.raises(ValueError, match="source|input|overlap"):
+        run_route_sampler(**arguments)
+    assert source.read_bytes() == before
+
+
+def test_single_sampler_rejects_input_changes_during_execution(tmp_path: Path) -> None:
+    arguments = _single_sampler_inputs(tmp_path)
+    before = arguments["edge_data_file"].read_bytes()
+
+    def runner(command, **kwargs):
+        Path(command[command.index("-o") + 1]).write_text('<routes><vehicle id="v0" depart="0"><route edges="a b"/></vehicle></routes>', encoding="utf-8")
+        Path(command[command.index("--mismatch-output") + 1]).write_text('<data><edge id="b" deficit="0"/></data>', encoding="utf-8")
+        arguments["edge_data_file"].write_bytes(before.replace(b'count="1"', b'count="2"'))
+        return CommandResult(command=command, cwd=str(kwargs["cwd"]), status="pass", returncode=0)
+
+    report = run_route_sampler(**arguments, command_runner=runner)
+    assert report["status"] == "fail"
+    assert report["inputs_unchanged"] is False
+    manifest = json.loads(Path(report["command_manifest"]).read_text(encoding="utf-8"))
+    assert manifest["inputs_unchanged"] is False
+    import hashlib
+    assert manifest["inputs"]["edge_data_sha256"] == hashlib.sha256(before).hexdigest()
+
+
+def test_empty_new_mismatch_is_not_a_perfect_match(tmp_path):
+    arguments = _single_sampler_inputs(tmp_path)
+    def runner(command, **kwargs):
+        Path(command[command.index('-o')+1]).write_text('<routes/>', encoding='utf-8')
+        Path(command[command.index('--mismatch-output')+1]).write_text('<data/>', encoding='utf-8')
+        return CommandResult(command=command, cwd=str(kwargs['cwd']), status='pass', returncode=0)
+    result = run_route_sampler(**arguments, command_runner=runner)
+    assert result['status'] != 'pass'
+    assert result['constraint_match_fraction'] is None
 
 
 def test_route_sampler_wrapper_writes_candidates_executes_and_hashes(tmp_path: Path) -> None:
@@ -36,6 +128,7 @@ def test_route_sampler_wrapper_writes_candidates_executes_and_hashes(tmp_path: P
     def fake_runner(command: list[str], **kwargs: object) -> CommandResult:
         assert kwargs["cwd"] == tmp_path / "out"
         assert command[command.index("--optimize") + 1] == "full"
+        assert command[command.index("--minimize-vehicles") + 1] == "0.9"
         for option in ("-r", "--edgedata-files", "--mismatch-output", "-o"):
             assert Path(command[command.index(option) + 1]).is_absolute()
         output = Path(command[command.index("-o") + 1])
@@ -53,16 +146,32 @@ def test_route_sampler_wrapper_writes_candidates_executes_and_hashes(tmp_path: P
         end=1800,
         interval=900,
         optimize="full",
+        minimize_vehicles=0.9,
         route_sampler_script=script,
         command_runner=fake_runner,
     )
 
     assert report["status"] == "pass"
     assert report["candidate_route_count"] == 1
+    assert report["demand_vehicle_count"] == 1
     assert Path(str(report["demand_route_file"])).is_file()
     assert report["mismatch"]["absolute_deficit"] == 0
     assert Path(str(report["command_manifest"])).is_file()
     assert report["constraint_structure"]["status"] == "pass"
+
+
+def test_route_sampler_rejects_minimize_vehicle_factor_at_one(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="less than 1"):
+        run_route_sampler(
+            candidate_manifest_csv=tmp_path / "missing-routes.csv",
+            edge_data_file=tmp_path / "missing-counts.xml",
+            output_dir=tmp_path / "out",
+            prefix="sample",
+            begin=0,
+            end=900,
+            interval=900,
+            minimize_vehicles=1.0,
+        )
 
 
 def test_route_sampler_edge_data_rejects_missing_bin(tmp_path: Path) -> None:

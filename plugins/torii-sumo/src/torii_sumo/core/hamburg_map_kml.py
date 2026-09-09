@@ -22,12 +22,12 @@ from typing import Any
 HAMBURG_MAP_KML_SCHEMA = "torii.hamburg-map-kml-geometry/v1"
 
 _LANE_NAME = re.compile(r"^Lane\s+(\d+)$")
-_CROSSWALK_NAME = re.compile(r"^Crosswalk\s+(\d+)$")
+_CROSSWALK_NAME = re.compile(r"^(?:Crosswalk|Pedestrian way|Bike way)\s+(\d+)$")
 _CONNECTION_NAME = re.compile(r"^Con\.\s+(\d+):\s+(\d+)\s+[→>-]+\s+(\d+)$")
 _DRIVE_LINE_NAME = re.compile(
     r"^DrvLn\.\s+(?:(A|B)\s+)?(\d+):\s+(\d+)\s+[→>-]+\s+(\d+)$"
 )
-_POINT_NAME = re.compile(r"^(Lane|Crosswalk)\s+(\d+)\s+([AB])$")
+_POINT_NAME = re.compile(r"^(Lane|Crosswalk|Pedestrian way|Bike way)\s+(\d+)\s+([AB])$")
 _MERGE_NAME = re.compile(r"^Lane\s+(\d+)\s+Merge$")
 
 _LANE_ROLES = {
@@ -479,7 +479,7 @@ def _parse_endpoints(folder: ET.Element) -> list[dict[str, Any]]:
         kind, lane_id, endpoint = match.groups()
         result.append(
             {
-                "feature_kind": kind.lower(),
+                "feature_kind": "lane" if kind == "Lane" else "crosswalk",
                 "lane_id": int(lane_id),
                 "endpoint": endpoint,
                 "coordinate": _point_coordinate(placemark),

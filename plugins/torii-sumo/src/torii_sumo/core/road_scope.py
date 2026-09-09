@@ -27,7 +27,7 @@ HIGHWAY_CLASS_PRESETS = {
 }
 
 ROAD_LEVEL_SCOPE_OPTIONS = ("arterial", "drive", "drive_plus_unclassified", "full_vehicle")
-RECOMMENDED_ROAD_LEVEL_SCOPE = "arterial"
+RECOMMENDED_ROAD_LEVEL_SCOPE = "full_vehicle"
 ROAD_LEVEL_SCOPE_QUESTION = (
     "Which road level should Torii include: arterial, drive, drive_plus_unclassified, or full_vehicle?"
 )

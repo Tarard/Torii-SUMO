@@ -50,7 +50,8 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
     manifest = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
 
     assert manifest["name"] == "torii-sumo"
-    assert re.fullmatch(r"1\.1\.0(?:\+codex\.\d{14})?", manifest["version"])
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    assert re.fullmatch(re.escape(version) + r"(?:\+codex\.\d{14})?", manifest["version"])
     assert manifest["license"] == PACKAGE_LICENSE
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"

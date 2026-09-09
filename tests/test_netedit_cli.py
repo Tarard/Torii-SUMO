@@ -13,6 +13,21 @@ class _Process:
     pid = 4711
 
 
+def test_default_resolver_uses_native_wheel_program_instead_of_python_launcher(tmp_path, monkeypatch):
+    import os
+    import sys
+    from types import SimpleNamespace
+    distribution = tmp_path / 'sumo'
+    binary = distribution / 'bin' / ('netedit.exe' if os.name == 'nt' else 'netedit')
+    binary.parent.mkdir(parents=True)
+    binary.write_text('native executable placeholder', encoding='utf-8')
+    binary.chmod(0o755)
+    monkeypatch.delenv('SUMO_HOME', raising=False)
+    monkeypatch.delenv('NETEDIT_BINARY', raising=False)
+    monkeypatch.setitem(sys.modules, 'sumo', SimpleNamespace(SUMO_HOME=str(distribution)))
+    assert Path(netedit._which_netedit('netedit')) == binary
+
+
 def test_launch_netedit_uses_compiled_network_option_and_never_plain_node_option(tmp_path: Path) -> None:
     net_file = tmp_path / "corridor.net.xml"
     net_file.write_text("<net/>", encoding="utf-8")

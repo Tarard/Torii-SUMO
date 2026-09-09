@@ -3,9 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from torii_sumo.core.hamburg_corridor_candidate import (
+    bind_hamburg_corridor_tls_clusters,
     build_hamburg_corridor_candidate_evidence,
+    select_hamburg_corridor,
 )
+from torii_sumo.core.candidate_contracts import file_sha256
 
 
 def _write(path: Path, payload: dict) -> Path:
@@ -202,3 +207,175 @@ def test_candidate_records_lane_axis_stitch_gate_without_promoting_network(tmp_p
     )
     assert report["gates"]["official_map_hh_sib_lane_axis_stitch"] == "review_required"
     assert report["automatic_promotion_gate"] == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("common_window_status", "expected_status", "expected_mode", "expected_candidate"),
+    [
+        ("pass", "pass", "strict", "higher_detector_coverage"),
+        ("blocked", "diagnostic-only", "registered_fallback", "ring1_east"),
+    ],
+)
+def test_five_corridor_selection_keeps_strict_and_registered_fallback_separate(
+    tmp_path: Path,
+    common_window_status: str,
+    expected_status: str,
+    expected_mode: str,
+    expected_candidate: str,
+) -> None:
+    source = _write(tmp_path / "source.json", {"frozen": True})
+    base_gates = {
+        "exactly_five_distinct_k_lsa": "pass",
+        "official_lsa_identity": "pass",
+        "official_road_simple_path": "pass",
+        "no_skipped_intervening_k_lsa": "pass",
+        "exact_static_asset_triplets": "pass",
+        "motor_vehicle_primary_tld_metadata": "pass",
+        "motor_vehicle_detector_metadata": "pass",
+        "complete_detector_window": "pass",
+        "common_detector_tld_window": common_window_status,
+        "publication_license": "pass",
+    }
+    if common_window_status == "blocked":
+        base_gates["exact_static_asset_triplets"] = "review_required"
+        base_gates["motor_vehicle_primary_tld_metadata"] = "blocked"
+    candidates = [
+        {
+            "candidate_id": "ring1_east",
+            "ordered_node_ids": ["104", "118", "119", "200", "535"],
+            "gates": base_gates,
+            "ranking": {
+                "exact_static_asset_intersection_count": 5,
+                "detector_covered_motor_vehicle_approach_count": 10,
+                "complete_common_observation_day_count": 1 if common_window_status == "pass" else 0,
+                "ambiguity_count": 0,
+                "max_adjacent_gap_m": 595.1,
+            },
+            "selected_detector_window": {
+                "simulation_begin_utc": "2026-07-11T15:10:00Z",
+                "formal_begin_utc": "2026-07-11T15:40:00Z",
+                "formal_end_utc": "2026-07-11T17:40:00Z",
+            },
+        },
+        {
+            "candidate_id": "higher_detector_coverage",
+            "ordered_node_ids": ["1", "2", "3", "4", "5"],
+            "gates": base_gates,
+            "ranking": {
+                "exact_static_asset_intersection_count": 5,
+                "detector_covered_motor_vehicle_approach_count": 12,
+                "complete_common_observation_day_count": 1 if common_window_status == "pass" else 0,
+                "ambiguity_count": 0,
+                "max_adjacent_gap_m": 500.0,
+            },
+        },
+    ]
+    ledger = _write(
+        tmp_path / "screening.json",
+        {
+            "schema": "torii.hamburg-five-corridor-screening/v1",
+            "protocol": "hamburg-five-intersection-v1+A1+A2",
+            "sources": [
+                {
+                    "role": "lsa_nodes",
+                    "url": "https://api.hamburg.de/example",
+                    "query": {},
+                    "retrieved_at_utc": "2026-08-27T18:00:00Z",
+                    "path": "source.json",
+                    "sha256": file_sha256(source),
+                    "license": "DL-DE-BY-2.0",
+                }
+            ],
+            "candidates": candidates,
+        },
+    )
+
+    result = select_hamburg_corridor(
+        screening_ledger_file=ledger,
+        expected_screening_ledger_sha256=file_sha256(ledger),
+        output_file=tmp_path / "selection.json",
+    )
+
+    assert result["status"] == expected_status
+    assert result["selection_mode"] == expected_mode
+    if expected_mode == "strict":
+        assert result["strict_selection"]["selected_candidate_id"] == expected_candidate
+    else:
+        assert result["strict_selection"]["status"] == "blocked"
+        assert result["fallback_selection"]["selected_candidate_id"] == expected_candidate
+        assert result["fallback_selection"]["ordered_node_ids"] == ["104", "118", "119", "200", "535"]
+        assert result["fallback_selection"]["allowed_approximations"] == [
+            "exact_static_asset_triplets",
+            "motor_vehicle_primary_tld_metadata",
+            "common_detector_tld_window",
+        ]
+
+
+@pytest.mark.parametrize("topology_only, compound_centroid", [(False, False), (True, False), (True, True)])
+def test_bind_selected_official_nodes_to_unique_tls_clusters(tmp_path: Path, topology_only: bool, compound_centroid: bool) -> None:
+    node_ids = ["1", "2"] if topology_only else ["1", "2", "3", "4", "5"]
+    selection = _write(
+        tmp_path / "selection.json",
+        {
+            "schema": "torii.hamburg-five-corridor-selection/v1",
+            "status": "diagnostic-only",
+            "selection_mode": "topology_only" if topology_only else "registered_fallback",
+            **({"ordered_node_ids": node_ids} if topology_only else {"fallback_selection": {"ordered_node_ids": node_ids}}),
+        },
+    )
+    lsa = _write(
+        tmp_path / "lsa.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "MultiPoint", "coordinates": [[10.0 + index / 1000, 53.0]]},
+                    "properties": {"knoten": index + 1, "art": "K-LSA", "LSA_Name": f"Node {index + 1}"},
+                }
+                for index in range(5)
+            ],
+        },
+    )
+    clusters = tmp_path / "clusters.csv"
+    clusters.write_text(
+        "cluster_id,lat,lon,tls_count,tls_ids\n"
+        + "\n".join(
+            f"G{index + 1:03d},53.0,{10.0 + index / 1000 + (0.002 if compound_centroid else 0)},1,tls-{index + 1}"
+            for index in range(5)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    network = tmp_path / "network.net.xml"
+    network.write_text(
+        "<net>" + "".join(f'<tlLogic id="tls-{index}"/>' for index in range(1, 6)) + "</net>",
+        encoding="utf-8",
+    )
+    if compound_centroid:
+        network.write_text(
+            '<net><location netOffset="0,0" projParameter="+proj=longlat +datum=WGS84"/>'
+            + ''.join(f'<junction id="j-{i}" x="{10 + (i-1)/1000}" y="53"/><tlLogic id="tls-{i}"/><edge id="in-{i}" to="j-{i}"/><connection from="in-{i}" tl="tls-{i}"/>' for i in range(1, 6))
+            + '</net>', encoding="utf-8",
+        )
+
+    result = bind_hamburg_corridor_tls_clusters(
+        selection_file=selection,
+        expected_selection_sha256=file_sha256(selection),
+        lsa_identity_file=lsa,
+        expected_lsa_identity_sha256=file_sha256(lsa),
+        tls_clusters_file=clusters,
+        expected_tls_clusters_sha256=file_sha256(clusters),
+        net_file=network,
+        expected_net_sha256=file_sha256(network),
+        output_file=tmp_path / "bindings.json",
+    )
+
+    assert result["status"] == "pass"
+    assert [row["cluster_id"] for row in result["bindings"]] == [f"G{int(node):03d}" for node in node_ids]
+    if topology_only:
+        assert result["selection_mode"] == "topology_only"
+        assert result["gates"]["selected_cluster_coverage"] == "pass"
+    if compound_centroid:
+        assert all(row["distance_basis"] == "nearest_controlled_junction" for row in result["bindings"])
+        assert all(row["distance_m"] < 0.01 for row in result["bindings"])

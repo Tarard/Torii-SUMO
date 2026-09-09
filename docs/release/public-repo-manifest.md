@@ -27,6 +27,10 @@ NOTICE.md
 CITATION.cff
 .zenodo.json
 pyproject.toml
+uv.lock
+AGENTS.md
+.gitattributes
+.gitignore
 .agents/plugins/marketplace.json
 .github/
 plugins/
@@ -41,6 +45,7 @@ docs/
   codex-plugin-install.md
   mcp-host-config.md
   osm-source-patterns.md
+  workflow-selection.md
   skill-integration.md
   common-sumo-signal-control-failures.md
   release/
@@ -64,6 +69,7 @@ local datasets
 private experiment logs
 unpublished research notes
 machine-local absolute paths
+untracked local research reports and captured run bundles
 ```
 
 ## Public Safety Checks

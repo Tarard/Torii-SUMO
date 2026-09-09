@@ -22,7 +22,6 @@ from .mcp_contract_tools import (
     torii_config_inspect,
     torii_demand_audit,
     torii_intersection_classify,
-    torii_netedit_act,
     torii_netedit_close,
     torii_netedit_observe,
     torii_netedit_open,
@@ -35,9 +34,25 @@ from .mcp_contract_tools import (
     torii_signal_classify,
 )
 from .tools.osm_tools import sumo_network_routeability_audit
+from .core.movement_routeability import run_candidate_movement_probes
+from .core.hamburg_aerial_movement import build_hamburg_aerial_corridor_plan
+from .core.hamburg_aerial_corridor_candidate import (
+    build_hamburg_aerial_combined_candidate,
+)
+from .core.hamburg_aerial_signal import (
+    build_hamburg_aerial_signal_binding,
+    build_protected_signal_candidate_from_request,
+)
+from .core.hamburg_aerial_count import build_hamburg_aerial_count_binding
+from .core.hamburg_aerial_demand import generate_hamburg_aerial_demand
+from .core.hamburg_lane_connection_repair import (
+    build_hamburg_lane_connection_repair,
+)
 
 
 _WORKFLOW_TOOL_NAMES = (
+    "hamburg_corridor_bind_tls_clusters",
+    "hamburg_corridor_select",
     "sumo_run_config",
     "sumo_run_minimal_smoke",
     "sumo_collect_evidence",
@@ -82,6 +97,7 @@ _WORKFLOW_TOOL_NAMES = (
     "sumo_detector_route_sampler_calibrate",
     "sumo_hamburg_sandtorkai_digital_twin",
     "sumo_hamburg_named_count_scope",
+    "sumo_hamburg_named_detector_bindings",
     "sumo_hamburg_sandtorkai_signal_observations",
     "sumo_hamburg_sandtorkai_named_replay",
     "sumo_hamburg_sandtorkai_execution_plan",
@@ -223,6 +239,14 @@ def _build_parser() -> argparse.ArgumentParser:
     routeability.add_argument("--max-end", type=int, default=2400)
     routeability.add_argument("--timeout-seconds", type=float, default=240.0)
     _add_output_argument(routeability)
+    movements = network_sub.add_parser("movement-probes", help="Test every declared official movement through its full internal lane chain.")
+    movements.add_argument("candidate_manifest")
+    movements.add_argument("output_dir")
+    movements.add_argument("--sumo-binary", default="sumo")
+    movements.add_argument("--seed", type=int, default=104)
+    movements.add_argument("--end", type=int, default=600)
+    movements.add_argument("--timeout-seconds", type=float, default=120.0)
+    _add_output_argument(movements)
 
     demand = subparsers.add_parser("demand", help="Demand and detector audits.")
     demand_sub = demand.add_subparsers(dest="demand_command", required=True)
@@ -248,8 +272,84 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument("--routeability-audit-report-file")
     _add_output_argument(create)
 
-    netedit = subparsers.add_parser("netedit", help="NetEdit observation-action loop.")
+    hamburg = subparsers.add_parser("hamburg", help="Hamburg official-data workflows.")
+    hamburg_sub = hamburg.add_subparsers(dest="hamburg_command", required=True)
+    topology = hamburg_sub.add_parser(
+        "build-network",
+        help="Rebuild and check a road network from OSM, MAP/KML, and aerial images without count calibration.",
+    )
+    topology.add_argument("request_file")
+    topology.add_argument("output_dir")
+    _add_output_argument(topology)
+    road_uses = hamburg_sub.add_parser(
+        "inspect-road-uses", help="Review local road-use evidence without changing the network.",
+    )
+    road_uses.add_argument("request_file")
+    road_uses.add_argument("output_dir")
+    _add_output_argument(road_uses)
+    aerial_movements = hamburg_sub.add_parser(
+        "aerial-movements",
+        help="Select official or aerial-traced movement geometry from a hash-bound request.",
+    )
+    aerial_movements.add_argument("request_file")
+    aerial_movements.add_argument("output_dir")
+    _add_output_argument(aerial_movements)
+    combined_aerial = hamburg_sub.add_parser(
+        "combine-aerial-movements",
+        help="Build and test a separate SUMO corridor candidate from selected movements.",
+    )
+    combined_aerial.add_argument("request_file")
+    combined_aerial.add_argument("output_dir")
+    _add_output_argument(combined_aerial)
+    aerial_signals = hamburg_sub.add_parser(
+        "bind-aerial-signals",
+        help="Bind exact official primary-signal identities to an aerial candidate.",
+    )
+    aerial_signals.add_argument("request_file")
+    aerial_signals.add_argument("output_dir")
+    _add_output_argument(aerial_signals)
+    protected_signals = hamburg_sub.add_parser(
+        "build-protected-signals",
+        help="Build a hash-bound protected-only signal candidate.",
+    )
+    protected_signals.add_argument("request_file")
+    protected_signals.add_argument("output_dir")
+    _add_output_argument(protected_signals)
+    lane_repair = hamburg_sub.add_parser(
+        "repair-lane-connections",
+        help="Rebuild the reviewed Hamburg fanouts and diverge as a separate candidate.",
+    )
+    lane_repair.add_argument("source_net")
+    lane_repair.add_argument("output_dir")
+    lane_repair.add_argument("--connection-patch", help="Apply this explicit lane patch instead of the legacy LSA119 case repair.")
+    lane_repair.add_argument("--patch-sha256", help="Expected SHA-256 of --connection-patch.")
+    lane_repair.add_argument("--netconvert-binary", default="netconvert")
+    lane_repair.add_argument("--sumo-binary", default="sumo")
+    lane_repair.add_argument("--timeout-seconds", type=float, default=240.0)
+    _add_output_argument(lane_repair)
+    aerial_counts = hamburg_sub.add_parser(
+        "bind-aerial-counts",
+        help="Bind frozen official count fields to an aerial candidate.",
+    )
+    aerial_counts.add_argument("request_file")
+    aerial_counts.add_argument("output_dir")
+    _add_output_argument(aerial_counts)
+    aerial_demand = hamburg_sub.add_parser(
+        "generate-aerial-demand",
+        help="Generate detector-constrained plausible demand for an aerial candidate.",
+    )
+    aerial_demand.add_argument("request_file")
+    aerial_demand.add_argument("output_dir")
+    _add_output_argument(aerial_demand)
+
+    netedit = subparsers.add_parser("netedit", help="One-shot NetEdit review; multi-step editing uses persistent MCP.")
     netedit_sub = netedit.add_subparsers(dest="netedit_command", required=True)
+    netedit_review = netedit_sub.add_parser("review", help="Open, capture, and close a diagnostic copy in one process.")
+    netedit_review.add_argument("source_net_file")
+    netedit_review.add_argument("output_dir")
+    netedit_review.add_argument("expected_source_sha256")
+    netedit_review.add_argument("--gui-settings-file")
+    _add_output_argument(netedit_review)
     netedit_open = netedit_sub.add_parser("open", help="Open a hash-bound NetEdit review session.")
     netedit_open.add_argument("source_net_file")
     netedit_open.add_argument("candidate_net_file")
@@ -288,9 +388,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "workflow",
         help="Run an allowlisted long or specialized workflow from a JSON request file.",
     )
-    workflow.add_argument("tool", choices=_WORKFLOW_TOOL_NAMES, metavar="TOOL")
+    workflow.add_argument("tool", choices=(*_WORKFLOW_TOOL_NAMES, 'selected'), metavar="TOOL")
     workflow.add_argument("request_file")
+    workflow.add_argument('--execute', action='store_true', help='Execute a validated model selection; selected mode otherwise only checks readiness.')
     _add_output_argument(workflow)
+    catalog = subparsers.add_parser('workflows', help='List scenarios and real workflow/function inputs for host-LLM selection.')
+    catalog.add_argument('--scenario', help='Show one scenario by its registered ID.')
+    _add_output_argument(catalog)
 
     mcp = subparsers.add_parser("mcp", help="Run the Torii MCP server.")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
@@ -357,6 +461,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             ),
             json_output=json_output,
         )
+    if args.command == "network" and args.network_command == "movement-probes":
+        return _emit(
+            run_candidate_movement_probes(candidate_manifest=args.candidate_manifest, output_dir=args.output_dir,
+                sumo_binary=args.sumo_binary, seed=args.seed, end_time_s=args.end, timeout_seconds=args.timeout_seconds),
+            json_output=json_output,
+        )
     if args.command == "network" and args.network_command == "routeability":
         return _emit(
             sumo_network_routeability_audit(
@@ -398,57 +508,119 @@ def _dispatch(args: argparse.Namespace) -> int:
             json_output=json_output,
         )
     if args.command == "netedit":
-        if args.netedit_command == "open":
-            return _emit(
-                torii_netedit_open(
-                    args.source_net_file,
-                    args.candidate_net_file,
-                    args.output_dir,
-                    args.expected_source_sha256,
-                    gui_settings_file=args.gui_settings_file,
-                    selection_file=args.selection_file,
-                    target_source_junction_ids=args.target_source_junction_ids,
-                    target_candidate_junction_ids=args.target_candidate_junction_ids,
-                ),
-                json_output=json_output,
-            )
-        if args.netedit_command == "observe":
-            return _emit(
-                torii_netedit_observe(
-                    args.session_id,
-                    object_type=args.object_type,
-                    object_id=args.object_id,
-                ),
-                json_output=json_output,
-            )
-        if args.netedit_command == "act":
-            return _emit(
-                torii_netedit_act(
-                    args.session_id,
-                    args.action,
-                    args.expected_screenshot_sha256,
-                    x=args.x,
-                    y=args.y,
-                    to_x=args.to_x,
-                    to_y=args.to_y,
-                ),
-                json_output=json_output,
-            )
-        if args.netedit_command == "close":
-            return _emit(
-                torii_netedit_close(
-                    args.session_id,
-                    mode=args.mode,
-                    expected_screenshot_sha256=args.expected_screenshot_sha256,
-                    reason=args.reason,
-                ),
-                json_output=json_output,
-            )
+        if args.netedit_command != "review":
+            return _emit({"status": "blocked", "error": "Multi-step NetEdit commands require a persistent MCP session. Use 'torii netedit review' for a one-shot CLI review."}, json_output=json_output)
+        destination = Path(args.output_dir).resolve()
+        if destination.exists():
+            raise ValueError("Choose a new NetEdit review output directory.")
+        opened = torii_netedit_open(args.source_net_file, str(destination / "candidate.net.xml"), str(destination),
+                                    args.expected_source_sha256, gui_settings_file=args.gui_settings_file)
+        if opened.status != "pass":
+            return _emit(opened, json_output=json_output)
+        session_id = opened.payload["session_id"]
+        try:
+            observed = torii_netedit_observe(session_id)
+        finally:
+            closed = torii_netedit_close(session_id, mode="abort", reason="one_shot_review_complete")
+        if closed.status != "pass":
+            return _emit(closed, json_output=json_output)
+        if observed.status != "pass":
+            return _emit(observed, json_output=json_output)
+        return _emit({"status": "pass", "claim_status": "diagnostic-demo",
+                      "summary": "Captured and closed the NetEdit review copy without saving edits.",
+                      "observation": observed.model_dump(mode="json"), "close": closed.model_dump(mode="json")},
+                     json_output=json_output)
+    if args.command == 'workflows':
+        from .core.workflow_catalog import get_workflow_catalog
+        return _emit(get_workflow_catalog(args.scenario), json_output=json_output)
     if args.command == "workflow":
+        if args.tool == 'selected':
+            from .core.workflow_catalog import run_selected_workflow
+            return _emit(run_selected_workflow(_load_request(args.request_file), execute=args.execute), json_output=json_output)
+        if args.execute:
+            raise ValueError('--execute is only used with workflow selected.')
         from .legacy_tools import WORKFLOW_TOOLS
 
         return _emit(
             WORKFLOW_TOOLS[args.tool](**_load_request(args.request_file)),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "build-network":
+        from .core.hamburg_topology_workflow import build_hamburg_topology_workflow
+
+        return _emit(
+            build_hamburg_topology_workflow(request_file=args.request_file, output_dir=args.output_dir),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "inspect-road-uses":
+        from .core.hamburg_road_use_review import build_hamburg_road_use_review
+
+        return _emit(
+            build_hamburg_road_use_review(request_file=args.request_file, output_dir=args.output_dir),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "aerial-movements":
+        return _emit(
+            build_hamburg_aerial_corridor_plan(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
+            json_output=json_output,
+        )
+    if (
+        args.command == "hamburg"
+        and args.hamburg_command == "combine-aerial-movements"
+    ):
+        return _emit(
+            build_hamburg_aerial_combined_candidate(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "bind-aerial-signals":
+        return _emit(
+            build_hamburg_aerial_signal_binding(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "build-protected-signals":
+        return _emit(
+            build_protected_signal_candidate_from_request(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "repair-lane-connections":
+        return _emit(
+            build_hamburg_lane_connection_repair(
+                source_net=args.source_net,
+                output_dir=args.output_dir,
+                connection_patch_file=args.connection_patch,
+                expected_connection_patch_sha256=args.patch_sha256,
+                netconvert_binary=args.netconvert_binary,
+                sumo_binary=args.sumo_binary,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "bind-aerial-counts":
+        return _emit(
+            build_hamburg_aerial_count_binding(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
+            json_output=json_output,
+        )
+    if args.command == "hamburg" and args.hamburg_command == "generate-aerial-demand":
+        return _emit(
+            generate_hamburg_aerial_demand(
+                request_file=args.request_file,
+                output_dir=args.output_dir,
+            ),
             json_output=json_output,
         )
     if args.command == "mcp" and args.mcp_command == "serve":

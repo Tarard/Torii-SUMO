@@ -334,7 +334,7 @@ def read_detector_mapping(path: Path) -> list[Detector]:
 
 
 def active_detectors(detectors: Iterable[Detector]) -> list[Detector]:
-    return [detector for detector in detectors if detector.mapping_status not in {"inactive", "out_of_scope", "ignored"}]
+    return [detector for detector in detectors if detector.mapping_status == "active"]
 
 
 def validate_detector_lane_positions(
@@ -990,12 +990,12 @@ def summarize_comparison(rows: list[dict[str, object]]) -> dict[str, object]:
         return {
             "edge_rows": 0,
             "expected_total": 0,
-            "measured_total": 0,
-            "MAE": 0.0,
-            "RMSE": 0.0,
-            "max_abs_error": 0,
-            "signed_bias": 0.0,
-            "GEH_lt5_percent": 100.0,
+            "measured_total": None,
+            "MAE": None,
+            "RMSE": None,
+            "max_abs_error": None,
+            "signed_bias": None,
+            "GEH_lt5_percent": None,
         }
 
     expected = [float(row["expected_total"]) for row in rows]

@@ -100,7 +100,7 @@ def _infer_reference_target(user_request: str | None, network_profile: str | Non
 def _highways_for_layers(layers: set[str]) -> set[str]:
     highways = set()
     if not layers or layers & {"passenger", "vehicle", "car", "bus"}:
-        highways |= set(DRIVE_HIGHWAYS) | {"unclassified"}
+        highways |= set(DRIVE_HIGHWAYS) | {"unclassified", "service"}
     if layers & {"service", "access", "passenger_plus_service"}:
         highways |= set(DRIVE_HIGHWAYS) | {"unclassified", "service"}
     if layers & {"bicycle", "bike", "bikeway", "cycleway"}:

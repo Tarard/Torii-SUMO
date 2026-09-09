@@ -10,6 +10,7 @@ This page is the stable entry point for Torii's user, architecture, workflow, an
 | Understand what belongs where | [Repository Guide](repository-guide.md) |
 | Understand the system and claim boundary | [Architecture](../ARCHITECTURE.md) |
 | Find an MCP tool | [MCP Tool Catalog](mcp-tool-catalog.md) |
+| Select a registered scenario from the task and sources | [Scenario selection](workflow-selection.md) |
 | Run the one-prompt OSM demonstration | [Ingolstadt example](../examples/02_one_prompt_osm_network/README.md) |
 | Reproduce the small-network topology work | [Teacher-free topology discrimination v4](teacher-free-topology-discrimination-v4.md) |
 | Inspect current corridor evaluation evidence | [Stage 1-M machine review-ready plan](stage1-machine-review-ready-plan.md) |

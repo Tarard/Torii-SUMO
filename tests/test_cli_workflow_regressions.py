@@ -158,7 +158,7 @@ def test_manifest_workflow_rejects_non_object_json(tmp_path, capsys) -> None:
     assert "JSON object" in payload["error"]
 
 
-def test_cli_abort_preserves_the_core_default_reason(monkeypatch, capsys) -> None:
+def test_persistent_session_abort_preserves_the_core_default_reason(monkeypatch) -> None:
     calls: list[dict[str, object]] = []
 
     def fake_session(**kwargs: object) -> dict[str, object]:
@@ -167,8 +167,6 @@ def test_cli_abort_preserves_the_core_default_reason(monkeypatch, capsys) -> Non
 
     monkeypatch.setattr(contract, "sumo_netedit_session", fake_session)
 
-    exit_code = cli.main(["netedit", "close", "session-2", "--mode", "abort", "--json"])
-    capsys.readouterr()
-
-    assert exit_code == 0
+    result = contract.torii_netedit_close("session-2", mode="abort")
+    assert result.status == "pass"
     assert calls[0]["reason"] == "caller_aborted"

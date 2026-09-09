@@ -292,9 +292,74 @@ def test_viewsettings_selection_and_mode_are_deterministic() -> None:
     assert script.selection_text("junction", "j0") == "junction:j0\n"
     assert script.selection_text("lane", "e0_0") == "lane:e0_0\n"
     assert script.selection_text("none", "") == ""
-    assert script.mode_key("inspect") is None
+    assert script.mode_key("inspect") == "CI"
     assert script.mode_key("connection") == "C"
     assert script.mode_key("tls") == "T"
+
+
+def test_network_fit_view_uses_network_boundary_and_window_size(tmp_path: Path) -> None:
+    script = _load_script()
+    net_file = tmp_path / "corridor.net.xml"
+    net_file.write_text(
+        '<net><location convBoundary="0,0,1600,800"/>'
+        '<junction id="a" x="0" y="0"/>'
+        '<junction id="b" x="1600" y="800"/></net>',
+        encoding="utf-8",
+    )
+
+    center, zoom = script.network_fit_view(net_file, "1400,1000")
+
+    assert center == (800.0, 400.0)
+    assert zoom == pytest.approx(90.0)
+
+
+@pytest.mark.parametrize("scale", [0.1, 1.0, 10.0])
+@pytest.mark.parametrize("size", ["1400,1000", "2800,2000"])
+def test_overview_zoom_is_independent_of_world_scale_and_pixel_count(tmp_path, scale, size):
+    script = _load_script()
+    network = tmp_path / "network.net.xml"
+    network.write_text(f'<net><location convBoundary="0,0,{1000*scale},{500*scale}"/></net>', encoding="utf-8")
+    center, zoom = script.network_fit_view(network, size)
+    assert center == (500 * scale, 250 * scale)
+    assert zoom == pytest.approx(90.0)
+
+
+def test_junction_auto_fit_uses_its_shape_and_bounded_connected_lane_context(tmp_path):
+    script = _load_script()
+    network = tmp_path / "network.net.xml"
+    network.write_text('<net><location convBoundary="0,0,1000,500"/>'
+        '<junction id="J" x="480" y="245" shape="450,230 550,230 550,270 450,270"/>'
+        '<edge id="in" from="west" to="J"><lane shape="0,250 450,250" width="3.2"/></edge>'
+        '<edge id="out" from="J" to="east"><lane shape="550,250 1000,250" width="3.2"/></edge></net>', encoding="utf-8")
+    target = script.read_target_junction(network, "J")
+    result = script.fitted_viewport(network, target=target)
+    assert result["center"] == [500.0, 250.0]
+    assert result["target_bounds"] == pytest.approx([418.4, 230.0, 581.6, 270.0])
+    assert result["zoom"] == pytest.approx(100 * .9 * min(1000 / 163.2, 500 / 40))
+    assert result["reference_bounds_basis"] == "convBoundary_estimate"
+    assert result["runtime_grid_measured"] is False
+    explicit = script.fitted_viewport(network, target=target, zoom=650)
+    assert explicit["zoom"] == 650
+    assert explicit["center"] == [480.0, 245.0]
+    assert explicit["basis"] == "explicit_zoom_override"
+    shifted = script.fitted_viewport(network, target=target, center=(400, 250))
+    assert shifted["zoom"] < result["zoom"]
+    half_width = 100 * 1000 / shifted["zoom"] / 2
+    assert shifted["center"][0] - half_width <= shifted["target_bounds"][0]
+    assert shifted["center"][0] + half_width >= shifted["target_bounds"][2]
+
+
+@pytest.mark.parametrize("zoom", [0, -1, float("nan"), float("inf")])
+def test_invalid_zoom_is_rejected_before_any_capture(tmp_path, zoom):
+    script = _load_script()
+    with pytest.raises(ValueError, match="positive, finite"):
+        script.fitted_viewport(tmp_path / "not-read.net.xml", zoom=zoom)
+
+
+def test_unspecified_cli_zoom_uses_automatic_fit(monkeypatch):
+    script = _load_script()
+    monkeypatch.setattr(script.sys, "argv", [str(SCRIPT), "--net-file", "candidate.net.xml", "--out-dir", "review"])
+    assert script._args().zoom is None
 
 
 def test_dpi_awareness_is_enabled_once_before_capture(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -668,9 +733,11 @@ def test_hamburg_runner_plans_three_modes_for_each_junction_without_gui(
     assert report["automatic_promotion_gate"] == "blocked"
 
 
+@pytest.mark.parametrize("requested_zoom", [None, 500])
 def test_direct_runner_is_hash_bound_and_non_promoting_without_gui(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    requested_zoom: float | None,
 ) -> None:
     script = _load_script()
     candidate = tmp_path / "candidate.net.xml"
@@ -709,7 +776,7 @@ def test_direct_runner_is_hash_bound_and_non_promoting_without_gui(
         output_dir=tmp_path / "review",
         netedit_binary="netedit",
         center=None,
-        zoom=500,
+        zoom=requested_zoom,
         window_size="1400,1000",
         window_pos="20,20",
         settle_seconds=0,
@@ -728,6 +795,8 @@ def test_direct_runner_is_hash_bound_and_non_promoting_without_gui(
     assert Path(report["report_file"]).name.startswith("review-")
     assert max(len(request.name) for request in calls) < 60
     assert [request.mode for request in calls] == ["inspect", "tls", "connection"]
+    assert all(call_kwargs["zoom"] == (90 if requested_zoom is None else 500) for call_kwargs in captured_call_kwargs)
+    assert report["viewport_fit"]["runtime_grid_measured"] is False
 
 
 def test_direct_runner_rejects_unexpected_candidate_hash(tmp_path: Path) -> None:
@@ -751,3 +820,155 @@ def test_direct_runner_rejects_unexpected_candidate_hash(tmp_path: Path) -> None
             window_pos="20,20",
             settle_seconds=0,
         )
+
+
+def test_direct_runner_auto_fits_only_neutral_overview(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _load_script()
+    candidate = tmp_path / "corridor.net.xml"
+    candidate.write_text(
+        '<net><location convBoundary="0,0,1600,800"/>'
+        '<junction id="owner" type="traffic_light" x="100" y="200"/></net>',
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_capture_request(**kwargs):
+        calls.append(kwargs)
+        return {
+            "name": kwargs["request"].name,
+            "mode": kwargs["request"].mode,
+            "selection_type": kwargs["request"].selection_type,
+            "selection_id": kwargs["request"].selection_id,
+            "sha256": f"{len(calls):064x}",
+            "print_window_result": 1,
+            "render_quality": "pass",
+            "foreground_unchanged": True,
+            "foreground_context_restored": True,
+            "mode_delivery": {"foreground_context_unchanged": True},
+        }
+
+    monkeypatch.setattr(script.sys, "platform", "win32")
+    monkeypatch.setattr(script, "_capture_request", fake_capture_request)
+    report = script.run_direct_background_review(
+        net_file=candidate,
+        expected_net_sha256=script.file_sha256(candidate),
+        target_junction_id="owner",
+        output_dir=tmp_path / "review",
+        netedit_binary="netedit",
+        center=None,
+        zoom=500,
+        window_size="1400,1000",
+        window_pos="20,20",
+        settle_seconds=0,
+        neutral_overview=True,
+    )
+
+    assert calls[0]["center"] == (800.0, 400.0)
+    assert calls[0]["zoom"] == pytest.approx(90.0)
+    assert all(call["center"] == (100.0, 200.0) for call in calls[1:])
+    assert all(call["zoom"] == 500 for call in calls[1:])
+    assert report["neutral_overview_view"]["zoom"] == pytest.approx(90.0)
+
+
+def _aerial_sources(tmp_path, projection="+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"):
+    from PIL import Image
+    net = tmp_path / "aerial.net.xml"
+    net.write_text(
+        f'<net><location projParameter="{projection}" netOffset="-565000,-5932000" '
+        'convBoundary="0,0,600,400"/><junction id="owner" type="priority" x="300" y="200" '
+        'shape="295,195 305,195 305,205 295,205"/></net>', encoding="utf-8")
+    aerial = tmp_path / "aerial & north.png"
+    Image.new("RGB", (40, 20), (20, 130, 70)).save(aerial)
+    return net, aerial, [565100, 5932100, 565500, 5932300]
+
+
+def test_native_aerial_decal_uses_projection_offset_and_escaped_original_image(tmp_path):
+    import xml.etree.ElementTree as ET
+    script = _load_script()
+    net, aerial, bbox = _aerial_sources(tmp_path)
+    before = aerial.read_bytes()
+    background = script.aerial_decal(net_file=net, aerial_image=aerial, bbox_epsg25832=bbox)
+    node = ET.fromstring(script.viewsettings_text((300, 200), zoom=500, aerial_background=background)).find("decal")
+    assert node.get("file") == str(aerial.resolve())
+    assert float(node.get("centerX")) == pytest.approx(300, abs=0.001)
+    assert float(node.get("centerY")) == pytest.approx(200, abs=0.001)
+    assert float(node.get("width")) == pytest.approx(400, abs=0.001)
+    assert float(node.get("height")) == pytest.approx(200, abs=0.001)
+    assert node.get("rotation") == "0"
+    assert node.get("screenRelative") == "false"
+    assert float(node.get("layer")) < 0
+    assert background["image"]["sha256"] == script.file_sha256(aerial)
+    assert background["bbox_epsg25832"] == bbox
+    assert aerial.read_bytes() == before
+
+
+@pytest.mark.parametrize("bbox", [[1, 2, 1, 5], [565100, 5932100, float("nan"), 5932300],
+                                  [True, 5932100, 565500, 5932300], [9.9, 53.5, 10.1, 53.6]])
+def test_native_aerial_decal_rejects_invalid_source_bounds(tmp_path, bbox):
+    script = _load_script()
+    net, aerial, _ = _aerial_sources(tmp_path)
+    with pytest.raises(ValueError):
+        script.aerial_decal(net_file=net, aerial_image=aerial, bbox_epsg25832=bbox)
+
+
+@pytest.mark.parametrize("projection", ["!", "EPSG:4326", "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs"])
+def test_native_aerial_decal_rejects_missing_geographic_and_rotated_network_frames(tmp_path, projection):
+    script = _load_script()
+    net, aerial, bbox = _aerial_sources(tmp_path, projection)
+    with pytest.raises(ValueError):
+        script.aerial_decal(net_file=net, aerial_image=aerial, bbox_epsg25832=bbox)
+
+
+def test_native_aerial_decal_rejects_exif_rotated_pixels(tmp_path):
+    from PIL import Image
+    script = _load_script()
+    net, _, bbox = _aerial_sources(tmp_path)
+    aerial = tmp_path / "rotated.jpg"
+    exif = Image.Exif()
+    exif[274] = 3
+    Image.new("RGB", (40, 20)).save(aerial, exif=exif)
+    with pytest.raises(ValueError, match="orientation"):
+        script.aerial_decal(net_file=net, aerial_image=aerial, bbox_epsg25832=bbox)
+
+
+@pytest.mark.parametrize("change_image", [False, True])
+def test_direct_capture_carries_and_rechecks_aerial_identity(tmp_path, monkeypatch, change_image):
+    script = _load_script()
+    net, aerial, bbox = _aerial_sources(tmp_path)
+    calls = []
+    def capture(**kwargs):
+        calls.append(kwargs)
+        request = kwargs["request"]
+        if change_image:
+            aerial.write_bytes(aerial.read_bytes() + b"changed")
+        return dict(name=request.name, mode=request.mode, selection_type=request.selection_type,
+                    sha256=f"{len(calls):064x}", print_window_result=1, render_quality="pass",
+                    foreground_unchanged=True, foreground_context_restored=True,
+                    mode_delivery={"foreground_context_unchanged": True})
+    monkeypatch.setattr(script.sys, "platform", "win32")
+    monkeypatch.setattr(script, "_capture_request", capture)
+    report = script.run_direct_background_review(
+        net_file=net, expected_net_sha256=script.file_sha256(net), target_junction_id="owner",
+        output_dir=tmp_path / "capture", netedit_binary="netedit", center=None, zoom=500,
+        window_size="1400,1000", window_pos="20,20", settle_seconds=0,
+        aerial_image=aerial, aerial_bbox_epsg25832=bbox)
+    assert all(call["aerial_background"]["image"]["path"] == str(aerial.resolve()) for call in calls)
+    assert report["aerial_background"]["image_unchanged"] is not change_image
+    assert report["status"] == ("blocked" if change_image else "review_material_ready")
+
+
+def test_aerial_cli_is_direct_only_and_requires_paired_arguments(tmp_path, monkeypatch):
+    script = _load_script()
+    monkeypatch.setattr(script.sys, "argv", [str(SCRIPT), "--summary", "s.json", "--out-dir", "review",
+                                            "--aerial-image", "image.png"])
+    with pytest.raises(SystemExit, match="only valid with --net-file"):
+        script.main()
+    net, aerial, _ = _aerial_sources(tmp_path)
+    with pytest.raises(ValueError, match="together"):
+        script.run_direct_background_review(
+            net_file=net, expected_net_sha256=script.file_sha256(net), target_junction_id="owner",
+            output_dir=tmp_path / "capture", netedit_binary="netedit", center=None, zoom=500,
+            window_size="1400,1000", window_pos="20,20", settle_seconds=0, aerial_image=aerial)

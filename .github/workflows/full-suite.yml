@@ -19,8 +19,14 @@ concurrency:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
 
     steps:
       - name: Check out repository
@@ -38,17 +44,27 @@ jobs:
           enable-cache: true
 
       - name: Install package and development dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --extra dev --extra native
+
+      - name: Locate the locked SUMO distribution
+        run: uv run --no-sync python -c "import os,pathlib,sumo; root=pathlib.Path(sumo.__file__).parent; assert (root/'tools').is_dir(); open(os.environ['GITHUB_ENV'],'a',encoding='utf-8').write('SUMO_HOME='+str(root)+'\n')"
+
+      - name: Verify native programs before testing
+        run: uv run --no-sync python -c "import subprocess; results=[subprocess.check_output([name,'--version'],text=True) for name in ('sumo','netconvert','netgenerate','duarouter')]; assert all('1.27.1' in result for result in results), results; print('\n'.join(results))"
 
       - name: Lint package and tests
-        run: uv run --frozen ruff check plugins/torii-sumo/src tests
+        run: uv run --no-sync ruff check plugins/torii-sumo/src tests
 
       - name: Report complexity debt without blocking yet
         continue-on-error: true
-        run: |
-          uv run --frozen ruff check plugins/torii-sumo/src \
-            --select C901,PLR0912,PLR0913,PLR0915 \
-            --statistics
+        run: uv run --no-sync ruff check plugins/torii-sumo/src --select C901,PLR0912,PLR0913,PLR0915 --statistics
 
       - name: Run full test suite
-        run: uv run --frozen pytest -q
+        run: uv run --no-sync pytest -q --junitxml=test-results.xml
+
+      - name: Save test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ matrix.os }}
+          path: test-results.xml
