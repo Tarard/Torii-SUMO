@@ -1,9 +1,8 @@
 # Notices
 
-The root `LICENSE` file defines the repository license scope. Code uses
-PolyForm Noncommercial 1.0.0 in `LICENSE-CODE`. Repository-authored non-code
-material uses CC BY-NC 4.0 in `LICENSE-DOCS`. File-level and third-party
-notices take priority. These licenses do not grant trademark rights.
+Torii-SUMO is licensed under the MIT License. See `LICENSE`.
+
+File-level and third-party notices take priority for third-party material.
 
 This project is inspired by `XRDS76354/SUMO-MCP-Server`, an MIT-licensed SUMO MCP server.
 
