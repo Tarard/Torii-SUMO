@@ -9,9 +9,8 @@
 </p>
 
 <p align="center">
-  An agent plugin that turns natural-language SUMO tasks into bounded,
-  evidence-bound workflows — building, auditing, and reviewing networks
-  without silently certifying what it cannot prove.
+  Torii is an agent plugin for building, checking, comparing, and reviewing
+  Eclipse SUMO networks from natural-language tasks.
 </p>
 
 <p align="center">
@@ -19,7 +18,7 @@
   <a href="docs/codex-plugin-install.md">Installation</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="examples/01_signal_control_audit/task.md">Examples</a> ·
-  <a href="LICENSE">License</a>
+  <a href="LICENSE">MIT License</a>
 </p>
 
 <p align="center">
@@ -28,63 +27,196 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
-## How Torii Works
+## What Torii Does
+
+Torii turns a task into a bounded SUMO workflow. It separates source data,
+candidate changes, checks, evidence, and review decisions.
+
+| Task | Torii provides |
+|---|---|
+| Build a SUMO network from OSM | Network creation, cleanup, and audit workflows |
+| Audit signal-control experiments | Controller identity, paired demand, teleport and collision checks, and claim labels |
+| Check lane-level connections | Lane transitions, internal lanes, request/foes, lane order, and TLS bindings |
+| Compare network versions | Semantic diffs, regression checks, and outside-scope preservation |
+| Reconstruct road topology | Construction-drawing and official-map workflows |
+| Reconstruct a digital-twin corridor | Structured workflows for geometry, counts, detector data, and review |
+| Bind NEMA phases | Four-way and three-way phase candidates with review gates |
+
+Torii does not treat a successful simulation as proof that the complete network is correct.
+
+## Quick Start
+
+Install the plugin:
+
+```powershell
+codex plugin marketplace add Tarard/Torii-SUMO --ref main
+codex plugin add torii-sumo@torii-sumo
+```
+
+Start a new Codex session. Then ask for a SUMO task, for example:
+
+```text
+Use Torii to build a passenger-road SUMO network from this OSM area.
+Check connectivity, audit traffic signals, test routeability, and save a review package.
+```
+
+Torii supports 64-bit Windows. It requires Python 3.11+ and Eclipse SUMO
+with `sumo`, `netconvert`, and `netedit` available.
+
+See the [installation guide](docs/codex-plugin-install.md) for setup details.
+
+## How It Works
 
 ```mermaid
 flowchart TD
-    A["Natural-language request"] --> B["Router: classify intent, choose workflow"]
-    B --> C["Planner: select gates, reference policy, traffic layers"]
-    C --> D["Executor: bounded stages, source-immutable candidates"]
-    D --> E["Reviewer: hash-bound evidence, HTML cockpit, decision manifests"]
+    A["Natural-language task"] --> B["Router: choose workflow"]
+    B --> C["Planner: choose checks and evidence"]
+    C --> D["Executor: create bounded candidate artifacts"]
+    D --> E["Reviewer: bind evidence and decisions"]
     E --> F{Decision}
-    F -->|"gates pass"| G["Automatic-safe"]
-    F -->|"review required"| H["Review-required"]
+    F -->|"checks pass"| G["Automatic-safe"]
+    F -->|"review needed"| H["Review-required"]
     F -->|"evidence missing"| I["Blocked"]
 ```
 
-| Layer | Role |
-|---|---|
-| **Expert skills** | Classify tasks, select checks, state claim boundaries |
-| **MCP tools** | The default profile exposes 10 focused tools for checks, classification, comparison, and review |
-| **CLI** | Run routeability, long workflows, batch work, and specialized legacy capabilities |
+Torii uses three main interfaces:
 
-The host model reads `torii workflows --json` to choose a registered scenario from your goal and sources; see [scenario selection](docs/workflow-selection.md).
+| Interface | Purpose |
+|---|---|
+| **Expert skills** | Interpret the task and define what can be claimed |
+| **MCP tools** | Run focused checks, comparisons, classification, and review |
+| **CLI** | Run routeability, long workflows, batch work, and legacy capabilities |
+
+The host model can read `torii workflows --json` to choose a registered workflow.
+See [workflow selection](docs/workflow-selection.md).
+
+## Core Safety Model
+
+Torii never edits a source network in place. Each change creates a separate candidate.
+Artifacts used for review are SHA-256 bound.
+
+```text
+Candidate
+   │
+   ▼
+Protected semantic or TLS change?
+   │
+   ├─ Yes → Manual review
+   │
+   └─ No
+        │
+        ▼
+All required checks pass?
+   │
+   ├─ No  → Blocked
+   │
+   └─ Yes → Automatic-safe
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
+
+## Common Commands
+
+The installed plugin provides the CLI through its locked runner:
+
+```powershell
+uv run --isolated --frozen --script <plugin-root>/scripts/run_torii_sumo.py --cli workflows --json
+```
+
+A separate global CLI installation is not required.
+
+### Check routeability
+
+```powershell
+torii network routeability <network.net.xml> <output-dir> --json
+```
+
+### Run a registered workflow
+
+```powershell
+torii workflow <tool> <request.json> --json
+```
+
+### Run OSM cleanup
+
+```powershell
+torii workflow sumo_osm_cleanup_workflow request.json --json
+```
+
+OSM cleanup is CLI-only. Resolve a place to a bounding box first.
+
+The request supports these main fields:
+
+- `output_dir`
+- `bbox`
+- `profile`
+- `source_osm_path`
+- `traffic_layers`
+- `reference_net_file`
+- `timeout_seconds`
+
+Use `traffic_layers` with `profile=standard`.
+Use `reference_net_file` with `profile=reference_matched`.
+The reference-matched profile audits differences and does not apply repairs.
+
+## MCP Profiles
+
+The MCP server starts with the 10-tool `default` profile.
+Use `legacy` only when an older integration needs one of the historical tool names.
+
+The default network audit provides two profiles:
+
+- `quick`: topology checks only.
+- `standard`: topology, Connection Mode, and overlapping-junction checks.
+
+Neither profile runs SUMO routeability. Run routeability through the CLI.
+
+NetEdit `observe` writes a screenshot and report.
+Close a session with `--mode abort`.
+Use `--mode finalize` with the latest screenshot SHA-256 when review is complete.
+
+## Tested Environment
+
+The corridor checks use SUMO 1.27.1.
+The Python dependency requires `sumolib>=1.27.1` for the tested connection-permission-aware route checks.
+
+Use the recorded SUMO version when reproducing a result.
 
 ## Hamburg Corridor Digital Twin
 
-Build road geometry and lane connections from a reviewed construction drawing,
-with OSM and supplied Google Maps references as supporting sources. The existing
-official MAP/XML/KML and aerial-image mode uses the same command:
+Torii includes a research workflow for reconstructing Hamburg road corridors.
+This workflow supports two source modes.
+
+### Construction-drawing mode
+
+A manually reviewed `topology.json` records roads, lane uses, widths, and connections.
+Torii then builds a fresh SUMO network and checks it.
 
 ```powershell
 torii hamburg build-network <request.json> <new-output-dir> --json
 ```
 
-With `construction_plan`, a manually reviewed `topology.json` records the
-drawing's roads, lane uses, widths, and connections. Torii builds a fresh SUMO
-network and checks it. This does not automatically interpret an arbitrary PDF.
-Drawing-based lane counts, uses, and movements take precedence over maps.
-OSM may supply missing coordinates, names, or speeds. Coordinates from another
-year require an explicit statement that they apply to the target year.
+This mode does not automatically interpret an arbitrary PDF.
+Drawing-based lane counts, lane uses, and movements take precedence over maps.
+OSM may provide missing coordinates, road names, or speeds.
 
-The user and the dated drawing define the scenario year. A 2013 scenario does
-not become a current-road scenario because a newer map is available. Google Maps
-is optional; missing references are reported as not supplied. See the
-[construction-drawing guide](examples/05_hamburg_topology/construction-plan.md)
-and its [illustrative request](examples/05_hamburg_topology/construction-plan.request.example.json).
+See the [construction-drawing guide](examples/05_hamburg_topology/construction-plan.md)
+and the [example request](examples/05_hamburg_topology/construction-plan.request.example.json).
 
-The MAP/aerial mode creates a fresh source network, official movement plan,
-candidate, and construction checks. It does not reuse an earlier candidate or
-movement plan. Detector counts and historical signal states are not required
-in either mode. In MAP/aerial mode, optional
-`construction.junction_contours: "guarded"` tightens empty parts of
-junction outlines, then verifies the compiled lane, connection and signal
-data. Unproved changes retain the previous boundary and a review record.
-See the [construction example](examples/05_hamburg_topology/README.md) and its
-[raw-input request](examples/05_hamburg_topology/request.example.json).
+### MAP and aerial mode
 
-Validation uses five fixed Hamburg corridors. The counts below describe the
-official input records, not a claim that every reconstruction has passed.
+The MAP and aerial workflow creates a fresh source network, movement plan,
+candidate, and construction checks. It does not reuse an older candidate.
+
+Optional `construction.junction_contours: "guarded"` can tighten empty parts of junction outlines.
+Torii then checks the compiled lane, connection, and signal data.
+
+See the [Hamburg construction example](examples/05_hamburg_topology/README.md)
+and its [request example](examples/05_hamburg_topology/request.example.json).
+
+### Validation scope
+
+Validation uses five fixed Hamburg corridors:
 
 | Corridor | Official intersection IDs | Official movement records |
 |---|---|---:|
@@ -94,175 +226,56 @@ official input records, not a claim that every reconstruction has passed.
 | Barmbeker Straße | 89, 65 | 36 |
 | Bremer Straße | 1859, 1862 | 21 |
 
-OSM side roads remain part of each selected area. Roads without official
-MAP coverage are recorded separately. A large junction polygon is not a
-connectivity failure: its internal lane paths must preserve the intended
-movements. Official stop sections may lie within a source road or its SUMO
-internal lanes, rather than at an existing road endpoint.
+These counts describe the official input records.
+They do not mean every reconstruction has passed validation.
 
-Read connection structure, geometry review, and vehicle passage as separate
-results. Checks cover official lane transitions, both corridor directions,
-surrounding roads, and paired source/candidate trips. A fixed junction shape
-must also survive a netconvert reload. Successful trips alone do not establish
-complete topology or field accuracy.
+Release validation is still in progress.
+Ring 1 still has unresolved lane and boundary cases.
+A historical open road also does not prove that the road is open today.
 
-**Release validation is still in progress.** Ring 1 has unresolved lane and
-boundary cases. Source dates also matter: a historical open road is not proof
-that the same road is open today. These topology tests do not establish a
-calibrated digital twin or replay historical signal timing. After the road
-network has been checked and frozen, start the separate
-[count-calibration workflow](plugins/torii-sumo/skills/simulation-helper-skill-for-eclipse-sumo/references/hamburg-count-calibration-workflow.md)
-only when traffic reconstruction is requested.
+The topology tests do not establish a calibrated digital twin or replay historical signal timing.
+Start the separate [count-calibration workflow](plugins/torii-sumo/skills/simulation-helper-skill-for-eclipse-sumo/references/hamburg-count-calibration-workflow.md)
+only after the road network is checked and frozen.
 
-Earlier detector-replay work is documented in the
-[historical evidence summary](docs/hamburg-digital-twin-evidence-summary.json)
+See the [historical evidence summary](docs/hamburg-digital-twin-evidence-summary.json)
 and [development log](docs/hamburg-digital-twin-development-log.md).
-
-## Design
-
-```
-  Candidate
-      │
-      ▼
-  ┌─────────────────────────┐
-  │  Protected semantic /   │──Yes──▶  Manual review
-  │  TLS delta?             │         (hash-bound decision)
-  └─────────────────────────┘
-      │ No
-      ▼
-  ┌─────────────────────────┐
-  │  All runtime gates      │──No───▶  BLOCKED
-  │  pass?                  │         (recorded in manifest)
-  └─────────────────────────┘
-      │ Yes
-      ▼
-  AUTOMATIC-SAFE
-```
-
-Source networks are never modified in place — every edit produces a
-separate candidate with rollback.  All artifacts are SHA-256 bound.
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.
-
-## What You Can Do
-
-| You want to... | Torii provides |
-|---|---|
-| Build and audit a SUMO network from OSM | CLI cleanup with fixed standard or reference-matched audit profiles |
-| Reconstruct Hamburg road topology | Reviewed construction drawings with supporting maps, or official MAP geometry with aerial review |
-| Audit a signal-control experiment | Controller identity, paired demand, teleport/collision check, 4-class claim label |
-| Reconstruct a digital-twin corridor | W0–W5 executable plan using official MAP, OCIT, counts, and detector data |
-| Audit lane-level connections | Code-native Connection Mode: fromLane→toLane→via, request/foes, lane order, TLS binding |
-| Compare two network versions | Exact semantic diff, Connection Mode regression, outside-scope preservation |
-| Bind standard NEMA phases | Four-way (1–8) and three-way candidates; never batch-promotes |
-
-[MCP profiles and legacy tool catalog](docs/mcp-tool-catalog.md) —
-[Example workflows](examples/01_signal_control_audit/task.md)
-
-## Installation
-
-```powershell
-codex plugin marketplace add Tarard/Torii-SUMO --ref main
-codex plugin add torii-sumo@torii-sumo
-```
-
-Torii supports 64-bit Windows only. Start a new Codex session after installation.
-Requires Python 3.11+ and Eclipse SUMO
-(`sumo`, `netconvert`, `netedit`).  See the
-[installation guide](docs/codex-plugin-install.md).
-
-The installed plugin also provides the CLI through its locked runner:
-
-```powershell
-uv run --isolated --frozen --script <plugin-root>/scripts/run_torii_sumo.py --cli workflows --json
-```
-
-Use the same runner for the `torii ...` commands below. A separate global CLI
-installation is not required.
-
-The corridor checks use SUMO 1.27.1. The Python dependency requires
-`sumolib>=1.27.1` for the tested connection-permission-aware route checks.
-Use the recorded SUMO version when reproducing a result.
-
-## Interfaces
-
-The MCP server starts with the 10-tool `default` profile. Use `legacy` only
-when an older integration requires one of the 73 historical tool names.
-
-The default network audit has two profiles:
-
-- `quick`: topology only.
-- `standard`: topology, Connection Mode, and overlapping-junction checks.
-
-Neither profile runs SUMO routeability. Run that longer check through the CLI:
-
-```powershell
-torii network routeability <network.net.xml> <output-dir> --json
-```
-
-Run an allowlisted long, batch, or specialized legacy capability from a JSON
-request file:
-
-```powershell
-torii workflow <tool> <request.json> --json
-```
-
-NetEdit `observe` writes a screenshot and report. Close a session with
-`--mode abort`, or use `--mode finalize` with the latest screenshot SHA-256.
-
-## Quick Start
-
-```text
-Use Torii to build a passenger-road SUMO network from this OSM area.
-Check connectivity, audit traffic signals, test routeability, and save a review package.
-```
-
-For a long workflow, prepare its JSON arguments and run:
-
-```powershell
-torii workflow sumo_osm_cleanup_workflow request.json --json
-```
-
-OSM cleanup is CLI-only and is not an MCP tool. Resolve a place to a bbox
-first. The request has seven fields: `output_dir`, `bbox`, `profile`,
-`source_osm_path`, `traffic_layers`, `reference_net_file`, and
-`timeout_seconds`. Use `traffic_layers` with `profile=standard`. Use a
-`reference_net_file` with `profile=reference_matched`; this profile audits
-differences and does not apply repairs.
 
 ## Repository Structure
 
 ```text
-plugins/torii-sumo/       Codex plugin, 10-tool default MCP, and legacy profile
+plugins/torii-sumo/       Codex plugin, MCP server, CLI, and skills
   src/torii_sumo/
     core/                 Domain logic
     tools/                MCP adapters
-    server.py             Default/NetEdit registration and profile switch
-    legacy_tools.py       Opt-in legacy MCP and CLI workflow bundle
+    server.py             MCP registration and profile switch
+    legacy_tools.py       Legacy MCP and CLI workflow bundle
   skills/                 Expert reasoning and workflow guidance
   scripts/                Reproducible CLI entry points
-docs/                     Guides, architecture, protocols, evidence snapshots
-examples/                 Small reproducible workflows
-benchmarks/               Frozen evaluation assets and adjudication protocols
+
+docs/                     Guides, architecture, protocols, and evidence
+examples/                 Reproducible example workflows
+benchmarks/               Frozen evaluation assets and protocols
 tests/                    Unit, contract, integration, and regression tests
 ```
 
-## More
+## Documentation
 
-- [Architecture](ARCHITECTURE.md) — router, planner, executor, reviewer, promotion rules
-- [Repository Guide](docs/repository-guide.md) — code, documentation, and evidence boundaries
-- [MCP Tool Catalog](docs/mcp-tool-catalog.md) — default, NetEdit, and legacy profiles
-- [Stage 1-M Evidence](docs/stage1-machine-review-ready-plan.md) — 30-corridor blind review, 102,398 atomic witnesses
-- [Research Status](docs/torii-corridor-human-modeling-implementation-status.md)
-- [Hamburg Evidence & Log](docs/hamburg-digital-twin-evidence-summary.json)
+- [Architecture](ARCHITECTURE.md)
+- [Repository guide](docs/repository-guide.md)
+- [MCP tool catalog](docs/mcp-tool-catalog.md)
+- [Workflow selection](docs/workflow-selection.md)
+- [Example workflows](examples/01_signal_control_audit/task.md)
+- [Stage 1-M evidence](docs/stage1-machine-review-ready-plan.md)
+- [Research status](docs/torii-corridor-human-modeling-implementation-status.md)
+- [Hamburg evidence](docs/hamburg-digital-twin-evidence-summary.json)
 
 ## License
 
-Source code uses [PolyForm Noncommercial 1.0.0](LICENSE-CODE).
-Repository-authored skills, documentation, checklists, examples, manifests,
-schemas, protocol text, prompts, and visual assets use
-[CC BY-NC 4.0](LICENSE-DOCS). Commercial use is not licensed by these terms.
-See the [scope notice](LICENSE).
+Torii-SUMO is licensed under the [MIT License](LICENSE).
 
-Eclipse SUMO is a trademark of the Eclipse Foundation.  OSM data
-© OpenStreetMap contributors (ODbL).  Earlier releases archived at
-[Zenodo](https://doi.org/10.5281/zenodo.20627976).
+Third-party material keeps its original license and copyright notice.
+See [NOTICE.md](NOTICE.md) for third-party notices.
+
+Eclipse SUMO is a trademark of the Eclipse Foundation.
+OpenStreetMap data is © OpenStreetMap contributors and uses the ODbL.
+Earlier releases are archived on [Zenodo](https://doi.org/10.5281/zenodo.20627976).
