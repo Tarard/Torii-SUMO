@@ -66,17 +66,18 @@ Torii requires Python 3.11+ and Eclipse SUMO.
 Torii is being used to reconstruct and validate a real traffic corridor in central Hamburg.
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Hamburg aerial imagery overlaid with the reconstructed Torii SUMO corridor" width="100%">
+  <img src="docs/assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Torii V1 reconstructed Hamburg corridor over aerial imagery, with lane connections and virtual sensors" width="100%">
 </p>
 
-<p align="center"><sub>From Hamburg public data to a reconstructed SUMO corridor.</sub></p>
+<p align="center"><sub>Torii V1 corridor over aerial imagery, with lane connections and virtual sensors.</sub></p>
 
 Torii combines official traffic data, aerial imagery, and SUMO network reconstruction in one workflow.
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-2403-junction-inspect.png" alt="Torii junction reconstruction detail" width="49%">
-  <img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="Torii junction connection detail" width="49%">
+  <img src="docs/assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118 reconstruction in four stages: official MAP endpoints and headings, reconstructed curves, and SUMO lane connections before and after cleaning" width="100%">
 </p>
+
+<p align="center"><sub>LSA118 reconstruction: official MAP endpoints and headings, reconstructed curves, and lane connections before and after cleaning.</sub></p>
 
 The current Hamburg calibration matches the aggregate detector count exactly, with **0.15 vehicles MAE per 15-minute bin**.
 
