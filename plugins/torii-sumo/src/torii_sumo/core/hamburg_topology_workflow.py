@@ -15,6 +15,8 @@ from typing import Any
 from .artifact_io import write_json_atomic
 from .candidate_contracts import file_sha256
 from .hamburg_aerial_corridor_candidate import build_hamburg_aerial_combined_candidate
+from .hamburg_road_geometry import build_hamburg_road_geometry_candidate
+from .hamburg_context_junctions import construction_coverage, rebuild_context_intersections
 from .hamburg_aerial_movement import build_hamburg_aerial_corridor_plan
 from .hamburg_aerial_road_edges import build_hamburg_road_edge_evidence
 from .hamburg_corridor_candidate import bind_hamburg_corridor_tls_clusters
@@ -31,13 +33,14 @@ REPORT_SCHEMA = "torii.hamburg-topology-workflow/v1"
 _BUILD_KEYS = {"bbox", "geo_boundary", "tls_join_distance_m", "highway_classes", "historical_date",
                "clip_source_ways_to_bbox", "netconvert_profile", "traffic_side"}
 _CONSTRUCTION_DEFAULTS = {"seed": 104, "vehicle_count": 100, "simulation_end": 600,
-                        "simulation_max_end": 2400, "timeout_seconds": 240.0, "junction_contours": "preserve"}
+                        "simulation_max_end": 2400, "timeout_seconds": 240.0, "junction_contours": "fused",
+                        "junction_corner_radius_m": 8.0}
 _CONSTRUCTION_KEYS = {*_CONSTRUCTION_DEFAULTS, "maximum_anchor_projection_error_m",
                       "maximum_lane_projection_error_m", "minimum_lane_match_margin_m",
-                      "context_joins", "context_geometry_neighbors", "sumo_binary", "netconvert_binary"}
+                      "context_joins", "context_geometry_neighbors", "context_lane_change_policy", "sumo_binary", "netconvert_binary"}
 _REQUEST_KEYS = {"schema", "source_osm", "lsa_identity", "osm_build", "intersections", "road_names",
                  "construction", "aerial_max_error_m", "tls_cluster_radius_m", "max_binding_distance_m",
-                 "construction_plan", "scenario", "supporting_maps"}
+                 "construction_plan", "scenario", "supporting_maps", "context_intersections"}
 
 
 def _identity(path: Path | str) -> dict[str, str]:
@@ -256,6 +259,38 @@ def _read_request(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
     if not isinstance(intersections, list) or len(intersections) < 2:
         raise ValueError("a corridor requires at least two intersections with raw MAP, KML, and aerial inputs")
     node_ids = []
+    contexts = value.setdefault("context_intersections", [])
+    if not isinstance(contexts, list):
+        raise ValueError("context_intersections must be a list")
+    context_ids, context_members = set(), set()
+    for row in contexts:
+        if not isinstance(row, dict):
+            raise ValueError("each context intersection must be an object")
+        identifier = str(row.get("node_id", ""))
+        if not identifier.isascii() or not identifier.isdigit():
+            raise ValueError("context intersections require unique numeric node ids")
+        identifier = str(int(identifier))
+        if identifier in context_ids:
+            raise ValueError("context intersections require unique numeric node ids")
+        row["node_id"] = identifier
+        context_ids.add(identifier)
+        members = row.get("source_node_ids")
+        if (not isinstance(members, list) or len(members) < 2
+                or any(not isinstance(node, str) or not node or node.startswith(":") or any(c.isspace() for c in node) for node in members)
+                or len(set(members)) != len(members) or context_members.intersection(members)):
+            raise ValueError("context source nodes must be explicit, unique, and disjoint")
+        context_members.update(members)
+        if row.get("signal_policy") != "rebuild_diagnostic" or not str(row.get("review_basis", "")).strip():
+            raise ValueError("context intersections require review_basis and signal_policy=rebuild_diagnostic")
+        row["aerial_image"] = source(row.get("aerial_image"), f"context.{identifier}.aerial_image")
+        bounds = row.get("bbox_epsg25832")
+        if (not isinstance(bounds, list) or len(bounds) != 4
+                or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in bounds)
+                or bounds[0] >= bounds[2] or bounds[1] >= bounds[3]):
+            raise ValueError("context intersections require valid EPSG:25832 aerial bounds")
+        year = row.get("aerial_year")
+        if isinstance(year, bool) or not isinstance(year, int) or not 1900 <= year <= 2200:
+            raise ValueError("context intersections require an aerial_year")
     for row in intersections:
         if not isinstance(row, dict):
             raise ValueError("each intersection must be an object")
@@ -263,6 +298,8 @@ def _read_request(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
         if not node_id.isascii() or not node_id.isdigit():
             raise ValueError("each intersection requires a numeric node_id")
         row["node_id"] = node_id
+        if str(int(node_id)) in context_ids:
+            raise ValueError("MAP and context intersections must not overlap")
         node_ids.append(node_id)
         for role in ("map_xml", "map_kml", "aerial_image"):
             row[role] = source(row.get(role), f"{node_id}.{role}")
@@ -291,15 +328,17 @@ def _read_request(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
     if not isinstance(options, dict) or set(options) - _CONSTRUCTION_KEYS:
         raise ValueError("construction contains unsupported options")
     options = {**_CONSTRUCTION_DEFAULTS, **options}
-    if options["junction_contours"] not in ("preserve", "guarded"):
-        raise ValueError("junction_contours must be preserve or guarded")
+    if options.get("context_lane_change_policy", "fixed_paths") not in ("fixed_paths", "permitted_interior"):
+        raise ValueError("context_lane_change_policy must be fixed_paths or permitted_interior")
+    if options["junction_contours"] not in ("preserve", "guarded", "fused"):
+        raise ValueError("junction_contours must be preserve, guarded, or fused")
     for name in ("seed", "vehicle_count", "simulation_end", "simulation_max_end"):
         number = options[name]
         if isinstance(number, bool) or not isinstance(number, int) or number < (0 if name == "seed" else 1):
             raise ValueError(f"{name} must be a valid integer")
     if options["simulation_max_end"] < options["simulation_end"]:
         raise ValueError("simulation_max_end must not be shorter than simulation_end")
-    for name in ("timeout_seconds", "maximum_anchor_projection_error_m", "maximum_lane_projection_error_m", "minimum_lane_match_margin_m"):
+    for name in ("timeout_seconds", "maximum_anchor_projection_error_m", "maximum_lane_projection_error_m", "minimum_lane_match_margin_m", "junction_corner_radius_m"):
         number = options.get(name, 1)
         if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number) or number <= 0:
             raise ValueError(f"{name} must be finite and positive")
@@ -388,6 +427,26 @@ def build_hamburg_topology_workflow(*, request_file: Path | str, output_dir: Pat
         net_file = Path(source["net_file"])
         source_identity = pin("source_network", net_file)
         pin("filtered_osm", source["filtered_osm_file"])
+        road_geometry = stage("road_geometry", lambda: build_hamburg_road_geometry_candidate(
+            source_net=net_file, output_dir=destination / "road-geometry",
+            netconvert_binary=netconvert_binary, timeout_seconds=timeout))
+        if road_geometry["status"] == "blocked":
+            raise ValueError("reviewed road geometry failed its preservation or connection checks")
+        if road_geometry.get("candidate_network"):
+            repaired = road_geometry["candidate_network"]
+            net_file = Path(repaired["path"])
+            source_identity = pin("road_geometry_network", net_file, repaired["sha256"])
+        context_rebuild = None
+        if request["context_intersections"]:
+            context_rebuild = stage("context_intersections", lambda: rebuild_context_intersections(
+                source_net=net_file, request=request, output_dir=destination / "context-intersections",
+                netconvert_binary=netconvert_binary, sumo_binary=sumo_binary,
+                timeout_seconds=timeout, seed=options["seed"]), require_pass=True)
+            rebuilt = context_rebuild["candidate_network"]
+            net_file = Path(rebuilt["path"])
+            source_identity = pin("context_network", net_file, rebuilt["sha256"])
+            pin("context_reconstruction", destination / "context_intersections.json")
+        coverage = stage("construction_coverage", lambda: construction_coverage(request))
         tls = stage("physical_areas", lambda: audit_tls(
             net_file=net_file, output_dir=destination / "physical-areas", prefix="source",
             osm_file=Path(source["filtered_osm_file"]), cluster_radius_m=request["tls_cluster_radius_m"]), require_pass=True)
@@ -444,12 +503,18 @@ def build_hamburg_topology_workflow(*, request_file: Path | str, output_dir: Pat
             candidate_manifest, destination / "construction-audit", netconvert_binary=netconvert_binary, timeout_seconds=timeout))
         movements = stage("movement_probes", lambda: run_candidate_movement_probes(
             candidate_manifest=candidate_manifest, output_dir=destination / "movement-probes",
+            context_manifest=destination / "context_intersections.json" if context_rebuild is not None else None,
             sumo_binary=sumo_binary, seed=options["seed"], end_time_s=options["simulation_end"], timeout_seconds=timeout))
         routes = stage("corridor_routes", lambda: run_hamburg_topology_route_checks(
             candidate_manifest, destination / "corridor-routes", road_names=request["road_names"],
             ordered_node_ids=report["ordered_node_ids"], sumo_binary=sumo_binary, seed=options["seed"],
             end_time_s=options["simulation_max_end"], timeout_seconds=timeout))
         decisions = [candidate["status"], quality["status"], movements["status"], routes["status"], source_policy['status']]
+        decisions.append(coverage["status"])
+        if context_rebuild is not None:
+            decisions.append(context_rebuild["field_geometry_review"])
+        if road_geometry["status"] != "not_applicable":
+            decisions.append(road_geometry["status"])
         road_edge_review = any("road_reference" in row for row in request["intersections"])
         if road_edge_review:
             decisions.append("review_required")
@@ -457,6 +522,8 @@ def build_hamburg_topology_workflow(*, request_file: Path | str, output_dir: Pat
             else "pass" if all(value == "pass" for value in decisions) and report["topology_complete"]
             else "review_required")
         report["checks"] = {"official_connectivity": "pass" if report["topology_complete"] else "review_required",
+            "road_geometry": road_geometry["status"],
+            "construction_coverage": coverage["status"],
             "movement_probes": movements["status"], "corridor_routes": routes["status"],
             "construction_audit": quality["status"]}
         if road_edge_review:
@@ -485,7 +552,7 @@ def build_hamburg_topology_workflow(*, request_file: Path | str, output_dir: Pat
     report["next_action"] = ("network_construction_complete" if report["status"] == "pass"
         else "inspect_the_recorded_construction_findings_and_rebuild_in_a_new_directory")
     report["first_incomplete_stage"] = next((name for name, row in report["stages"].items()
-                                              if row["status"] != "pass"), None)
+                                              if row["status"] not in {"pass", "not_applicable"}), None)
     save()
     if report["network_handoff"] is not None:
         handoff_file = destination / "network-handoff.json"

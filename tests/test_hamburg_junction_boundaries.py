@@ -9,6 +9,7 @@ import pytest
 
 from torii_sumo.core.hamburg_aerial_corridor_candidate import _select_join_groups
 from torii_sumo.core import hamburg_aerial_corridor_candidate as candidate_module
+from torii_sumo.core.hamburg_junctions import boundaries as boundary_module, groups as group_module
 
 
 def test_join_does_not_absorb_a_road_beyond_official_lane_boundary(monkeypatch) -> None:
@@ -24,7 +25,7 @@ def test_join_does_not_absorb_a_road_beyond_official_lane_boundary(monkeypatch) 
         ],
     }
     binding = {"bindings": [{"node_id": "999", "tls_ids": ["J", "R"]}]}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: plan["_official_lane_b_points_network"])
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: plan["_official_lane_b_points_network"])
     groups = _select_join_groups(root, binding, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J"]
     assert groups[0]["boundary_excluded_node_ids"] == ["R"]
@@ -33,7 +34,7 @@ def test_join_does_not_absorb_a_road_beyond_official_lane_boundary(monkeypatch) 
 def test_official_core_keeps_connected_nodes_even_when_internal_edge_exceeds_20m(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="30" y="0"/><edge id="inside" from="J" to="R"><lane id="inside_0" length="30" shape="0,0 30,0"/></edge></net>')
     points = {"i0": (-40, -5), "i1": (-40, 5), "o0": (40, -5), "o1": (40, 5)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
     plan = {"movements": [{"ingress_lane_id": f"i{n}", "egress_lane_id": f"o{n}", "intersection_part": "0", "selected_shape_network": [(-50, 0), (50, 0)]} for n in (0, 1)]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -42,7 +43,7 @@ def test_official_core_keeps_connected_nodes_even_when_internal_edge_exceeds_20m
 def test_boundary_node_ownership_uses_road_surface_not_only_node_center(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="12" y="0" shape="3,-3 14,-3 14,3 3,3"/><junction id="outside" x="25" y="0" shape="22,-3 28,-3 28,3 22,3"/><edge id="inside" from="J" to="R"><lane length="12" shape="0,0 12,0"/></edge><edge id="outside_road" from="R" to="outside"><lane length="13" shape="12,0 25,0"/></edge></net>')
     points = {"i0": (-4, -1.6), "i1": (-4, 1.6), "o0": (4, -1.6), "o1": (4, 1.6)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
     plan = {"movements": [{"ingress_lane_id": f"i{n}", "egress_lane_id": f"o{n}", "intersection_part": "0", "selected_shape_network": [(-20, 0), (30, 0)]} for n in (0, 1)]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -52,8 +53,8 @@ def test_boundary_node_ownership_uses_road_surface_not_only_node_center(monkeypa
 def test_lane_port_width_can_overlap_junction_when_its_center_does_not(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="12" y="2" shape="3,1 14,1 14,4 3,4"/><edge id="inside" from="J" to="R"><lane length="12" shape="0,0 12,2"/></edge></net>')
     points = {"in": (-4, 0), "out": (4, 0), "north": (0, 4)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
-    monkeypatch.setattr(candidate_module, "_official_boundary_widths", lambda *_: {key: 3.25 for key in points}, raising=False)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(boundary_module, "_official_boundary_widths", lambda *_: {key: 3.25 for key in points}, raising=False)
     plan = {"lanes": [{"lane_id": key, "shape_network": [point, (point[0] * 4, point[1] * 4)]} for key, point in points.items()], "movements": [{"ingress_lane_id": key, "egress_lane_id": "out", "intersection_part": "0", "selected_shape_network": [points[key], (20, 0)]} for key in ("in", "north")]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -62,7 +63,7 @@ def test_lane_port_width_can_overlap_junction_when_its_center_does_not(monkeypat
 def test_internal_road_face_owns_stopline_even_outside_legacy_junction_polygon(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="12" y="0" shape="10,3 14,3 14,5 10,5"/><edge id="inside" from="J" to="R"><lane length="12" shape="0,0 3,0"/></edge><edge id=":R_0" function="internal"><lane id=":R_0_0" width="3.2" shape="3,0 14,0"/></edge></net>')
     points = {"in": (-4, 0), "out": (4, 0), "north": (0, 4)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
     plan = {"movements": [{"ingress_lane_id": key, "egress_lane_id": "out", "intersection_part": "0", "selected_shape_network": [points[key], (20, 0)]} for key in ("in", "north")]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -71,8 +72,8 @@ def test_internal_road_face_owns_stopline_even_outside_legacy_junction_polygon(m
 def test_official_internal_curve_identifies_fragment_outside_endpoint_polygon(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="2" y="8" shape="1,6 3,6 3,10 1,10"/><edge id="inside" from="J" to="R"><lane length="6" shape="0,0 1,6"/></edge></net>')
     points = {"in": (-4, 0), "out": (4, 0), "north": (0, 4)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
-    monkeypatch.setattr(candidate_module, "_official_internal_paths", lambda *_: {"paths": {("in", "out"): [(-4, 0), (2, 8), (4, 0)]}, "unusable": []}, raising=False)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_internal_paths", lambda *_: {"paths": {("in", "out"): [(-4, 0), (2, 8), (4, 0)]}, "unusable": []}, raising=False)
     plan = {"movements": [{"ingress_lane_id": key, "egress_lane_id": "out", "intersection_part": "0", "selected_shape_network": [points[key], (20, 0)]} for key in ("in", "north")]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -82,7 +83,7 @@ def test_official_internal_curve_identifies_fragment_outside_endpoint_polygon(mo
 def test_core_connectivity_uses_actual_lane_geometry_not_edge_reference_axis(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="R" x="20" y="0"/><edge id="inside" from="J" to="R" shape="0,100 20,100"><lane length="20" shape="0,0 20,0"/></edge><edge id=":R_0" function="internal"><lane shape="20,0 20,0"/></edge></net>')
     points = {"i0": (-30, -5), "i1": (-30, 5), "o0": (30, -5), "o1": (30, 5)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
     plan = {"movements": [{"ingress_lane_id": f"i{n}", "egress_lane_id": f"o{n}", "intersection_part": "0", "selected_shape_network": [(-30, 0), (30, 0)]} for n in (0, 1)]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J"]}]}, {"999": plan})
     assert groups[0]["source_node_ids"] == ["J", "R"]
@@ -100,7 +101,7 @@ def test_official_port_width_uses_centimeter_deltas_at_stopline(tmp_path) -> Non
 def test_part_assignment_uses_stopline_core_instead_of_full_drive_line_tail(monkeypatch) -> None:
     root = ET.fromstring('<net><junction id="J" x="0" y="0"/><junction id="K" x="100" y="0"/></net>')
     points = {f"{part}{role}{n}": (center + (-5 if role == "i" else 5), -3 if n == 0 else 3) for part, center in (("0", 0), ("1", 100)) for role in ("i", "o") for n in (0, 1)}
-    monkeypatch.setattr(candidate_module, "_official_lane_boundary_points", lambda *_: points)
+    monkeypatch.setattr(group_module, "_official_lane_boundary_points", lambda *_: points)
     plan = {"movements": [{"ingress_lane_id": f"{part}i{n}", "egress_lane_id": f"{part}o{n}", "intersection_part": part, "selected_shape_network": [(0, 0), (300, 0)] if part == "0" else [(90, 0), (110, 0)]} for part in ("0", "1") for n in (0, 1)]}
     groups = _select_join_groups(root, {"bindings": [{"node_id": "999", "tls_ids": ["J", "K"]}]}, {"999": plan})
     assert {group["intersection_part"]: group["source_node_ids"] for group in groups} == {"0": ["J"], "1": ["K"]}

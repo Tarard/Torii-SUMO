@@ -13002,6 +13002,7 @@ def test_restore_off_scope_netconvert_artifacts_preserves_only_declared_replay_s
     assert report["restored_external_edge_centerline_ids"] == ["remote"]
     assert root.find("edge[@id='remote']").attrib["shape"] == "50,0 60,0"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "50,0 60,0"
+    assert root.find("edge[@id='remote']/lane").attrib["customShape"] == "1"
     assert root.find("junction[@id='y']").attrib["shape"] == "60,-1 60,1"
     assert root.find("junction[@id='y']").attrib["customShape"] == "true"
     assert root.find("edge[@id='current']/lane").attrib["shape"] == "0,1 12,1"

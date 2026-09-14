@@ -7,6 +7,7 @@ This index contains dated audits, handoff notes, development logs, and supersede
 - [Architecture audit, 2026-07-13](../architecture-audit-2026-07-13.md)
 - [Research-plan handoff, 2026-07-14](../research-plan-handoff-2026-07-14.md)
 - [Hamburg digital-twin development log](../hamburg-digital-twin-development-log.md)
+- [Ring1 road continuity and calibration correction, 2026-09-11](ring1-road-continuity-and-calibration-2026-09-11.md)
 
 ## Superseded Guidance
 

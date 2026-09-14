@@ -11,6 +11,7 @@ import pytest
 
 from torii_sumo import cli
 from torii_sumo.core import hamburg_aerial_corridor_candidate as candidate_module
+from torii_sumo.core.hamburg_junctions import movements as movement_module
 from torii_sumo.core.hamburg_aerial_corridor_candidate import (
     _bind_official_lanes,
     _load_movement_plans,
@@ -176,6 +177,7 @@ def test_failed_aerial_fit_tries_official_curve_at_the_same_anchors_and_limit(
     source.write_text('''<net>
       <edge id="in" from="w" to="J"><lane id="in_0" index="0" length="20" shape="-20,0 0,0"/></edge>
       <edge id="out" from="J" to="e"><lane id="out_0" index="0" length="20" shape="10,0 30,0"/></edge>
+      <edge id="remote-taper" from="A" to="B"><lane id="remote-taper_0" index="0" length="4" shape="100,0 104,0"/></edge>
       <junction id="J" type="priority" customShape="true" shape="0,-3 10,-3 10,3 0,3"/>
       <connection from="in" fromLane="0" to="out" toLane="0"/>
     </net>''', encoding="utf-8")
@@ -183,9 +185,14 @@ def test_failed_aerial_fit_tries_official_curve_at_the_same_anchors_and_limit(
     output = tmp_path / "candidate.net.xml"
     def compile_copy(command, **kwargs):
         shutil.copy2(source, output)
+        changed = ET.parse(output)
+        remote = changed.getroot().find("edge[@id='remote-taper']/lane")
+        remote.set("shape", "76,0 104,0")
+        remote.set("length", "28")
+        changed.write(output, encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
-    monkeypatch.setattr(candidate_module, "run_command", compile_copy)
-    monkeypatch.setattr(candidate_module, "audit_source_movement_support", lambda *args, **kwargs: {
+    monkeypatch.setattr(movement_module, "run_command", compile_copy)
+    monkeypatch.setattr(movement_module, "audit_source_movement_support", lambda *args, **kwargs: {
         "unresolved": [], "unsupported_redundant_pairs": [], "source_backed_extra": []})
     selected = [(0, selected_y), (10, selected_y)]
     official = [(0, official_y), (5, official_y + 1), (10, official_y)]
@@ -214,6 +221,10 @@ def test_failed_aerial_fit_tries_official_curve_at_the_same_anchors_and_limit(
         assert curve[0] == (0, 0) and curve[-1] == (10, 0)
         assert row["anchor_projection_error_sum_m"] == pytest.approx(error)
     assert source.read_bytes() == before
+    remote = ET.parse(output).getroot().find("edge[@id='remote-taper']/lane")
+    assert remote.get("shape") == "100,0 104,0"
+    assert remote.get("length") == "4"
+    assert report["official_connection_audit"]["outside_road_restoration"]["status"] == "pass"
     assert movement["selected_shape_network"] == selected
 
 
@@ -345,7 +356,7 @@ def test_movement_surface_polygon_wraps_crossing_movements_without_huge_box() ->
     assert _area(polygon) < 140
 
 
-@pytest.mark.parametrize("mode", [None, "preserve", "guarded", True, "smooth_anything"])
+@pytest.mark.parametrize("mode", [None, "preserve", "guarded", "fused", True, "smooth_anything"])
 def test_junction_contour_mode_is_explicit_and_validated(tmp_path, mode):
     request = tmp_path / "request.json"
     payload = {"schema": candidate_module.REQUEST_SCHEMA,
@@ -361,8 +372,24 @@ def test_junction_contour_mode_is_explicit_and_validated(tmp_path, mode):
         assert _read_request(request)["junction_contours"] == (mode or "preserve")
 
 
+def test_contour_scope_discovers_unlisted_road_junctions_without_counting_two_way_roads_twice():
+    from torii_sumo.core.hamburg_junctions.movements import _contour_target_ids
+
+    root = ET.fromstring('<net><junction id="MAP"/><junction id="unlisted" type="priority"/><junction id="through" type="traffic_light"/></net>')
+    for center, peers in [('unlisted', ['west', 'east', 'north']), ('through', ['west', 'east'])]:
+        for peer in peers:
+            for start, end in [(center, peer), (peer, center)]:
+                edge = ET.SubElement(root, 'edge', id=start + '-' + end, attrib={'from': start, 'to': end})
+                ET.SubElement(edge, 'lane', allow='passenger')
+    groups = [{'join_id': 'MAP'}]
+    assert _contour_target_ids(root, groups, include_context=False) == ['MAP']
+    assert _contour_target_ids(root, groups, include_context=True) == ['MAP', 'unlisted']
+
+
 @pytest.mark.parametrize("failure", ["speed", "coverage", "lane_shift"])
-def test_contour_build_keeps_verified_parts_and_rolls_back_failed_parts(tmp_path, monkeypatch, failure):
+@pytest.mark.parametrize("mode", ["guarded", "fused"])
+@pytest.mark.parametrize("native_refit", [False, True])
+def test_contour_build_keeps_verified_parts_and_rolls_back_failed_parts(tmp_path, monkeypatch, failure, mode, native_refit):
     import sys
     from types import SimpleNamespace
 
@@ -371,6 +398,7 @@ def test_contour_build_keeps_verified_parts_and_rolls_back_failed_parts(tmp_path
       <edge id="in" from="w" to="J"><lane id="in_0" index="0" speed="10" length="20" shape="-30,0 -10,0"/></edge>
       <junction id="J" shape="-10,-10 10,-10 10,10 -10,10"/>
       <junction id="K" shape="40,-10 60,-10 60,10 40,10"/>
+      <tlLogic id="J" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
     </net>''', encoding="utf-8")
     output = tmp_path / "candidate.net.xml"
     shutil.copy2(source, output)
@@ -379,11 +407,13 @@ def test_contour_build_keeps_verified_parts_and_rolls_back_failed_parts(tmp_path
     patch.write_text("<connections/>", encoding="utf-8")
     proposed = {"J": [(-10, -10), (10, -10), (10, 10)], "K": [(40, -10), (60, -10), (60, 10)]}
     module = SimpleNamespace(
-        propose_junction_contour=lambda root, identifier: {
-            "status": "pass", "changed": True, "proposed_shape": proposed[identifier], "reasons": []},
+        propose_junction_contour=lambda root, identifier, **kwargs: {
+            "status": "pass", "changed": True, "proposed_shape": proposed[identifier], "reasons": [],
+            "native_boundary_refit": native_refit},
         audit_junction_contour=lambda root, identifier, polygon: {
             "preservation_pass": not (failure == "coverage" and identifier == "K")},
     )
+    module.propose_fused_junction_contour = module.propose_junction_contour
     monkeypatch.setitem(sys.modules, "torii_sumo.core.hamburg_junction_contour", module)
     commands = []
 
@@ -401,20 +431,26 @@ def test_contour_build_keeps_verified_parts_and_rolls_back_failed_parts(tmp_path
             root.find("edge/lane").set("speed", "9")
         if nodes.find("node[@id='K']") is not None and failure == "lane_shift":
             root.find("edge/lane").set("shape", "-30,0.05 -10,0.05")
+        if native_refit:
+            root.find("tlLogic/phase").set("duration", "5")
         ET.ElementTree(root).write(command[command.index("--output-file") + 1], encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(candidate_module, "run_command", compile_from_original)
+    monkeypatch.setattr(movement_module, "run_command", compile_from_original)
     root, report = candidate_module._compile_junction_contours(
         ET.parse(output).getroot(), groups=[{"join_id": "J"}, {"join_id": "K"}], output_file=output,
         command=["netconvert", "--sumo-net-file", str(source), "--connection-files", str(patch),
-                 "--offset.disable-normalization", "true", "--output-file", str(output)], timeout_seconds=30)
-    assert report["accepted_junction_ids"] == ["J"]
-    assert report["rejected_junction_ids"] == ["K"]
+                 "--offset.disable-normalization", "true", "--output-file", str(output)], timeout_seconds=30, mode=mode)
+    assert report["mode"] == mode
+    assert ET.tostring(ET.parse(report["baseline_network"]["path"]).getroot()) == ET.tostring(ET.fromstring(baseline))
+    restored = native_refit and failure != "coverage"
+    assert report["accepted_junction_ids"] == (["J", "K"] if restored else ["J"])
+    assert report["rejected_junction_ids"] == ([] if restored else ["K"])
     assert root.find("junction[@id='J']").get("customShape") == "1"
-    assert root.find("junction[@id='K']").get("customShape") is None
+    assert root.find("junction[@id='K']").get("customShape") == ("1" if restored else None)
     assert root.find("edge/lane").get("speed") == "10"
     assert root.find("edge/lane").get("shape") == "-30,0 -10,0"
+    assert root.find("tlLogic/phase").get("duration") == "30"
     assert source.read_bytes() == baseline
     assert len(commands) == 2
     assert ET.parse(output).getroot().find("edge/lane").get("speed") == "10"

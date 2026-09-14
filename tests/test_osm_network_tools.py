@@ -983,6 +983,25 @@ def test_filter_osm_by_highways_keeps_nodes_and_restrictions_for_kept_ways(tmp_p
     }
 
 
+def test_filter_drops_vehicle_area_perimeters_but_keeps_linear_and_pedestrian_ways(tmp_path):
+    source, target = tmp_path / "source.osm", tmp_path / "filtered.osm"
+    root = ET.fromstring('<osm><node id="1" lat="0" lon="0"/><node id="2" lat="0" lon="1"/><node id="3" lat="1" lon="1"/></osm>')
+    for identifier, highway, area in [("area", "service", "yes"), ("road", "service", "no"),
+                                      ("square", "pedestrian", "yes")]:
+        way = ET.SubElement(root, "way", id=identifier)
+        for ref in ["1", "2", "3", "1"]:
+            ET.SubElement(way, "nd", ref=ref)
+        ET.SubElement(way, "tag", k="highway", v=highway)
+        ET.SubElement(way, "tag", k="area", v=area)
+    ET.ElementTree(root).write(source)
+    original = source.read_bytes()
+    stats = filter_osm_by_highways(source, target, {"service", "pedestrian"})
+    assert {w.get("id") for w in ET.parse(target).getroot().findall("way")} == {"road", "square"}
+    assert stats["dropped_vehicle_area_way_ids"] == ["area"]
+    assert stats["dropped_ways"] == 1
+    assert source.read_bytes() == original
+
+
 def test_filter_osm_by_highways_selects_whole_ways_intersecting_bbox(tmp_path: Path) -> None:
     source = tmp_path / "source.osm.xml"
     target = tmp_path / "filtered.osm.xml"
@@ -1396,6 +1415,8 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
             "--output-file",
             "sumo/demo.net.xml",
             "--proj.utm",
+            "--junctions.internal-link-detail",
+            "25",
             "--no-turnarounds",
             "--osm.all-attributes",
             "--output.original-names",

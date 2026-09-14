@@ -17,7 +17,7 @@ from typing import Any
 
 from .candidate_contracts import file_sha256
 from .connection_mode_audit import audit_network_connection_mode
-from .hamburg_aerial_signal import build_protected_signal_stages
+from .hamburg_aerial_signal import allocate_stage_green_seconds, build_protected_signal_stages, _tls_link_flows
 
 
 def build_topology_test_signal_plan(
@@ -26,12 +26,15 @@ def build_topology_test_signal_plan(
     target_junction_ids: Sequence[str],
     green_seconds: float = 15.0,
     yellow_seconds: float = 3.0,
+    route_file: Path | None = None,
 ) -> dict[str, Any]:
     """Color actual request conflicts, including controllers shared by nodes."""
     if not math.isfinite(green_seconds) or green_seconds < 5:
         raise ValueError("generic topology tests require green_seconds >= 5")
     if not math.isfinite(yellow_seconds) or yellow_seconds < 3:
         raise ValueError("generic topology tests require yellow_seconds >= 3")
+    if route_file and (not float(green_seconds).is_integer() or not float(yellow_seconds).is_integer()):
+        raise ValueError("Route-flow allocation requires whole-second green and yellow durations.")
     requested = set(map(str, target_junction_ids))
     known = {row.get("id", "") for row in root.findall("junction")}
     if not requested or requested - known:
@@ -105,29 +108,49 @@ def build_topology_test_signal_plan(
         raise ValueError(f"controlled links lack physical request bindings: {sorted(keys - mapped)}")
     if not ordered_keys:
         return {"target_tls_ids": [], "expanded_junction_ids": sorted(expanded), "controllers": [], "source_protected_green_conflict_count": 0, "conflict_pairs": []}
-    stages = build_protected_signal_stages(
-        [{"status": "active", "official_signal_group": f"generic-link-{index:06d}", "sumo_link_index": index} for index in range(len(ordered_keys))],
-        conflict_pairs=conflicts,
-        link_count=len(ordered_keys),
-    )
-    common_phases = []
-    for state in stages:
-        common_phases.append({"duration": green_seconds, "state": state})
-        if len(stages) > 1:
-            clearance = max(2, math.ceil(max((clearance_by_key.get(key, 0.0) for index, key in enumerate(ordered_keys) if state[index] == "G"), default=0.0)))
-            common_phases.append({"duration": yellow_seconds, "state": state.replace("G", "y")})
-            common_phases.append({"duration": clearance, "state": "r" * len(state)})
+    # Only controllers with physical conflicts need common phase boundaries.
+    # Unrelated junctions must not inherit each other's unused red stages.
+    controller_groups = [{tls} for tls in sorted(target_tls)]
+    for first, second in sorted(conflicts):
+        pair = {ordered_keys[first][0], ordered_keys[second][0]}
+        joined = set().union(*(group for group in controller_groups if group & pair))
+        controller_groups = [group for group in controller_groups if not group & pair] + [joined]
+    link_flows = _tls_link_flows(root, route_file, sorted(target_tls)) if route_file else {}
     controllers = []
-    for tls_id in sorted(target_tls):
-        width = max(index for controller, index in ordered_keys if controller == tls_id) + 1
-        phases = []
-        for common in common_phases:
-            state = ["r"] * width
-            for global_index, (controller, index) in enumerate(ordered_keys):
-                if controller == tls_id:
-                    state[index] = common["state"][global_index]
-            phases.append({"duration": common["duration"], "state": "".join(state)})
-        controllers.append({"tls_id": tls_id, "state_length": width, "phases": phases})
+    for group in sorted(controller_groups, key=lambda value: sorted(value)):
+        indices = [index for index, key in enumerate(ordered_keys) if key[0] in group]
+        local_index = {index: local for local, index in enumerate(indices)}
+        stages = build_protected_signal_stages(
+            [{"status": "active", "official_signal_group": f"generic-link-{index:06d}", "sumo_link_index": local_index[index]} for index in indices],
+            conflict_pairs={(local_index[a], local_index[b]) for a, b in conflicts if a in local_index and b in local_index},
+            link_count=len(indices),
+        )
+        common_phases = []
+        for state in stages:
+            common_phases.append({"duration": green_seconds, "state": state})
+            if len(stages) > 1:
+                clearance = max(2, math.ceil(max((clearance_by_key.get(ordered_keys[index], 0.0) for local, index in enumerate(indices) if state[local] == "G"), default=0.0)))
+                common_phases.append({"duration": yellow_seconds, "state": state.replace("G", "y")})
+                common_phases.append({"duration": clearance, "state": "r" * len(state)})
+        if route_file:
+            transitions = [round(sum(phase["duration"] for phase in common_phases[3*i+1:3*i+3])) for i in range(len(stages))] if len(stages) > 1 else [0]
+            weights = {local: link_flows.get(ordered_keys[index][0], {}).get(ordered_keys[index][1], 0.0) for local, index in enumerate(indices)}
+            green_values = allocate_stage_green_seconds(stages, link_flows=weights,
+                cycle_seconds=round(sum(phase["duration"] for phase in common_phases)),
+                transition_seconds=transitions)
+            for phase, duration in zip((phase for phase in common_phases if "G" in phase["state"]), green_values):
+                phase["duration"] = duration
+        for tls_id in sorted(group):
+            width = max(index for controller, index in ordered_keys if controller == tls_id) + 1
+            phases = []
+            for common in common_phases:
+                state = ["r"] * width
+                for local, global_index in enumerate(indices):
+                    controller, index = ordered_keys[global_index]
+                    if controller == tls_id:
+                        state[index] = common["state"][local]
+                phases.append({"duration": common["duration"], "state": "".join(state)})
+            controllers.append({"tls_id": tls_id, "state_length": width, "phases": phases})
     unsafe = 0
     for first, second in conflicts:
         first_tls, first_index = ordered_keys[first]
@@ -145,7 +168,9 @@ def build_topology_test_signal_plan(
         "green_seconds": green_seconds,
         "yellow_seconds": yellow_seconds,
         "clearance_basis": "sum of full internal-chain length/speed plus a 5m passenger tail; minimum 2 seconds",
-        "coordination": "same phase boundaries and zero offset for the target controller closure",
+        "coordination": "common phase boundaries and zero offset only within physically conflicting controller groups",
+        "coordinated_controller_groups": [sorted(group) for group in controller_groups],
+        "green_allocation": "declared_route_link_flows" if route_file else "equal_test_greens",
     }
 
 
@@ -161,6 +186,7 @@ def rebuild_topology_test_signals(
     expected_source_sha256: str | None = None,
     green_seconds: float = 15.0,
     yellow_seconds: float = 3.0,
+    route_file: Path | str | None = None,
 ) -> dict[str, Any]:
     """Replace only target programs; keep the freshly-built topology untouched."""
     source = Path(net_file).expanduser().resolve(strict=True)
@@ -171,7 +197,9 @@ def rebuild_topology_test_signals(
     if expected_source_sha256 is not None and source_hash != expected_source_sha256.lower():
         raise ValueError("source network SHA-256 does not match")
     original = ET.parse(source).getroot()
-    plan = build_topology_test_signal_plan(original, target_junction_ids=target_junction_ids, green_seconds=green_seconds, yellow_seconds=yellow_seconds)
+    routes = Path(route_file).expanduser().resolve(strict=True) if route_file else None
+    route_hash = file_sha256(routes) if routes else None
+    plan = build_topology_test_signal_plan(original, target_junction_ids=target_junction_ids, green_seconds=green_seconds, yellow_seconds=yellow_seconds, route_file=routes)
     candidate = deepcopy(original)
     targets = set(plan["target_tls_ids"])
     for controller in plan["controllers"]:
@@ -193,6 +221,7 @@ def rebuild_topology_test_signals(
     protected_conflicts = sum(value for key, value in audit["finding_category_counts"].items() if "protected_green_foes" in key)
     gates = {
         "source_immutable": "pass" if file_sha256(source) == source_hash else "blocked",
+        "routes_immutable": "pass" if routes is None or file_sha256(routes) == route_hash else "blocked",
         "non_target_programs_unchanged": "pass" if outside_before == outside_after else "blocked",
         "all_geometry_and_connections_unchanged": "pass" if topology_before == topology_after else "blocked",
         "target_structure": "pass" if audit["structural_failure_count"] == 0 and audit["status"] != "fail" else "blocked",
@@ -211,13 +240,14 @@ def rebuild_topology_test_signals(
         "signal_role": "generic_topology_test",
         "claim_status": "diagnostic-demo",
         "source_network": {"path": str(source), "sha256": source_hash},
+        "route_file": {"path": str(routes), "sha256": route_hash} if routes else None,
         "candidate_network": {"path": str(output), "sha256": file_sha256(output)},
         "artifacts": {"network": {"path": str(output), "sha256": file_sha256(output)}},
         "plan": plan,
         "expanded_junction_ids": plan["expanded_junction_ids"],
         "gates": gates,
         "protected_green_conflict_count": protected_conflicts,
-        "claim_boundary": "Protected generic test signals from the current SUMO conflict graph; no historical/field signal timing or demand fitting. Runtime collision and completion tests remain required.",
+        "claim_boundary": "Protected generic test signals from the current SUMO conflict graph. Optional green allocation uses declared route flows. This is not historical or field signal timing. Vehicle routes and departures are unchanged. Runtime collision and completion tests remain required.",
         "sources": ["https://sumo.dlr.de/docs/Simulation/Traffic_Lights.html", "https://sumo.dlr.de/docs/Networks/SUMO_Road_Networks.html"],
     }
     manifest = destination / "manifest.json"

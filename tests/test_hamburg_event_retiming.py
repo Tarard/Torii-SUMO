@@ -44,3 +44,14 @@ def test_feedback_rejects_cross_station_regressions_and_incomplete_runs():
     assert not retiming_improves(current, candidate)
     candidate.update(healthy=True, total_absolute_error=6)
     assert not retiming_improves(current, candidate)
+
+
+def test_periodic_e1_uses_declared_simulation_step_at_bin_boundaries(tmp_path):
+    source = tmp_path / "events.xml"
+    source.write_text('<instantE1><instantOut id="a" vehID="v" state="enter" time="899.906226435250"/></instantE1>', encoding="utf-8")
+    events = read_passages(source, {"a": 1}, {"v"}, step_length=1,
+                           expected_entries={("a", 0): 0, ("a", 900): 1})
+    assert events == {"v": {(1, 900)}}
+    assert compare_passages(events, {(1, 0): 0, (1, 900): 1}, 0, 900)["mae"] == 0
+    with pytest.raises(ValueError, match="Simulation step"):
+        read_passages(source, {"a": 1}, {"v"}, step_length=0)

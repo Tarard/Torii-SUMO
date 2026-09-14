@@ -68,8 +68,9 @@ def run_candidate_movement_probes(
     seed: int = 104, end_time_s: int = 600, step_length_s: float = 0.1,
     timeout_seconds: float = 120.0,
     junction_movements_only: bool = False,
+    context_manifest: Path | str | None = None,
 ) -> dict[str, Any]:
-    """Exercise declared official movements separately without detector data."""
+    """Exercise declared MAP and context movements separately without detector data."""
     manifest_path = Path(candidate_manifest).resolve(strict=True)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     plan_based = manifest.get('schema') == 'torii.engineering-topology-build/v1'
@@ -112,6 +113,24 @@ def run_candidate_movement_probes(
         raise ValueError("official movement coverage counts do not agree")
     requested_pairs = {tuple(row["sumo_connection"]) for row in required}
     extra_probes = [row for row in connection_audit.get("boundary_connections", []) if tuple(row["sumo_connection"]) not in requested_pairs]
+    context_record = None
+    context_probe_count = 0
+    if context_manifest is not None:
+        context_path = Path(context_manifest).resolve(strict=True)
+        context_record = {"path": str(context_path), "sha256": file_sha256(context_path)}
+        context = json.loads(context_path.read_text(encoding="utf-8"))
+        expected_source = manifest.get("inputs", {}).get("source_net", {}).get("sha256")
+        if (plan_based or context.get("schema") != "torii.junction-boundary-rebuild/v1" or context.get("status") != "pass"
+                or not expected_source or context.get("candidate_network", {}).get("sha256") != expected_source
+                or file_sha256(Path(context["candidate_network"]["path"]).resolve(strict=True)) != expected_source):
+            raise ValueError("context boundary evidence does not match the candidate construction source")
+        seen = requested_pairs | {tuple(row["sumo_connection"]) for row in extra_probes}
+        for row in context["plan"]["movements"]:
+            if tuple(row["connection"]) not in seen:
+                extra_probes.append({"sumo_connection": row["connection"], "allowed_vehicle_classes": row["vehicle_classes"],
+                    "movement_authority": "source_boundary_path", "context_junction_id": row["join_id"]})
+                seen.add(tuple(row["connection"]))
+                context_probe_count += 1
     probes = [{**row, "probe_role": "plan_declared_movement" if plan_based else "official_movement"} for row in required] + [{**row, "probe_role": "additional_composed_boundary_connection"} for row in extra_probes]
     network = sumolib.net.readNet(str(network_path), withInternal=True)
     structural = audit_network_connection_mode(ET.parse(network_path).getroot(), endpoint_tolerance_m=0.1)
@@ -191,10 +210,11 @@ def run_candidate_movement_probes(
     composed = [row for row in official_records if "composition_geometry_status" in row]
     composed_passed = sum(row["status"] == "pass" and row["composition_geometry_status"] == "pass" for row in composed)
     boundary_reviews = connection_audit.get("composed_boundary_path_reviews", [])
-    unchanged = file_sha256(network_path) == network_hash
+    unchanged = file_sha256(network_path) == network_hash and (context_record is None or file_sha256(context_path) == context_record["sha256"])
     report = {"schema": "torii.official-movement-routeability/v1", "status": "pass" if passed == total and composed_passed == len(composed) and all(row["status"] == "pass" for row in records) and not boundary_reviews and unchanged else "review_required",
         "official_total": total, "mapped_and_tested": len(required), "passed_exact_lane_transition": passed,
         "probe_count": len(records), "additional_boundary_probe_count": len(extra_probes),
+        "context_boundary_probe_count": context_probe_count, "context_manifest": context_record,
         "composed_official_movement_count": len(composed), "passed_composed_spatial_movements": composed_passed,
         "composed_boundary_path_review_count": len(boundary_reviews),
         "unmapped_not_tested": len(unresolved), "not_tested": unresolved, "results": records,

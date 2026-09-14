@@ -205,7 +205,7 @@ def correct_osm_access_permissions(
     candidate = output_dir / "access-corrected.net.xml"
     ET.indent(patch, space="  ")
     ET.ElementTree(patch).write(patch_file, encoding="utf-8", xml_declaration=True)
-    command = [str(netconvert_binary), "--sumo-net-file", str(native.resolve()), "--edge-files", str(patch_file.resolve()), "--offset.disable-normalization", "true", "--output-file", str(candidate.resolve())]
+    command = [str(netconvert_binary), "--sumo-net-file", str(native.resolve()), "--edge-files", str(patch_file.resolve()), "--offset.disable-normalization", "true", "--junctions.internal-link-detail", "25", "--output-file", str(candidate.resolve())]
     result = command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds)
     result = result.to_dict() if hasattr(result, "to_dict") else dict(result)
     report.update({"native_import": {"path": str(native.resolve()), "sha256": file_sha256(native)}, "edge_patch": {"path": str(patch_file.resolve()), "sha256": file_sha256(patch_file)}, "command": command, "result": result})

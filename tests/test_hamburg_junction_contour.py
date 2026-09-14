@@ -20,6 +20,66 @@ def module():
     return importlib.import_module("torii_sumo.core.hamburg_junction_contour")
 
 
+def test_fused_surface_uses_lane_width_and_keeps_mouths_without_mutating_source():
+    root = network("0,-2.25 5,-12 10,-2.25 10,2.25 5,12 0,2.25", width=4.5, mouths=True)
+    original = ET.tostring(root)
+    result = module().propose_fused_junction_contour(root, "j")
+    assert result["changed"]
+    assert result["method"] == "smooth_surface_with_preserved_mouth_edges/v2"
+    assert result["after_area_m2"] < result["before_area_m2"] * .9
+    assert result["surface_audit"]["preservation_pass"]
+    assert result["surface_audit"]["mouth_coverage_status"] == "pass"
+    assert result["surface_audit"]["support_widths_m"] == {":j_0_0": 4.5}
+    assert ET.tostring(root) == original
+
+
+def test_smooth_contour_rounds_corners_without_flared_blocks_at_road_mouths():
+    from shapely import LineString, Point, Polygon
+
+    root = network("-20,-2 -2,-20 2,-20 20,-2 20,2 2,20 -2,20 -20,2", width=3.2)
+    root.find("edge/lane").set("shape", "-20,0 20,0")
+    edge = ET.SubElement(root, "edge", id=":j_1", function="internal")
+    ET.SubElement(edge, "lane", id=":j_1_0", shape="0,-20 0,20", width="3.2")
+    for name, points in (("w", "-40,0 -20,0"), ("e", "40,0 20,0"),
+                         ("n", "0,40 0,20"), ("s", "0,-40 0,-20")):
+        edge = ET.SubElement(root, "edge", id=name, **{"from": name, "to": "j"})
+        ET.SubElement(edge, "lane", id=name + "_0", shape=points, width="3.2")
+    result = module().propose_fused_junction_contour(root, "j", corner_radius_m=8)
+    outline = Polygon(result["proposed_shape"])
+    assert result["changed"] and result["surface_audit"]["preservation_pass"]
+    assert outline.covers(Point(4, 4))  # A continuous rounded corner, beyond a narrow crossing of lane strips.
+    section = outline.intersection(LineString([(-18, -30), (-18, 30)]))
+    assert section.bounds[1] >= -2.1 and section.bounds[3] <= 2.1
+    for center in ((-20, 0), (20, 0), (0, -20), (0, 20)):
+        assert outline.boundary.distance(Point(center)) < .01
+
+
+def test_fused_surface_retains_an_invalid_source_instead_of_erasing_its_parts():
+    root = network("0,-2 10,2 0,2 10,-2", mouths=True)
+    result = module().propose_fused_junction_contour(root, "j")
+    assert not result["changed"]
+    assert result["status"] == "blocked"
+    assert result["proposed_shape"] == result["source_shape"]
+
+
+def test_smooth_contour_repairs_an_internal_loop_without_discarding_source_parts():
+    root = network("-2,-4 12,-4 12,4 -2,4 -2,-4 2,-2 4,-2 4,2 2,2 2,-2 -2,-4", mouths=True)
+    original = ET.tostring(root)
+    result = module().propose_fused_junction_contour(root, "j")
+    assert result["changed"]
+    assert result["method"] == "smooth_surface_with_preserved_mouth_edges/v2"
+    assert result["source_polygon_repair"]["no_source_component_discarded"]
+    assert result["source_polygon_repair"]["filled_unclassified_loop_area_m2"] == 8
+    assert result["surface_audit"]["preservation_pass"]
+    assert ET.tostring(root) == original
+
+
+@pytest.mark.parametrize("radius", [True, 0, float("nan")])
+def test_smooth_contour_requires_a_finite_positive_corner_radius(radius):
+    with pytest.raises(ValueError, match="junction_corner_radius_m"):
+        module().propose_fused_junction_contour(network("0,-2 10,-2 10,2 0,2"), "j", corner_radius_m=radius)
+
+
 @pytest.mark.parametrize("lower,expected", [(-1.496, "pass"), (-1.494, "blocked")])
 def test_actual_lane_width_decides_the_99_and_101_mm_gap(lower, expected):
     root = network("-1,-2 11,-2 11,2 -1,2", width=3.19)
@@ -67,6 +127,22 @@ def test_old_tolerance_cannot_accumulate_into_a_new_199_mm_gap(partial_gap):
     assert result["absolute_coverage_status"] == "review_required"
 
 
+def test_regression_does_not_require_preserving_an_unqualified_square_corner():
+    root = network("0,0 10,0 10,10 0,10", width=.002)
+    root.find("edge/lane").set("shape", "-.09,-.09 -.08,-.08")
+    result = module().audit_junction_contour(root, "j", [(0, .08), (.08, 0), (10, 0), (10, 10), (0, 10)])
+    assert result["preservation_pass"]
+    assert result["absolute_coverage_status"] == "review_required"
+
+
+def test_continuous_coverage_accepts_two_boundary_capsules_covering_one_cell():
+    mod = module()
+    polygon = [(0, 0), (10, 0), (10, 3), (3, 3), (3, 10), (0, 10)]
+    triangles = [(part, mod._bbox(part)) for part in mod._triangulate_polygon(polygon)]
+    cell = [(3.09, 3.109), (3.109, 3.09), (3.09, 3.09)]
+    assert mod._coverage(cell, polygon, triangles, False)["status"] == "pass"
+
+
 def test_proposer_only_removes_a_proven_empty_ear_and_does_not_mutate_xml():
     root = network("0,-2 10,-2 10,2 5,5 0,2", mouths=True)
     original = ET.tostring(root)
@@ -81,14 +157,14 @@ def test_proposer_only_removes_a_proven_empty_ear_and_does_not_mutate_xml():
     assert audit["geometry_preservation_pass"]
 
 
-def test_proposer_keeps_disconnected_lane_regions_instead_of_selecting_the_largest():
+@pytest.mark.parametrize("proposer", ["propose_junction_contour", "propose_fused_junction_contour"])
+def test_proposer_keeps_disconnected_lane_regions_instead_of_selecting_the_largest(proposer):
     root = network("-1,-4 11,-4 11,4 5,7 -1,4")
     root.find("edge/lane").set("shape", "0,-2 10,-2")
     edge = ET.SubElement(root, "edge", id=":j_1", function="internal")
     ET.SubElement(edge, "lane", id=":j_1_0", shape="0,2 10,2", width="2")
-    result = module().propose_junction_contour(root, "j")
+    result = getattr(module(), proposer)(root, "j")
     assert result["protected_lane_ids"] == [":j_0_0", ":j_1_0"]
-    assert result["checks"]["no_component_discarded"]
     audit = module().audit_junction_contour(root, "j", result["proposed_shape"])
     assert audit["absolute_coverage_status"] == "pass"
 

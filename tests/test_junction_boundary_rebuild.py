@@ -7,10 +7,37 @@ import pytest
 from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.junction_boundary_rebuild import (
     _boundary_geometry,
+    _source_polygon_preserves_cuts,
     collect_join_boundary_paths,
     restore_joined_boundary_connections,
 )
 from torii_sumo.core.source_movement_support import _index
+
+
+@pytest.mark.skipif(not shutil.which("netconvert") or not shutil.which("sumo"), reason="SUMO binaries required")
+@pytest.mark.parametrize("lane_change_allowed", [True, False])
+def test_explicit_interior_lane_change_policy_requires_source_permission(tmp_path, lane_change_allowed):
+    nodes, edges, connections = [tmp_path / name for name in ("nodes.xml", "edges.xml", "connections.xml")]
+    nodes.write_text('<nodes><node id="w" x="-100" y="0"/><node id="a" x="0" y="0"/><node id="b" x="20" y="0"/><node id="e" x="120" y="0"/><node id="n" x="20" y="100"/></nodes>', encoding="utf-8")
+    restriction = '' if lane_change_allowed else '<lane index="1" changeRight="bus"/>'
+    edges.write_text('<edges><edge id="in" from="w" to="a" allow="passenger"/><edge id="middle" from="a" to="b" allow="passenger" numLanes="2">' + restriction + '</edge><edge id="out" from="b" to="e" allow="passenger"/><edge id="side" from="b" to="n" allow="passenger"/></edges>', encoding="utf-8")
+    connections.write_text('<connections><connection from="in" to="middle" fromLane="0" toLane="1"/><connection from="middle" to="out" fromLane="0" toLane="0"/><connection from="middle" to="side" fromLane="1" toLane="0"/></connections>', encoding="utf-8")
+    source, joined = tmp_path / "source.net.xml", tmp_path / "joined.net.xml"
+    subprocess.run(["netconvert", "-n", str(nodes), "-e", str(edges), "-x", str(connections), "-o", str(source)], check=True, capture_output=True, timeout=30)
+    nodes.write_text('<nodes><join id="joined" nodes="a b" reset="false" type="priority"/></nodes>', encoding="utf-8")
+    connections.write_text('<connections><connection from="in" to="out" fromLane="0" toLane="0"/><connection from="in" to="side" fromLane="0" toLane="0"/></connections>', encoding="utf-8")
+    subprocess.run(["netconvert", "-s", str(source), "-n", str(nodes), "-x", str(connections), "--offset.disable-normalization", "true", "-o", str(joined)], check=True, capture_output=True, timeout=30)
+    args = dict(source_net=source, joined_net=joined, groups={"joined": ["a", "b"]},
+                expected_source_sha256=file_sha256(source), expected_joined_sha256=file_sha256(joined))
+    strict = restore_joined_boundary_connections(**args, output_dir=tmp_path / "strict")
+    assert strict["status"] == "blocked"
+    result = restore_joined_boundary_connections(**args, output_dir=tmp_path / "permitted",
+                                                interior_lane_change_policy="permitted_interior")
+    assert result["status"] == ("pass" if lane_change_allowed else "blocked")
+    additions = [row for row in result["plan"]["movements"] if row.get("permitted_interior_lane_change_paths")]
+    assert len(additions) == int(lane_change_allowed)
+    if additions:
+        assert additions[0]["permitted_interior_lane_change_paths"][0]["lane_changes"][0]["edge_id"] == "middle"
 
 
 def _source():
@@ -31,6 +58,16 @@ def _source():
     return root
 
 
+def test_source_polygon_is_not_frozen_when_it_would_recut_an_existing_lane():
+    node = ET.fromstring('<junction shape="-2,-2 2,-2 2,2 -2,2"/>')
+    edge = ET.fromstring('<edge><lane shape="0,0 10,0"/></edge>')
+    assert not _source_polygon_preserves_cuts(node, [edge])
+    edge.find('lane').set('shape', '2,0 10,0')
+    assert _source_polygon_preserves_cuts(node, [edge])
+    node.set('shape', '2,-2 2,2 2,-2')
+    assert _source_polygon_preserves_cuts(node, [edge])
+
+
 def test_collects_only_scoped_mode_consistent_source_paths():
     root = _source()
     snapshot = ET.tostring(root)
@@ -39,6 +76,28 @@ def test_collects_only_scoped_mode_consistent_source_paths():
     assert movement["vehicle_classes"] == ["bus"]
     assert movement["source_paths"] == [{"lane_ids": ["in_0", "middle_0", "out_0"], "vehicle_classes": ["bus"]}]
     assert ET.tostring(root) == snapshot
+
+
+def test_explicit_diagnostic_signal_rebuild_keeps_source_paths_and_input():
+    root = _source()
+    root.find("junction[@id='a']").set("type", "traffic_light")
+    root.find("connection[@from='in']").set("tl", "local-control")
+    root.find("connection[@from='in']").set("linkIndex", "0")
+    snapshot = ET.tostring(root)
+    result = collect_join_boundary_paths(root, groups={"joined": ["a", "b"]}, signal_policy="rebuild_diagnostic")
+    assert result["retired_tls_ids"] == ["local-control"]
+    path = next(row for row in result["movements"] if row["connection"] == ["in", 0, "out", 0])
+    assert path["vehicle_classes"] == ["bus"]
+    assert ET.tostring(root) == snapshot
+
+
+def test_diagnostic_rebuild_rejects_a_controller_shared_outside_the_group():
+    root = _source()
+    root.find("junction[@id='a']").set("type", "traffic_light")
+    for edge in ["in", "detour"]:
+        root.find(f"connection[@from='{edge}']").set("tl", "shared")
+    with pytest.raises(ValueError, match="outside"):
+        collect_join_boundary_paths(root, groups={"joined": ["a", "b"]}, signal_policy="rebuild_diagnostic")
 
 
 @pytest.mark.parametrize("groups", [{"joined": ["a", "missing"]}, {"joined": ["a", "b"], "second": ["b", "e"]}, {"joined": ["a", "e"]}, {"outside": ["a", "b"]}])

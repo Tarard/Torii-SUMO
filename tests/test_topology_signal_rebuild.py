@@ -81,6 +81,29 @@ def test_rebuild_keeps_all_connections_and_outside_program_exactly(tmp_path) -> 
     assert report["gates"]["non_target_programs_unchanged"] == "pass"
 
 
+def test_unrelated_junction_does_not_inherit_unused_red_stages() -> None:
+    root = _network()
+    for request in root.find("junction[@id='OUTSIDE']").findall("request"):
+        request.set("foes", "00")
+        request.set("response", "00")
+    plan = build_topology_test_signal_plan(root, target_junction_ids=["J0", "OUTSIDE"])
+    controllers = {row["tls_id"]: row for row in plan["controllers"]}
+    assert controllers["outside-controller"]["phases"] == [{"duration": 15, "state": "GG"}]
+    assert len(controllers["shared-controller"]["phases"]) == 6
+
+
+def test_route_flow_allocation_keeps_conflicts_clearance_and_cycle(tmp_path) -> None:
+    routes = tmp_path / "routes.xml"
+    routes.write_text('<routes><vehicle id="v" depart="0"><route edges="J0-w J0-e"/></vehicle></routes>', encoding="utf-8")
+    equal = build_topology_test_signal_plan(_network(), target_junction_ids=["J0"])
+    weighted = build_topology_test_signal_plan(_network(), target_junction_ids=["J0"], route_file=routes)
+    before, after = equal["controllers"][0]["phases"], weighted["controllers"][0]["phases"]
+    assert [p["state"] for p in before] == [p["state"] for p in after]
+    assert sum(p["duration"] for p in before) == sum(p["duration"] for p in after)
+    assert [p for p in before if "G" not in p["state"]] == [p for p in after if "G" not in p["state"]]
+    assert [p["duration"] for p in after if "G" in p["state"]] == [25, 5]
+
+
 @pytest.mark.skipif(shutil.which("sumo") is None, reason="SUMO is not installed")
 def test_real_sumo_shared_controller_crossing_traffic_finishes_without_collisions(tmp_path) -> None:
     source = tmp_path / "source.net.xml"

@@ -117,7 +117,7 @@ def _read_reference(record):
 
 def build_hamburg_road_edge_evidence(*, aerial_image, bbox, aerial_year, references, output_dir):
     """Freeze image boundary candidates and a soft road prior for the existing movement tracer."""
-    from .hamburg_aerial_corridor_candidate import _marching_loop
+    from .hamburg_junctions.geometry import _marching_loop
 
     destination = Path(output_dir).resolve()
     if destination.exists():

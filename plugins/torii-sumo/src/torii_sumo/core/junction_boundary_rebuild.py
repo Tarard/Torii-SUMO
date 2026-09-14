@@ -71,8 +71,46 @@ def _groups(root: ET.Element, groups: Mapping[str, Sequence[str]]) -> dict[str, 
     return normalized
 
 
-def collect_join_boundary_paths(source_root: ET.Element, *, groups: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+def _diagnostic_signal_view(source_root, groups):
+    """Ignore timing only for explicitly scoped, locally owned source signals."""
+    members = {str(node) for values in groups.values() for node in values}
+    index = _index(source_root)
+
+    def owner(connection):
+        edge = index["edges"].get(connection.get("from"))
+        return (edge.get("to") if edge is not None and not _internal(edge) else
+                index["owners"].get(connection.get("via")) or
+                index["owners"].get(index["keys"].get((connection.get("from"), int(connection.get("fromLane", "0"))))))
+
+    retired = {c.get("tl") for c in source_root.findall("connection") if c.get("tl") and owner(c) in members}
+    if not retired:
+        raise ValueError("diagnostic signal rebuilding requires source signal control")
+    if any(c.get("tl") in retired and owner(c) not in members for c in source_root.findall("connection")):
+        raise ValueError("a source controller also controls connections outside the declared group")
+    if set(groups) & ({logic.get("id") for logic in source_root.findall("tlLogic")} - retired):
+        raise ValueError("a joined controller would replace a controller outside the declared group")
+    view = deepcopy(source_root)
+    for node in view.findall("junction"):
+        if node.get("id") in members and node.get("type", "").startswith("traffic_light"):
+            node.set("type", "priority")
+    for connection in view.findall("connection"):
+        if connection.get("tl") in retired:
+            for key in ("tl", "linkIndex", "linkIndex2"):
+                connection.attrib.pop(key, None)
+    for logic in list(view.findall("tlLogic")):
+        if logic.get("id") in retired:
+            view.remove(logic)
+    return view, sorted(retired)
+
+
+def collect_join_boundary_paths(source_root: ET.Element, *, groups: Mapping[str, Sequence[str]],
+                                signal_policy: str = "preserve") -> dict[str, Any]:
     """Enumerate fixed-lane, mode-consistent paths wholly within each group."""
+    if signal_policy not in {"preserve", "rebuild_diagnostic"}:
+        raise ValueError("unsupported signal_policy")
+    retired = []
+    if signal_policy == "rebuild_diagnostic":
+        source_root, retired = _diagnostic_signal_view(source_root, groups)
     normalized = _groups(source_root, groups)
     index = _index(source_root)
     movements, records = [], []
@@ -92,10 +130,11 @@ def collect_join_boundary_paths(source_root: ET.Element, *, groups: Mapping[str,
                         if paths:
                             movements.append({"join_id": joined, "connection": [left, li, right, ri], "source_paths": paths, "vehicle_classes": sorted({mode for path in paths for mode in path["vehicle_classes"]})})
         records.append({"join_id": joined, "source_node_ids": sorted(members), "interior_edge_ids": sorted(internal), "incoming_edge_ids": sorted(incoming), "outgoing_edge_ids": sorted(outgoing)})
-    return {"groups": records, "movements": movements, "basis": "source fixed-lane paths inside declared members; no exterior detours or assumed lane changes", "field_turn_legality": "review_required"}
+    return {"groups": records, "movements": movements, "signal_policy": signal_policy, "retired_tls_ids": retired,
+            "basis": "source fixed-lane paths inside declared members; no exterior detours or assumed lane changes", "field_turn_legality": "review_required"}
 
 
-def _outside_delta(source: ET.Element, candidate: ET.Element, excluded: set[str]) -> dict[str, Any]:
+def _outside_delta(source: ET.Element, candidate: ET.Element, excluded: set[str], *, ignored_tls_ids=()) -> dict[str, Any]:
     def items(root):
         index = _index(root)
         result = {key: {} for key in ("external_edges", "internal_edges", "junctions", "connections", "tls_programs")}
@@ -118,7 +157,8 @@ def _outside_delta(source: ET.Element, candidate: ET.Element, excluded: set[str]
             if owner not in excluded:
                 key = tuple(row.get(field, "") for field in ("from", "fromLane", "to", "toLane", "via"))
                 result["connections"][key] = _signature(row)
-        result["tls_programs"] = {(row.get("id"), row.get("programID")): _signature(row) for row in root.findall("tlLogic")}
+        result["tls_programs"] = {(row.get("id"), row.get("programID")): _signature(row)
+                                  for row in root.findall("tlLogic") if row.get("id") not in ignored_tls_ids}
         return result
     before, after = items(source), items(candidate)
     result = {f"changed_{key}": sorted(str(item) for item in before[key].keys() | after[key].keys() if before[key].get(item) != after[key].get(item)) for key in before}
@@ -164,23 +204,51 @@ def _demand_impact(path: Path, missing_edges: set[str]) -> dict[str, Any]:
     return {"path": str(path), "sha256": file_sha256(path), "affected_od": affected, "unresolved_od": unresolved, "same_demand_runnable": not affected and not unresolved, "policy": "No vehicles, departure times, or OD locations are changed. Removed internal OD edges require a separate declared demand design."}
 
 
+def _source_polygon_preserves_cuts(node, edges):
+    """A fixed polygon must not swallow an already-built boundary lane."""
+    from shapely.geometry import LineString, Polygon
+
+    points = [tuple(map(float, token.split(",")[:2])) for token in node.get("shape", "").split()]
+    if len(points) < 3:
+        return False
+    polygon = Polygon(points)
+    if polygon.convex_hull.area <= 1e-8:
+        return True  # A straight stop-line shape has no interior to recut.
+    if not polygon.is_valid:
+        return False
+    interior = polygon.buffer(-0.1)
+    for edge in edges:
+        for lane in edge.findall("lane"):
+            shape = [tuple(map(float, token.split(",")[:2])) for token in lane.get("shape", "").split()]
+            if len(shape) < 2 or LineString(shape).intersection(interior).length > 0.1:
+                return False
+    return True
+
+
 def _boundary_geometry(source_root, source_index, plan, destination):
     from .hamburg_official_intersection_plainxml import _angular_endpoint_polygon
 
     nodes, patches, records = ET.Element("nodes"), {}, []
     members = {node for group in plan["groups"] for node in group["source_node_ids"]}
     frozen_neighbors = set()
+    boundary_edges = {name: source_index["edges"][name] for group in plan["groups"]
+                      for key in ("incoming_edge_ids", "outgoing_edge_ids") for name in group[key]}
+    native_neighbors = set()
     for group in plan["groups"]:
         corners = []
         for side, names in (("to", group["incoming_edge_ids"]), ("from", group["outgoing_edge_ids"])):
             for edge_id in names:
                 original = source_index["edges"][edge_id]
                 remote = original.get("from" if side == "to" else "to")
-                if remote not in members and remote not in frozen_neighbors:
+                if remote not in members and remote not in frozen_neighbors and remote not in native_neighbors:
                     node = source_root.find(f"junction[@id='{remote}']")
                     if node is not None and len(node.get("shape", "").split()) >= 3:
-                        ET.SubElement(nodes, "node", id=remote, shape=node.get("shape"))
-                        frozen_neighbors.add(remote)
+                        incident = [edge for edge in boundary_edges.values() if remote in (edge.get("from"), edge.get("to"))]
+                        if _source_polygon_preserves_cuts(node, incident):
+                            ET.SubElement(nodes, "node", id=remote, shape=node.get("shape"))
+                            frozen_neighbors.add(remote)
+                        else:
+                            native_neighbors.add(remote)
                 edge = patches.setdefault(edge_id, deepcopy(original))
                 edge.set(side, group["join_id"])
                 edge.set("numLanes", str(len(edge.findall("lane"))))
@@ -231,7 +299,9 @@ def _boundary_geometry(source_root, source_index, plan, destination):
         paths[name] = destination / f"boundary.{name}.xml"
         ET.indent(root)
         ET.ElementTree(root).write(paths[name], encoding="utf-8", xml_declaration=True)
-    return paths, {"groups": records, "frozen_neighbor_junction_ids": sorted(frozen_neighbors)}
+    return paths, {"groups": records, "frozen_neighbor_junction_ids": sorted(frozen_neighbors),
+                   "native_neighbor_junction_ids": sorted(native_neighbors),
+                   "native_neighbor_reason": "source polygon would recut an existing boundary lane; require outside preservation"}
 
 
 def _adjacent_geometry(original, native, plan, node_ids):
@@ -290,14 +360,21 @@ def restore_joined_boundary_connections(
     adjacent_geometry_junction_ids: Sequence[str] = (),
     netconvert_binary: str = "netconvert", sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
+    signal_policy: str = "preserve",
+    junction_contours: str = "preserve", junction_corner_radius_m: float = 8.0,
+    interior_lane_change_policy: str = "fixed_paths",
 ) -> dict[str, Any]:
-    """Restore missing source-supported pairs; preserve non-target artifacts."""
+    """Restore source-supported pairs; preserve non-target artifacts."""
     source, joined = Path(source_net).resolve(strict=True), Path(joined_net).resolve(strict=True)
     destination = Path(output_dir).resolve()
     if destination.exists():
         raise ValueError("output_dir must not already exist")
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be finite and positive")
+    if junction_contours not in {"preserve", "guarded", "fused"}:
+        raise ValueError("unsupported junction contour method")
+    if interior_lane_change_policy not in ("fixed_paths", "permitted_interior"):
+        raise ValueError("unsupported interior lane-change policy")
     source_hash, joined_hash = file_sha256(source), file_sha256(joined)
     if source_hash != expected_source_sha256.lower() or joined_hash != expected_joined_sha256.lower():
         raise ValueError("source or joined network SHA-256 does not match")
@@ -306,14 +383,16 @@ def restore_joined_boundary_connections(
         raise ValueError("source and joined coordinate frames must match")
     trip_paths = [Path(path).resolve(strict=True) for path in original_trip_files]
     trip_hashes = {path: file_sha256(path) for path in trip_paths}
-    plan = collect_join_boundary_paths(original, groups=groups)
-    normalized = _groups(original, groups)
+    plan = collect_join_boundary_paths(original, groups=groups, signal_policy=signal_policy)
+    normalized = {group["join_id"]: set(group["source_node_ids"]) for group in plan["groups"]}
+    allowed_tls_changes = set(plan["retired_tls_ids"]) | (set(normalized) if signal_policy == "rebuild_diagnostic" else set())
     excluded = set(normalized) | set().union(*normalized.values())
     source_index, joined_index = _index(original), _index(native)
     for group in plan["groups"]:
         owner = native.find(f"junction[@id='{group['join_id']}']")
-        if owner is None or owner.get("type", "").startswith(("traffic_light", "rail_")):
-            raise ValueError("joined groups must exist without signal control")
+        permitted_owner = (owner is not None and owner.get("type") == "traffic_light") if signal_policy == "rebuild_diagnostic" else (owner is not None and not owner.get("type", "").startswith(("traffic_light", "rail_")))
+        if not permitted_owner:
+            raise ValueError("joined groups must match the declared signal policy")
         for side, names in (("to", group["incoming_edge_ids"]), ("from", group["outgoing_edge_ids"])):
             for edge_id in names:
                 edge = joined_index["edges"].get(edge_id)
@@ -322,6 +401,31 @@ def restore_joined_boundary_connections(
                 if [lane.get("id") for lane in edge.findall("lane")] != [lane.get("id") for lane in source_index["edges"][edge_id].findall("lane")]:
                     raise ValueError("joined boundary lane identities require an explicit mapping")
     before = _compare_boundary(native, plan)
+    if interior_lane_change_policy == "permitted_interior":
+        from .source_movement_support import _source_lane_change_path
+
+        # Explicit geometric repair policy: a short absorbed road can prevent
+        # execution of an otherwise permitted lane change in the broken source.
+        # Admit only native turns with complete, mode-consistent permission paths.
+        for pair in before["unexpected_motorized"]:
+            start = source_index["keys"][pair[0], pair[1]]
+            target = source_index["keys"][pair[2], pair[3]]
+            owner = joined_index["edges"][pair[0]].get("to")
+            movement = next(row for row in joined_index["movements"] if row[0] == tuple(pair))
+            modes = _candidate_modes(joined_index, *movement[1:])[0]
+            paths = [_source_lane_change_path(source_index, start, target, normalized[owner], mode)
+                     for mode in sorted(modes)]
+            if all(paths):
+                plan["movements"].append({"join_id": owner, "connection": pair,
+                    "vehicle_classes": sorted(modes), "source_paths": [],
+                    "permitted_interior_lane_change_paths": [dict(path, vehicle_class=mode)
+                        for path, mode in zip(paths, sorted(modes))],
+                    "basis": "permitted source lane changes within absorbed ordinary roads; source execution is not claimed"})
+        before = _compare_boundary(native, plan)
+    plan["interior_lane_change_policy"] = interior_lane_change_policy
+    if interior_lane_change_policy == "permitted_interior":
+        plan["basis"] = ("source fixed-lane paths plus explicitly permitted lane-change paths for native turns "
+                         "inside absorbed ordinary roads; no outside detours or source-execution claim")
     destination.mkdir(parents=True)
     patch = ET.Element("connections")
     missing = {tuple(pair) for pair in before["missing"]}
@@ -335,20 +439,28 @@ def restore_joined_boundary_connections(
     geometry_paths, boundary_geometry = _boundary_geometry(original, source_index, plan, destination)
     compiled = destination / "compiled.net.xml"
     commands = []
-    result = run_command([netconvert_binary, "--sumo-net-file", str(joined), "--node-files", str(geometry_paths["nodes"]), "--edge-files", str(geometry_paths["edges"]), "--connection-files", str(patch_file), "--offset.disable-normalization", "true", "--output-file", str(compiled)], cwd=destination, timeout_seconds=timeout_seconds)
+    result = run_command([netconvert_binary, "--sumo-net-file", str(joined), "--node-files", str(geometry_paths["nodes"]), "--edge-files", str(geometry_paths["edges"]), "--connection-files", str(patch_file), "--offset.disable-normalization", "true", "--junctions.internal-link-detail", "25", "--output-file", str(compiled)], cwd=destination, timeout_seconds=timeout_seconds)
     commands.append(result.to_dict())
     if result.returncode != 0 or not compiled.is_file():
         write_json_atomic(destination / "failed-command.json", commands[-1])
         raise ValueError("netconvert could not restore boundary connections: " + result.stderr)
+    contour_report = None
+    if junction_contours != "preserve":
+        from .hamburg_junctions.movements import _compile_junction_contours
+
+        _, contour_report = _compile_junction_contours(ET.parse(compiled).getroot(),
+            command=commands[-1]["command"], groups=plan["groups"], output_file=compiled,
+            timeout_seconds=timeout_seconds, mode=junction_contours, corner_radius_m=junction_corner_radius_m,
+            include_context=False)
     candidate = destination / "boundary-restored.net.xml"
     shutil.copy2(compiled, candidate)
     raw_root = ET.parse(compiled).getroot()
-    outside_before = _outside_delta(original, raw_root, excluded)
+    outside_before = _outside_delta(original, raw_root, excluded, ignored_tls_ids=allowed_tls_changes)
     adjacent_patches, adjacent_records = _adjacent_geometry(original, raw_root, plan, adjacent_geometry_junction_ids)
     # Reuse the existing coherent restoration of non-target internal lanes,
     # requests, connections and controller programs. Do not restore only a
     # polygon or silently accept netconvert's unrelated round-trip changes.
-    from .junction_rebuild_tail import _restore_non_target_internal_artifacts
+    from .junction_rebuild.restoration import _restore_non_target_internal_artifacts
     tree = ET.parse(candidate)
     root = tree.getroot()
     for position, edge in enumerate(list(root)):
@@ -382,7 +494,17 @@ def restore_joined_boundary_connections(
                 if lane.get("id") in adjacent_patches:
                     lane.attrib.update(adjacent_patches[lane.get("id")])
     ET.ElementTree(final).write(candidate, encoding="utf-8", xml_declaration=True)
-    outside_after = _outside_delta(expected_outside, final, excluded)
+    signal_report = None
+    if signal_policy == "rebuild_diagnostic":
+        from .topology_signal_rebuild import rebuild_topology_test_signals
+
+        signal_report = rebuild_topology_test_signals(net_file=candidate, output_dir=destination / "diagnostic-signals",
+            target_junction_ids=sorted(normalized), expected_source_sha256=file_sha256(candidate))
+        if signal_report["status"] != "pass":
+            raise ValueError("diagnostic signal rebuilding did not pass its conflict checks")
+        candidate = Path(signal_report["candidate_network"]["path"])
+        final = ET.parse(candidate).getroot()
+    outside_after = _outside_delta(expected_outside, final, excluded, ignored_tls_ids=allowed_tls_changes)
     outside_after["explicit_adjacent_geometry_lane_ids"] = sorted(adjacent_patches)
     outside_after["fixed_shape_marker_junction_ids"] = fixed_markers
     boundary_after = _compare_boundary(final, plan)
@@ -397,6 +519,12 @@ def restore_joined_boundary_connections(
     gates = {"source_immutable": source_hash == file_sha256(source) and joined_hash == file_sha256(joined) and all(file_sha256(path) == digest for path, digest in trip_hashes.items()), "outside_preserved": outside_after["status"] == "pass", "boundary_coverage": not boundary_after["missing"] and not boundary_after["permission_mismatches"] and not boundary_after["unexpected_motorized"], "only_declared_interior_edges_removed": removed == expected_removed, "source_members_collapsed": not remaining_old_nodes, "connection_structure": structural["structural_failure_count"] == 0, "sumo_load": load.returncode == 0}
     report = {"schema": "torii.junction-boundary-rebuild/v1", "status": "pass" if all(gates.values()) else "blocked", "decision": "review_required", "claim_status": "diagnostic-demo", "field_turn_legality": "review_required", "source_network": {"path": str(source), "sha256": source_hash}, "joined_network": {"path": str(joined), "sha256": joined_hash}, "candidate_network": {"path": str(candidate), "sha256": file_sha256(candidate)}, "compiled_network": {"path": str(compiled), "sha256": file_sha256(compiled)}, "plan": plan, "boundary_before": before, "boundary_after": boundary_after, "outside_before_restore": outside_before, "outside_preservation": outside_after, "restoration": restoration, "removed_interior_edges": sorted(removed), "original_demand": demand, "gates": gates, "commands": commands, "non_motorized_connectivity": "not_audited", "claim_boundary": "Preserves source motor-vehicle boundary paths after explicitly selected uncontrolled joins. No physical grouping, field turn permission, historical signals or unchanged-demand completion is inferred.", "sources": ["https://sumo.dlr.de/docs/Networks/PlainXML.html#joining-junctions", "https://sumo.dlr.de/docs/Networks/PlainXML.html#lane-to-lane-connectivity"]}
     report["input_bounds_metadata_changed"] = _signature(original.find("location")) != _signature(native.find("location"))
+    report["signal_policy"] = signal_policy
+    report["retired_source_tls_ids"] = plan["retired_tls_ids"]
+    report["generic_test_signals"] = signal_report
+    report["junction_contours"] = contour_report
+    if signal_report is not None:
+        report["claim_boundary"] = "Preserves source boundary paths under an explicit diagnostic signal rebuild. Physical grouping requires source review. Field turn legality and historical signal timing remain unverified."
     report["boundary_geometry"] = boundary_geometry
     report["adjacent_geometry"] = {"requested_junction_ids": list(adjacent_geometry_junction_ids), "connections": adjacent_records, "policy": "Only shape and length of explicitly adjacent, identity-stable existing internal lanes may use native geometry. Node shapes, request conflicts, permissions, speeds, signal programs, and all other connections stay unchanged."}
     final_index = _index(final)

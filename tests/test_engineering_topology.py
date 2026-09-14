@@ -38,6 +38,22 @@ def _write(path, value):
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
+def test_generated_turns_use_25_shape_points(tmp_path):
+    path, data, osm = _case(tmp_path)
+    data["nodes"][2].update(x=565050, y=5933050)
+    _write(path, data)
+    result = build_engineering_topology(topology_file=path, source_osm=osm,
+                                        output_dir=tmp_path / "build", target_year=2013)
+    assert result["status"] == "pass", result
+    network = Path(result["artifacts"]["network"]["path"])
+    root = ET.parse(network).getroot()
+    turns = root.findall("connection[@from='in']")
+    assert len(turns) == 2
+    for turn in turns:
+        lane = root.find(f"edge/lane[@id='{turn.get('via')}']")
+        assert len(lane.get("shape").split()) == 25
+
+
 def test_real_plan_two_lanes_including_bike_override_one_lane_osm(tmp_path):
     path, data, osm = _case(tmp_path)
     hashes = file_sha256(path), osm["sha256"]

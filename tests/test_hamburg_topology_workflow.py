@@ -96,11 +96,12 @@ def _fake_stages(monkeypatch, *, topology_complete=True, geometry_status="pass")
     return observed
 
 
-@pytest.mark.parametrize("mode", ["guarded", "preserve", True, "smooth_anything"])
+@pytest.mark.parametrize("mode", ["guarded", "fused", "preserve", True, "smooth_anything"])
 def test_contour_choice_reaches_construction_and_invalid_choices_stop_early(tmp_path, monkeypatch, mode):
     request = _request(tmp_path)
     value = json.loads(request.read_text(encoding="utf-8"))
     value["construction"]["junction_contours"] = mode
+    value["construction"]["junction_corner_radius_m"] = 6.0
     _write(request, value)
     observed = _fake_stages(monkeypatch)
     output = tmp_path / "run"
@@ -112,6 +113,7 @@ def test_contour_choice_reaches_construction_and_invalid_choices_stop_early(tmp_
         result = workflow.build_hamburg_topology_workflow(request_file=request, output_dir=output)
         assert result["status"] == "pass"
         assert observed["combine"]["junction_contours"] == mode
+        assert observed["combine"]["junction_corner_radius_m"] == 6.0
 
 
 def test_rebuilds_every_stage_from_raw_inputs_and_keeps_calibration_separate(tmp_path, monkeypatch):
@@ -120,14 +122,17 @@ def test_rebuilds_every_stage_from_raw_inputs_and_keeps_calibration_separate(tmp
     result = workflow.build_hamburg_topology_workflow(request_file=request, output_dir=tmp_path / "run")
     assert result["status"] == "pass"
     assert result["purpose"] == "network_construction"
+    assert observed["combine"]["junction_contours"] == "fused"
+    assert observed["combine"]["junction_corner_radius_m"] == 8.0
     assert result["calibration"]["status"] == "not_run"
     assert result["calibration"]["required_for_network_construction"] is False
     assert result["network_handoff"]["construction_decision"] == "pass"
     assert observed["movements"]["intersections"][0]["map_xml"]["sha256"]
     assert observed["combine"]["seed"] == 104
     assert observed["route_checks"]["road_names"] == ["Example road"]
-    assert len(result["stages"]) == 8
-    assert all(row["status"] == "pass" for row in result["stages"].values())
+    assert len(result["stages"]) == 10
+    assert result["stages"]["road_geometry"]["status"] == "not_applicable"
+    assert all(row["status"] in {"pass", "not_applicable"} for row in result["stages"].values())
     assert result["inputs_unchanged"] is True
     assert Path(result["report_file"]).is_file()
     handoff = json.loads(Path(result["handoff_file"]).read_text(encoding="utf-8"))
@@ -137,6 +142,47 @@ def test_rebuilds_every_stage_from_raw_inputs_and_keeps_calibration_separate(tmp
     with pytest.raises(ValueError, match="already exist"):
         workflow.build_hamburg_topology_workflow(request_file=request, output_dir=tmp_path / "run")
     assert Path(result["report_file"]).read_bytes() == before
+
+
+def test_reviewed_road_geometry_reaches_normal_hamburg_construction(tmp_path, monkeypatch):
+    request = _request(tmp_path)
+    value = json.loads(request.read_text(encoding='utf-8'))
+    value['construction']['context_lane_change_policy'] = 'permitted_interior'
+    _write(request, value)
+    observed = _fake_stages(monkeypatch)
+
+    def repair(**kwargs):
+        network = _write(kwargs['output_dir'] / 'repaired.net.xml', '<net><junction id="road-repaired"/></net>')
+        return {'status': 'pass', 'applied': True, 'candidate_network': _artifact(network)}
+
+    monkeypatch.setattr(workflow, 'build_hamburg_road_geometry_candidate', repair, raising=False)
+    result = workflow.build_hamburg_topology_workflow(request_file=request, output_dir=tmp_path / 'run')
+    assert result['status'] == 'pass'
+    assert result['stages']['road_geometry']['status'] == 'pass'
+    assert Path(observed['combine']['source_net']['path']).name == 'repaired.net.xml'
+    assert result['checks']['road_geometry'] == 'pass'
+    assert observed['combine']['context_lane_change_policy'] == 'permitted_interior'
+
+
+def test_reviewed_context_reconstruction_is_used_by_the_normal_workflow(tmp_path, monkeypatch):
+    path = _request(tmp_path)
+    request = json.loads(path.read_text(encoding='utf-8'))
+    request['context_intersections'] = [{'node_id': '3', 'source_node_ids': ['a', 'b'],
+        'signal_policy': 'rebuild_diagnostic', 'review_basis': 'Reviewed source geometry',
+        'aerial_year': 2024, 'bbox_epsg25832': [1, 2, 101, 102],
+        'aerial_image': request['intersections'][0]['aerial_image']}]
+    _write(path, request)
+    observed = _fake_stages(monkeypatch)
+
+    def rebuild(**kwargs):
+        network = _write(kwargs['output_dir'] / 'context.net.xml', '<net/>')
+        return {'status': 'pass', 'candidate_network': _artifact(network), 'field_geometry_review': 'review_required'}
+
+    monkeypatch.setattr(workflow, 'rebuild_context_intersections', rebuild, raising=False)
+    result = workflow.build_hamburg_topology_workflow(request_file=path, output_dir=tmp_path / 'run')
+    assert result['status'] == 'review_required'
+    assert result['stages']['context_intersections']['status'] == 'pass'
+    assert Path(observed['combine']['source_net']['path']).name == 'context.net.xml'
 
 
 def test_road_references_reach_the_movement_stage_with_exact_image_identity(tmp_path, monkeypatch):
