@@ -1,0 +1,22 @@
+{
+  "atomic_membership_coverage_required": 1.0,
+  "automatic_promotion_gate": "blocked",
+  "cluster_decision_propagation_requires_purity": true,
+  "confidence_level": 0.95,
+  "confidence_method": "wilson-one-sided",
+  "duplicate_witness_maximum": 0,
+  "estimator": "horvitz-thompson",
+  "hard_key_mixing_maximum": 0,
+  "hidden_random_member_required": true,
+  "inclusion_probability_required": true,
+  "lost_witness_maximum": 0,
+  "maximum_hidden_member_disagreement_upper_bound": 0.05,
+  "maximum_safety_critical_hidden_heterogeneity": 0,
+  "negative_pair_sampling_required": true,
+  "policy_id": "policy_f202470c7f38e11abf269305",
+  "rare_hard_ood_census_required": true,
+  "rwc_policy_id": "policy_fb1e086b2c08de72f6ceec63",
+  "rwc_sampling_seed_sha256": "5a36151fe105e2b4a0ad0ecf5d4f47e5e3f6131ac16b47b1b1763dad02005b0a",
+  "schema": "torii.corridor.review-witness-sampling-policy/v2",
+  "visible_medoid_and_extrema_required": true
+}

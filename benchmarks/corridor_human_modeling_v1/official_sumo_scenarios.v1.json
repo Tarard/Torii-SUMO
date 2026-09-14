@@ -1,0 +1,458 @@
+{
+  "schema": "torii.corridor.official-sumo-benchmark/v1",
+  "benchmark_id": "manifest_6bb4634cc4ee5a85494ba537",
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "toolchain_lock_sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
+  "upstream_repository": "https://github.com/eclipse-sumo/sumo.git",
+  "upstream_tag": "v1_27_1",
+  "upstream_commit": "7717f2379d9e314a0c81c5cec748444de06a2a91",
+  "license_expression": "EPL-2.0 OR GPL-2.0-or-later",
+  "source_files": [
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "conn-nodes",
+      "vendored_path": "sumo/tests/netconvert/import/XML/connections/input_nodes.nod.xml",
+      "vendored_sha256": "6a72132a8cca0f2325561df070376763180793ad4f53d71d7e3bd86f1a3194b0",
+      "upstream_path": "tests/netconvert/import/XML/connections/input_nodes.nod.xml",
+      "upstream_sha256": "6a72132a8cca0f2325561df070376763180793ad4f53d71d7e3bd86f1a3194b0"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "conn-edges",
+      "vendored_path": "sumo/tests/netconvert/import/XML/connections/input_edges.edg.xml",
+      "vendored_sha256": "8a3c1539fc4e9bd333c92e3b9d8a4340737ebbb0a43f5b100320ecd4c964902e",
+      "upstream_path": "tests/netconvert/import/XML/connections/input_edges.edg.xml",
+      "upstream_sha256": "8a3c1539fc4e9bd333c92e3b9d8a4340737ebbb0a43f5b100320ecd4c964902e"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "edge2edge-connections",
+      "vendored_path": "sumo/tests/netconvert/import/XML/connections/cross3l_edge2edge_conns/input_connections.con.xml",
+      "vendored_sha256": "01e486b3bacbc242a002b766553e89dcca33d89860367566e0f8256fba22b366",
+      "upstream_path": "tests/netconvert/import/XML/connections/cross3l_edge2edge_conns/input_connections.con.xml",
+      "upstream_sha256": "9fbaa59e1dfe8488a9e62e48debd706bfb9eaab2a21c80a0a14eea9d1061ab31"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "lane2lane-connections",
+      "vendored_path": "sumo/tests/netconvert/import/XML/connections/cross3l_lane2lane_conns/input_connections.con.xml",
+      "vendored_sha256": "b5be8b831fea61be183f2c156e9d7b33d6109c05819cd396e7027f0fb4acbc97",
+      "upstream_path": "tests/netconvert/import/XML/connections/cross3l_lane2lane_conns/input_connections.con.xml",
+      "upstream_sha256": "a9d36302759e923ab782058795a73fd410c6042a3a6a24a71d0ba398ddd27d7e"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "join-nodes",
+      "vendored_path": "sumo/tests/netconvert/function/junctions.join/basic/input_nodes.nod.xml",
+      "vendored_sha256": "36bbcc311bed9b69a8c4a89a712d5af1a1ea6144f8ce211b7492d90d4c651da3",
+      "upstream_path": "tests/netconvert/function/junctions.join/basic/input_nodes.nod.xml",
+      "upstream_sha256": "36bbcc311bed9b69a8c4a89a712d5af1a1ea6144f8ce211b7492d90d4c651da3"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "join-edges",
+      "vendored_path": "sumo/tests/netconvert/function/junctions.join/basic/input_edges.edg.xml",
+      "vendored_sha256": "218c5e75d6e7f56ae778368139652f08059ee395479c26a55487bfb910c1d3b3",
+      "upstream_path": "tests/netconvert/function/junctions.join/basic/input_edges.edg.xml",
+      "upstream_sha256": "218c5e75d6e7f56ae778368139652f08059ee395479c26a55487bfb910c1d3b3"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "no-internal-net",
+      "vendored_path": "sumo/tests/netconvert/import/SUMO/no_internal_lanes/input_net.net.xml",
+      "vendored_sha256": "971132fe7e24759fd5179e36b50035dea092bbc93e6db35d57262eda9699b0de",
+      "upstream_path": "tests/netconvert/import/SUMO/no_internal_lanes/input_net.net.xml",
+      "upstream_sha256": "971132fe7e24759fd5179e36b50035dea092bbc93e6db35d57262eda9699b0de"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "nema-nodes",
+      "vendored_path": "sumo/tests/netconvert/import/XML/tl_types/NEMA/NEMA_4arm/input_plain.nod.xml",
+      "vendored_sha256": "10f1e8ec57c8cd3c9d9d0d4eefb84956599752aac6a258bb451c8a6f97534627",
+      "upstream_path": "tests/netconvert/import/XML/tl_types/NEMA/NEMA_4arm/input_plain.nod.xml",
+      "upstream_sha256": "10f1e8ec57c8cd3c9d9d0d4eefb84956599752aac6a258bb451c8a6f97534627"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "nema-edges",
+      "vendored_path": "sumo/tests/netconvert/import/XML/tl_types/NEMA/NEMA_4arm/input_plain.edg.xml",
+      "vendored_sha256": "43751cd4fcc426eba910b486546f9d5257a9af9db7357ff21576bcb7981af8dd",
+      "upstream_path": "tests/netconvert/import/XML/tl_types/NEMA/NEMA_4arm/input_plain.edg.xml",
+      "upstream_sha256": "43751cd4fcc426eba910b486546f9d5257a9af9db7357ff21576bcb7981af8dd"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "ped-nodes",
+      "vendored_path": "sumo/tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.nod.xml",
+      "vendored_sha256": "3dc4a50b97b166e952934776144a959efd5e36bb0458f27bb18335b895c120d8",
+      "upstream_path": "tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.nod.xml",
+      "upstream_sha256": "3dc4a50b97b166e952934776144a959efd5e36bb0458f27bb18335b895c120d8"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "ped-edges",
+      "vendored_path": "sumo/tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.edg.xml",
+      "vendored_sha256": "4e1bd267213c55c9578adaeaccda4b4e0ce02a95a104afb17c9708c3891e73e6",
+      "upstream_path": "tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.edg.xml",
+      "upstream_sha256": "4e1bd267213c55c9578adaeaccda4b4e0ce02a95a104afb17c9708c3891e73e6"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "ped-connections",
+      "vendored_path": "sumo/tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.con.xml",
+      "vendored_sha256": "63e130ea992e561ed6333897b302b72ab1917384004a9da5910c46751e1b1252",
+      "upstream_path": "tests/complex/tutorial/traci_pedestrian_crossing/data/pedcrossing.con.xml",
+      "upstream_sha256": "63e130ea992e561ed6333897b302b72ab1917384004a9da5910c46751e1b1252"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "rail-nodes",
+      "vendored_path": "sumo/tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.nod.xml",
+      "vendored_sha256": "2770da254032808ae532fd405cd12949f1e909a55f71ee0e604f732c321b9f8e",
+      "upstream_path": "tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.nod.xml",
+      "upstream_sha256": "2770da254032808ae532fd405cd12949f1e909a55f71ee0e604f732c321b9f8e"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "rail-edges",
+      "vendored_path": "sumo/tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.edg.xml",
+      "vendored_sha256": "385842750cc1e55995f97762d64c391d53ef8ee2cf3a8c9d9afd801c09834cc4",
+      "upstream_path": "tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.edg.xml",
+      "upstream_sha256": "385842750cc1e55995f97762d64c391d53ef8ee2cf3a8c9d9afd801c09834cc4"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "rail-connections",
+      "vendored_path": "sumo/tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.con.xml",
+      "vendored_sha256": "f2cffd11bc2fef396280bf1e05d41753f415202a6ac6e900238db75b90d414c9",
+      "upstream_path": "tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.con.xml",
+      "upstream_sha256": "f2cffd11bc2fef396280bf1e05d41753f415202a6ac6e900238db75b90d414c9"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "rail-tll",
+      "vendored_path": "sumo/tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.tll.xml",
+      "vendored_sha256": "526e42c55d710fc2fcd737c8a3a18cbee1affb3baefd55a29baf069599f678de",
+      "upstream_path": "tests/netconvert/import/XML/node_types/rail_crossing/all_plain/input_plain.tll.xml",
+      "upstream_sha256": "526e42c55d710fc2fcd737c8a3a18cbee1affb3baefd55a29baf069599f678de"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "ramp-nodes",
+      "vendored_path": "sumo/tests/netconvert/function/ramps/input_nodes.nod.xml",
+      "vendored_sha256": "48eb8da104ef6e938ddfe5272cf682d4c8fce938adf658cc63aea97b3844c5fa",
+      "upstream_path": "tests/netconvert/function/ramps/input_nodes.nod.xml",
+      "upstream_sha256": "48eb8da104ef6e938ddfe5272cf682d4c8fce938adf658cc63aea97b3844c5fa"
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "ramp-edges",
+      "vendored_path": "sumo/tests/netconvert/function/ramps/on_ramp/input_edges.edg.xml",
+      "vendored_sha256": "98c89299662e04fcef5da3f89c14a29e076682142f10b463b7f8a529c22efa5d",
+      "upstream_path": "tests/netconvert/function/ramps/on_ramp/input_edges.edg.xml",
+      "upstream_sha256": "98c89299662e04fcef5da3f89c14a29e076682142f10b463b7f8a529c22efa5d"
+    }
+  ],
+  "cases": [
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "edge-to-edge-connections",
+      "normative_feature": "official PlainXML edge-to-edge connection semantics",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "conn-nodes",
+        "conn-edges",
+        "edge2edge-connections"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:conn-nodes",
+        "--edge-files",
+        "@source:conn-edges",
+        "--connection-files",
+        "@source:edge2edge-connections",
+        "--speed-in-kmh",
+        "true",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "ambiguous_target_lane_fanout": 4,
+        "incoming_motorized_lane_without_connection": 2,
+        "outgoing_motorized_lane_without_connection": 4
+      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 28,
+      "expected_conflict_count": 20,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "lane-to-lane-connections",
+      "normative_feature": "official PlainXML lane-to-lane connection semantics",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "conn-nodes",
+        "conn-edges",
+        "lane2lane-connections"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:conn-nodes",
+        "--edge-files",
+        "@source:conn-edges",
+        "--connection-files",
+        "@source:lane2lane-connections",
+        "--speed-in-kmh",
+        "true",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "ambiguous_target_lane_fanout": 4,
+        "incoming_motorized_lane_without_connection": 2,
+        "outgoing_motorized_lane_without_connection": 4
+      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 28,
+      "expected_conflict_count": 20,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "joined-junction",
+      "normative_feature": "official joined-junction topology semantics",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "join-nodes",
+        "join-edges"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:join-nodes",
+        "--edge-files",
+        "@source:join-edges",
+        "--junctions.join",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "ambiguous_target_lane_fanout": 1
+      },
+      "expected_independent_safety_status": "review",
+      "expected_safety_category_counts": {
+        "permissive_potential_envelope_conflict_requires_review": 1
+      },
+      "expected_movement_count": 10,
+      "expected_conflict_count": 16,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "no-internal-links",
+      "normative_feature": "official legal --no-internal-links network mode",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "no-internal-net"
+      ],
+      "netconvert_arguments": [
+        "--sumo-net-file",
+        "@source:no-internal-net",
+        "--geometry.min-radius.fix.railways",
+        "false",
+        "--geometry.avoid-overlap",
+        "false",
+        "--geometry.max-grade.fix",
+        "false",
+        "--offset.disable-normalization",
+        "true",
+        "--no-internal-links",
+        "--no-turnarounds",
+        "--junctions.corner-detail",
+        "0",
+        "--junctions.limit-turn-speed",
+        "-1",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "no-internal-links",
+      "expected_connection_status": "pass",
+      "expected_connection_category_counts": {},
+      "expected_independent_safety_status": "review",
+      "expected_safety_category_counts": {
+        "movement_geometry_unavailable_no_internal_links": 1
+      },
+      "expected_movement_count": 1,
+      "expected_conflict_count": 0,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "nema-four-arm",
+      "normative_feature": "official NEMA four-arm controller generation",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "nema-nodes",
+        "nema-edges"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:nema-nodes",
+        "--edge-files",
+        "@source:nema-edges",
+        "--tls.default-type",
+        "NEMA",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "outgoing_motorized_lane_without_connection": 4
+      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 20,
+      "expected_conflict_count": 40,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "nema-four-arm-grouped",
+      "normative_feature": "official NEMA shared signal-index generation",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "nema-nodes",
+        "nema-edges"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:nema-nodes",
+        "--edge-files",
+        "@source:nema-edges",
+        "--tls.default-type",
+        "NEMA",
+        "--tls.group-signals",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "outgoing_motorized_lane_without_connection": 4
+      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 20,
+      "expected_conflict_count": 40,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "pedestrian-crossing",
+      "normative_feature": "official sidewalk, crossing, and walkingarea tutorial",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "ped-nodes",
+        "ped-edges",
+        "ped-connections"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:ped-nodes",
+        "--edge-files",
+        "@source:ped-edges",
+        "--connection-files",
+        "@source:ped-connections",
+        "--no-turnarounds",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "incoming_motorized_lane_without_connection": 4,
+        "outgoing_motorized_lane_without_connection": 4
+      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 5,
+      "expected_conflict_count": 4,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "rail-crossing",
+      "normative_feature": "official rail crossing and SUMO runtime rail controller semantics",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "rail-nodes",
+        "rail-edges",
+        "rail-connections",
+        "rail-tll"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:rail-nodes",
+        "--edge-files",
+        "@source:rail-edges",
+        "--connection-files",
+        "@source:rail-connections",
+        "--tllogic-files",
+        "@source:rail-tll",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "internal-links",
+      "expected_connection_status": "pass",
+      "expected_connection_category_counts": {},
+      "expected_independent_safety_status": "review",
+      "expected_safety_category_counts": {
+        "movement_modes_outside_certified_conflict_applicability": 3
+      },
+      "expected_movement_count": 8,
+      "expected_conflict_count": 4,
+      "expected_abstention": true
+    },
+    {
+      "schema": "torii.corridor.contracts/v1",
+      "case_id": "on-ramp",
+      "normative_feature": "official ramp guessing with legal no-internal-links mode",
+      "traffic_side": "right",
+      "source_file_ids": [
+        "ramp-nodes",
+        "ramp-edges"
+      ],
+      "netconvert_arguments": [
+        "--node-files",
+        "@source:ramp-nodes",
+        "--edge-files",
+        "@source:ramp-edges",
+        "--ramps.guess",
+        "--no-internal-links",
+        "--output-file",
+        "@output-net"
+      ],
+      "expected_internal_link_mode": "no-internal-links",
+      "expected_connection_status": "review_required",
+      "expected_connection_category_counts": {
+        "incoming_motorized_lane_without_connection": 1
+      },
+      "expected_independent_safety_status": "review",
+      "expected_safety_category_counts": {
+        "movement_geometry_unavailable_no_internal_links": 1
+      },
+      "expected_movement_count": 13,
+      "expected_conflict_count": 0,
+      "expected_abstention": true
+    }
+  ]
+}

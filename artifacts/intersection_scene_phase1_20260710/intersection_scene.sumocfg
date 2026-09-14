@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<configuration>
+  <input>
+    <net-file value="intersection_scene.net.xml" />
+    <route-files value="intersection_scene.rou.xml" />
+  </input>
+  <output>
+    <summary-output value="intersection_scene_summary.xml" />
+    <tripinfo-output value="intersection_scene_tripinfo.xml" />
+  </output>
+  <time>
+    <begin value="0" />
+    <end value="600" />
+  </time>
+  <processing>
+    <time-to-teleport value="-1" />
+  </processing>
+  <report>
+    <duration-log.statistics value="true" />
+    <no-step-log value="true" />
+  </report>
+</configuration>

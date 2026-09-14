@@ -1,0 +1,835 @@
+{
+  "city_extracts": [
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/Berlin/CHECKSUM.txt",
+      "city_group": "berlin",
+      "expected_content_length_bytes": 180357428,
+      "expected_etag": "\"641849792\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:50:24 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "1d725e5434422f94dc6fbe6b0b3fa5c7",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "berlin-bbbike-20260711",
+      "traffic_side": "right"
+    },
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/Amsterdam/CHECKSUM.txt",
+      "city_group": "amsterdam",
+      "expected_content_length_bytes": 141948365,
+      "expected_etag": "\"1878350408\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:32:13 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/Amsterdam/Amsterdam.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "7dcd57d390fc556bda923cab1adc81e2",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "amsterdam-bbbike-20260711",
+      "traffic_side": "right"
+    },
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/Paris/CHECKSUM.txt",
+      "city_group": "paris",
+      "expected_content_length_bytes": 239050771,
+      "expected_etag": "\"874712177\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:55:25 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/Paris/Paris.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "8e8b339ae51b2aa8d432b4b3421b7615",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "paris-bbbike-20260711",
+      "traffic_side": "right"
+    },
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/London/CHECKSUM.txt",
+      "city_group": "london",
+      "expected_content_length_bytes": 196666081,
+      "expected_etag": "\"3590488792\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:55:25 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/London/London.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "adc2c11257c3d8c44e43681423ed2090",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "london-bbbike-20260711",
+      "traffic_side": "left"
+    },
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/Melbourne/CHECKSUM.txt",
+      "city_group": "melbourne",
+      "expected_content_length_bytes": 86429050,
+      "expected_etag": "\"3843497657\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:21:37 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/Melbourne/Melbourne.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "8a37dcda40cbf84614a026bdb3daa1e6",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "melbourne-bbbike-20260711",
+      "traffic_side": "left"
+    },
+    {
+      "checksum_url": "https://download.bbbike.org/osm/bbbike/Sydney/CHECKSUM.txt",
+      "city_group": "sydney",
+      "expected_content_length_bytes": 55931710,
+      "expected_etag": "\"2264562845\"",
+      "expected_last_modified_http": "Sat, 11 Jul 2026 16:21:37 GMT",
+      "pbf_url": "https://download.bbbike.org/osm/bbbike/Sydney/Sydney.osm.pbf",
+      "provider": "BBBike",
+      "provider_md5": "480d263525806f549648c7c518e1fcdb",
+      "schema": "torii.corridor.contracts/v1",
+      "source_id": "sydney-bbbike-20260711",
+      "traffic_side": "left"
+    }
+  ],
+  "corpus_id": "manifest_1895a8d421bf11ec9f88fb98",
+  "corridors": [
+    {
+      "bbox": {
+        "east": 4.9258,
+        "north": 52.3374,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.3254,
+        "west": 4.9062
+      },
+      "center_lat": 52.3314,
+      "center_lon": 4.916,
+      "city_source_id": "amsterdam-bbbike-20260711",
+      "corridor_key": "amsterdam-a10-amstel",
+      "label": "A10 Amstel interchange",
+      "morphology": "ramp-interchange",
+      "preregistered_feature_targets": [
+        "bicycle",
+        "ramp",
+        "rail",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_58ae52c9c36412ad3e9fd754"
+    },
+    {
+      "bbox": {
+        "east": 4.9178,
+        "north": 52.3558,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.3438,
+        "west": 4.8982
+      },
+      "center_lat": 52.3498,
+      "center_lon": 4.908,
+      "city_source_id": "amsterdam-bbbike-20260711",
+      "corridor_key": "amsterdam-amstel-bridge",
+      "label": "Amstel bridge",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_839a9e1f54ffc63ca506e0f4"
+    },
+    {
+      "bbox": {
+        "east": 4.902,
+        "north": 52.3791,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.3671,
+        "west": 4.8824
+      },
+      "center_lat": 52.3731,
+      "center_lon": 4.8922,
+      "city_source_id": "amsterdam-bbbike-20260711",
+      "corridor_key": "amsterdam-dam",
+      "label": "Dam",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_87dc349e7927932f5dc15596"
+    },
+    {
+      "bbox": {
+        "east": 4.9223,
+        "north": 52.383,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.371,
+        "west": 4.9027
+      },
+      "center_lat": 52.377,
+      "center_lon": 4.9125,
+      "city_source_id": "amsterdam-bbbike-20260711",
+      "corridor_key": "amsterdam-ijtunnel",
+      "label": "IJtunnel",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "bicycle",
+        "bridge",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_1d5f4a0978a42506cd3960b7"
+    },
+    {
+      "bbox": {
+        "east": 4.8908,
+        "north": 52.3639,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.3519,
+        "west": 4.8712
+      },
+      "center_lat": 52.3579,
+      "center_lon": 4.881,
+      "city_source_id": "amsterdam-bbbike-20260711",
+      "corridor_key": "amsterdam-museumplein",
+      "label": "Museumplein",
+      "morphology": "multimodal",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_76c02eb96144640aed04f697"
+    },
+    {
+      "bbox": {
+        "east": 13.423,
+        "north": 52.5279,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.5159,
+        "west": 13.4034
+      },
+      "center_lat": 52.5219,
+      "center_lon": 13.4132,
+      "city_source_id": "berlin-bbbike-20260711",
+      "corridor_key": "berlin-alexanderplatz",
+      "label": "Alexanderplatz",
+      "morphology": "multimodal",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_4f61b13193de75ab539681ab"
+    },
+    {
+      "bbox": {
+        "east": 13.2893,
+        "north": 52.5075,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.4955,
+        "west": 13.2697
+      },
+      "center_lat": 52.5015,
+      "center_lon": 13.2795,
+      "city_source_id": "berlin-bbbike-20260711",
+      "corridor_key": "berlin-funkturm-interchange",
+      "label": "Funkturm interchange",
+      "morphology": "ramp-interchange",
+      "preregistered_feature_targets": [
+        "ramp",
+        "bridge",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_e3e3fbff84585132f86368ee"
+    },
+    {
+      "bbox": {
+        "east": 13.4548,
+        "north": 52.5077,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.4957,
+        "west": 13.4352
+      },
+      "center_lat": 52.5017,
+      "center_lon": 13.445,
+      "city_source_id": "berlin-bbbike-20260711",
+      "corridor_key": "berlin-oberbaum-bridge",
+      "label": "Oberbaum Bridge",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_082d245ac37bc93466da3951"
+    },
+    {
+      "bbox": {
+        "east": 13.3858,
+        "north": 52.5156,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.5036,
+        "west": 13.3662
+      },
+      "center_lat": 52.5096,
+      "center_lon": 13.376,
+      "city_source_id": "berlin-bbbike-20260711",
+      "corridor_key": "berlin-potsdamer-platz",
+      "label": "Potsdamer Platz",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_0c7ae6522241e6b5e444a774"
+    },
+    {
+      "bbox": {
+        "east": 13.3692,
+        "north": 52.5339,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 52.5219,
+        "west": 13.3496
+      },
+      "center_lat": 52.5279,
+      "center_lon": 13.3594,
+      "city_source_id": "berlin-bbbike-20260711",
+      "corridor_key": "berlin-tiergarten-tunnel",
+      "label": "Tiergarten tunnel",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_46e456391b6ffaffaf9eeabc"
+    },
+    {
+      "bbox": {
+        "east": 0.0027,
+        "north": 51.5155,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 51.5035,
+        "west": -0.0167
+      },
+      "center_lat": 51.5095,
+      "center_lon": -0.007,
+      "city_source_id": "london-bbbike-20260711",
+      "corridor_key": "london-blackwall-tunnel",
+      "label": "Blackwall tunnel",
+      "morphology": "ramp-interchange",
+      "preregistered_feature_targets": [
+        "ramp",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_2590f7d1ebad8a62719b2d89"
+    },
+    {
+      "bbox": {
+        "east": -0.1408,
+        "north": 51.5087,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 51.4967,
+        "west": -0.1602
+      },
+      "center_lat": 51.5027,
+      "center_lon": -0.1505,
+      "city_source_id": "london-bbbike-20260711",
+      "corridor_key": "london-hyde-park-corner",
+      "label": "Hyde Park Corner",
+      "morphology": "multimodal",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_f68b59959d46eb917cbb5c2e"
+    },
+    {
+      "bbox": {
+        "east": -0.0726,
+        "north": 51.5238,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 51.5118,
+        "west": -0.092
+      },
+      "center_lat": 51.5178,
+      "center_lon": -0.0823,
+      "city_source_id": "london-bbbike-20260711",
+      "corridor_key": "london-liverpool-street",
+      "label": "Liverpool Street",
+      "morphology": "tram-rail",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+      "selection_id": "scope_dc76fac5446ea7fc1e1d3003"
+    },
+    {
+      "bbox": {
+        "east": -0.1149,
+        "north": 51.5067,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 51.4947,
+        "west": -0.1343
+      },
+      "center_lat": 51.5007,
+      "center_lon": -0.1246,
+      "city_source_id": "london-bbbike-20260711",
+      "corridor_key": "london-parliament",
+      "label": "Parliament Square",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_957141e976f48e8173df0703"
+    },
+    {
+      "bbox": {
+        "east": -0.0657,
+        "north": 51.5115,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 51.4995,
+        "west": -0.0851
+      },
+      "center_lat": 51.5055,
+      "center_lon": -0.0754,
+      "city_source_id": "london-bbbike-20260711",
+      "corridor_key": "london-tower-bridge",
+      "label": "Tower Bridge",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_6117588580630c9e35aaf1ed"
+    },
+    {
+      "bbox": {
+        "east": 145.0246,
+        "north": -37.823,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -37.835,
+        "west": 145.0094
+      },
+      "center_lat": -37.829,
+      "center_lon": 145.017,
+      "city_source_id": "melbourne-bbbike-20260711",
+      "corridor_key": "melbourne-burnley-tunnel",
+      "label": "Burnley tunnel",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "ramp",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_01d21ad422830f8d6b48e1ce"
+    },
+    {
+      "bbox": {
+        "east": 145.0196,
+        "north": -37.8538,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -37.8658,
+        "west": 145.0044
+      },
+      "center_lat": -37.8598,
+      "center_lon": 145.012,
+      "city_source_id": "melbourne-bbbike-20260711",
+      "corridor_key": "melbourne-dandenong-orrong",
+      "label": "Dandenong Road and Orrong Road",
+      "morphology": "divided-arterial",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+      "selection_id": "scope_c6c5e1e65a9a552589d51319"
+    },
+    {
+      "bbox": {
+        "east": 144.9746,
+        "north": -37.8119,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -37.8239,
+        "west": 144.9594
+      },
+      "center_lat": -37.8179,
+      "center_lon": 144.967,
+      "city_source_id": "melbourne-bbbike-20260711",
+      "corridor_key": "melbourne-flinders-swanston",
+      "label": "Flinders and Swanston",
+      "morphology": "tram-rail",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_b10ed269d8e43d3d728ba68b"
+    },
+    {
+      "bbox": {
+        "east": 144.9936,
+        "north": -37.833,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -37.845,
+        "west": 144.9784
+      },
+      "center_lat": -37.839,
+      "center_lon": 144.986,
+      "city_source_id": "melbourne-bbbike-20260711",
+      "corridor_key": "melbourne-punt-toorak",
+      "label": "Punt and Toorak",
+      "morphology": "multimodal",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_9c926878e426674fb3185871"
+    },
+    {
+      "bbox": {
+        "east": 144.9156,
+        "north": -37.823,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -37.835,
+        "west": 144.9004
+      },
+      "center_lat": -37.829,
+      "center_lon": 144.908,
+      "city_source_id": "melbourne-bbbike-20260711",
+      "corridor_key": "melbourne-west-gate-bridge",
+      "label": "West Gate Bridge",
+      "morphology": "ramp-interchange",
+      "preregistered_feature_targets": [
+        "ramp",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_b10e9f970a212b856e95791d"
+    },
+    {
+      "bbox": {
+        "east": 2.304,
+        "north": 48.8798,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 48.8678,
+        "west": 2.286
+      },
+      "center_lat": 48.8738,
+      "center_lon": 2.295,
+      "city_source_id": "paris-bbbike-20260711",
+      "corridor_key": "paris-arc-de-triomphe",
+      "label": "Arc de Triomphe",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_d2830d3b30080c9eea1c2c2b"
+    },
+    {
+      "bbox": {
+        "east": 2.378,
+        "north": 48.859,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 48.847,
+        "west": 2.36
+      },
+      "center_lat": 48.853,
+      "center_lon": 2.369,
+      "city_source_id": "paris-bbbike-20260711",
+      "corridor_key": "paris-bastille",
+      "label": "Bastille",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_991661cf90ac7c9dadb2b006"
+    },
+    {
+      "bbox": {
+        "east": 2.3885,
+        "north": 48.8446,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 48.8326,
+        "west": 2.3705
+      },
+      "center_lat": 48.8386,
+      "center_lon": 2.3795,
+      "city_source_id": "paris-bbbike-20260711",
+      "corridor_key": "paris-bercy-bridge",
+      "label": "Bercy bridge",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_91002887074148993f707513"
+    },
+    {
+      "bbox": {
+        "east": 2.291,
+        "north": 48.884,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 48.872,
+        "west": 2.273
+      },
+      "center_lat": 48.878,
+      "center_lon": 2.282,
+      "city_source_id": "paris-bbbike-20260711",
+      "corridor_key": "paris-porte-maillot",
+      "label": "Porte Maillot",
+      "morphology": "ramp-interchange",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "ramp",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_2cda2863b10f11ea1b8663ca"
+    },
+    {
+      "bbox": {
+        "east": 2.336,
+        "north": 48.8675,
+        "schema": "torii.corridor.contracts/v1",
+        "south": 48.8555,
+        "west": 2.318
+      },
+      "center_lat": 48.8615,
+      "center_lon": 2.327,
+      "city_source_id": "paris-bbbike-20260711",
+      "corridor_key": "paris-tuileries-tunnel",
+      "label": "Tuileries tunnel",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_01e86abfa1c416160d21c183"
+    },
+    {
+      "bbox": {
+        "east": 151.2278,
+        "north": -33.8855,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -33.8975,
+        "west": 151.2132
+      },
+      "center_lat": -33.8915,
+      "center_lon": 151.2205,
+      "city_source_id": "sydney-bbbike-20260711",
+      "corridor_key": "sydney-anzac-cleveland",
+      "label": "Anzac and Cleveland",
+      "morphology": "divided-arterial",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_aaee79fb5aa8a714d66c3bb2"
+    },
+    {
+      "bbox": {
+        "east": 151.2136,
+        "north": -33.877,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -33.889,
+        "west": 151.199
+      },
+      "center_lat": -33.883,
+      "center_lon": 151.2063,
+      "city_source_id": "sydney-bbbike-20260711",
+      "corridor_key": "sydney-central",
+      "label": "Central Station",
+      "morphology": "tram-rail",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_00c18209d5e392a39556ab8a"
+    },
+    {
+      "bbox": {
+        "east": 151.214,
+        "north": -33.867,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -33.879,
+        "west": 151.1994
+      },
+      "center_lat": -33.873,
+      "center_lon": 151.2067,
+      "city_source_id": "sydney-bbbike-20260711",
+      "corridor_key": "sydney-george-park",
+      "label": "George and Park",
+      "morphology": "historic-core",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_9cc6f0882d54e3135abbbe44"
+    },
+    {
+      "bbox": {
+        "east": 151.2181,
+        "north": -33.8463,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -33.8583,
+        "west": 151.2035
+      },
+      "center_lat": -33.8523,
+      "center_lon": 151.2108,
+      "city_source_id": "sydney-bbbike-20260711",
+      "corridor_key": "sydney-harbour-bridge",
+      "label": "Sydney Harbour Bridge",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "rail",
+        "bridge"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered corridor selected before OSM tag extraction; frozen feature targets must be confirmed from the bound snapshot or reported as unresolved.",
+      "selection_id": "scope_0958840e1b4f2c919cb464ea"
+    },
+    {
+      "bbox": {
+        "east": 151.1088,
+        "north": -33.935,
+        "schema": "torii.corridor.contracts/v1",
+        "south": -33.947,
+        "west": 151.0942
+      },
+      "center_lat": -33.941,
+      "center_lon": 151.1015,
+      "city_source_id": "sydney-bbbike-20260711",
+      "corridor_key": "sydney-m5-east-kingsgrove",
+      "label": "M5 East at Kingsgrove",
+      "morphology": "bridge-tunnel",
+      "preregistered_feature_targets": [
+        "pedestrian",
+        "bicycle",
+        "tunnel"
+      ],
+      "schema": "torii.corridor.contracts/v1",
+      "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+      "selection_id": "scope_703379cba90731b448de2716"
+    }
+  ],
+  "held_out_review_policy_sha256": "d9f4b77696bcb8d9fd3ad49a84b7c254a9172e48c774a990551dadd4c552ba6a",
+  "minimum_case_count": 30,
+  "minimum_cases_per_city_group": 5,
+  "minimum_city_group_count": 3,
+  "minimum_morphology_count": 6,
+  "network_build_profile": {
+    "allowed_highways": [
+      "cycleway",
+      "footway",
+      "living_street",
+      "motorway",
+      "motorway_link",
+      "path",
+      "pedestrian",
+      "primary",
+      "primary_link",
+      "residential",
+      "secondary",
+      "secondary_link",
+      "service",
+      "steps",
+      "tertiary",
+      "tertiary_link",
+      "track",
+      "trunk",
+      "trunk_link",
+      "unclassified"
+    ],
+    "allowed_railways": [
+      "funicular",
+      "light_rail",
+      "monorail",
+      "narrow_gauge",
+      "rail",
+      "subway",
+      "tram"
+    ],
+    "clip_source_ways_to_bbox": false,
+    "include_railway": true,
+    "netconvert_profile": "reference_visual_detail",
+    "routeability_seed": 20260714,
+    "routeability_vehicle_count": 20,
+    "schema": "torii.corridor.contracts/v1"
+  },
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "provider_attribution": "© OpenStreetMap contributors",
+  "provider_license": "Open Data Commons Open Database License (ODbL)",
+  "provider_license_url": "https://opendatacommons.org/licenses/odbl/",
+  "required_mode_features": [
+    "pedestrian",
+    "bicycle",
+    "ramp",
+    "rail",
+    "bridge",
+    "tunnel"
+  ],
+  "required_traffic_sides": [
+    "right",
+    "left"
+  ],
+  "schema": "torii.corridor.held-out-corpus/v1",
+  "snapshot_selection_cutoff": "2026-07-14T00:00:00+02:00"
+}

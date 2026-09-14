@@ -1,0 +1,18 @@
+{
+  "schema": "torii.corridor.certification-envelope/v1",
+  "envelope_id": "policy_22e662ff9578015edf8e0386",
+  "claim_name": "vehicle-x4-independent-conflict-audit-v1",
+  "allowed_traffic_sides": ["right", "left"],
+  "allowed_arm_counts": [4],
+  "allowed_movement_mode_classes": ["road-motorized"],
+  "allowed_controller_types": ["static"],
+  "maximum_controller_owner_cells": 1,
+  "maximum_programs_per_controller": 1,
+  "maximum_movements_per_signal_group": 1,
+  "require_internal_geometry": true,
+  "allow_link_index2": false,
+  "allow_unsupported_controlled_connections": false,
+  "allow_pedestrian_facilities": false,
+  "allow_grade_separation": false,
+  "disallowed_edge_types": ["motorway_link", "ramp"]
+}

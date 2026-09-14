@@ -1,0 +1,51 @@
+{
+  "adjudicator_id": "review_e7884abf6650979dad03e5d3",
+  "audit_attention": {
+    "auto_precision_status": "not-applicable",
+    "cohort": "audit-attention",
+    "finding_cluster_decisions_required": true,
+    "maximum_median_review_seconds": 300.0,
+    "maximum_safety_critical_false_negatives": 0,
+    "minimum_cohen_kappa": 0.6,
+    "minimum_raw_agreement": 0.8,
+    "minimum_valid_corridor_packages": 30,
+    "minimum_weighted_attention_precision": 0.9,
+    "minimum_weighted_attention_recall": 0.95,
+    "negative_units_required_for_recall": true,
+    "schema": "torii.corridor.contracts/v1"
+  },
+  "automatic_promotion_gate": "blocked",
+  "blinding_seed_sha256": "6c05c9f65ebe101b5b3898caf8bf4e733b821ab3cd40a46efef0eedcafef9b6e",
+  "machine_assessments_are_immutable_after_freeze": true,
+  "parent_review_benchmark_sha256": "3cd790f943d029e527074a30370a29b2c304adb088875583a7efff1673b41eb0",
+  "prospective_safe_pass": {
+    "auto_coverage_minimum": null,
+    "cohort": "prospective-safe-pass",
+    "confidence_level": 0.95,
+    "confidence_method": "wilson-one-sided",
+    "current_defect_only_corpus_eligible": false,
+    "enrollment": "all-consecutive-machine-acceptable",
+    "maximum_safety_critical_false_negatives": 0,
+    "minimum_auto_precision_one_sided_lower_bound": 0.99,
+    "minimum_auto_precision_point_estimate": 0.99,
+    "minimum_machine_acceptable_count": 600,
+    "retrospective_enrollment_forbidden": true,
+    "schema": "torii.corridor.contracts/v1"
+  },
+  "replacement_policy_sha256": "26685fb3bfd9074e21d63c8e0afa7b4717f48b78803d98ea743965f112abb1d5",
+  "replay_invalid_corridor_keys": [
+    "london-kings-cross",
+    "melbourne-royal-parade",
+    "sydney-cross-city-tunnel"
+  ],
+  "reserve_corpus_sha256": "be9b3f30ef4ac4aae3f5350d8b415edb89a31724add8c018a6b494798f9b26b5",
+  "reviewer_ids": [
+    "review_bad57d9406872f8341c4c7b7",
+    "review_f8911cd4edc3afe0d6b4e0b1"
+  ],
+  "sampling_policy_sha256": "aa733c926a1b3edf53a29903c36e090b8e5e85111b5c9956a28c6cf1d5d80d99",
+  "schema": "torii.corridor.held-out-review-policy/v2",
+  "stage_1_exit_requires_human_validation": true,
+  "stage_1m_machine_milestone_only": true,
+  "trial_id": "review_d1cb2890ff41e6ebd8c03e08"
+}

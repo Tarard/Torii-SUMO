@@ -1,0 +1,155 @@
+{
+  "schema": "torii.corridor.real-held-out-machine-evidence/v1",
+  "recorded_at": "2026-07-14",
+  "corpus_id": "manifest_e2562c4125f9f157ece520d5",
+  "machine_run_commit": "0348269",
+  "report_sha256": "4fb50aa5a468bd22fceb2ecfafec9ecf9eb2fd02740f23b78862ef1f100014a5",
+  "manifest_sha256": "cc702516019071e501fe88307f510a30b23d4710f1bd50cb803ca2d878100237",
+  "manifest_artifact_count": 497,
+  "manifest_missing_artifact_count": 0,
+  "manifest_hash_failure_count": 0,
+  "automatic_promotion_gate": "blocked",
+  "evidence_build_status": "blocked",
+  "case_outcomes": {
+    "expected_case_count": 30,
+    "processed_case_count": 30,
+    "pipeline_pass_count": 27,
+    "pipeline_blocked_count": 3,
+    "review_case_count": 27,
+    "source_osm_immutable_count": 30,
+    "machine_label_counts": {
+      "acceptable": 0,
+      "ambiguous": 0,
+      "defect": 30
+    },
+    "applicability_counts": {
+      "out-of-domain": 27,
+      "invalid": 3
+    },
+    "sumo_load_status_counts": {
+      "pass": 22,
+      "fail": 5,
+      "not-run": 3
+    },
+    "connection_mode_status_counts": {
+      "review_required": 1,
+      "fail": 26,
+      "not-run": 3
+    },
+    "independent_safety_status_counts": {
+      "blocked": 30
+    },
+    "routeability_status_counts": {
+      "pass": 14,
+      "fail": 13,
+      "not-run": 3
+    }
+  },
+  "connection_mode_calibration": {
+    "complete_case_count": 27,
+    "source_baseline_calibration_pass_count": 25,
+    "blocked_calibration_count": 2,
+    "diagnostic_two_metre_fallback_count": 2,
+    "minimum_calibrated_tolerance_m": 0.02183448,
+    "maximum_calibrated_tolerance_m": 0.06251753,
+    "blocked_cases": [
+      {
+        "corridor_key": "amsterdam-amstel-bridge",
+        "finding": "baseline_endpoint_gap_exceeds_lane_scale_cap:0.757694>0.500000"
+      },
+      {
+        "corridor_key": "sydney-george-park",
+        "finding": "baseline_endpoint_gap_exceeds_lane_scale_cap:0.602993>0.500000"
+      }
+    ],
+    "fallback_is_diagnostic_only": true
+  },
+  "connection_mode_findings": {
+    "structural_failure_count": 354,
+    "review_finding_count": 19513,
+    "structural_category_counts": {
+      "path_endpoint_gap": 335,
+      "controller_logic_missing": 17,
+      "internal_path_mode_permission_empty": 2
+    },
+    "review_category_counts": {
+      "path_width_transition_centerline_offset": 12177,
+      "ambiguous_target_lane_fanout": 2326,
+      "turn_lane_order_inversion": 1686,
+      "left_turn_not_curb_lane": 802,
+      "destination_lane_merge": 711,
+      "right_turn_not_innermost_lane": 699,
+      "incoming_motorized_lane_without_connection": 627,
+      "outgoing_motorized_lane_without_connection": 268,
+      "lane_rank_jump": 101,
+      "right_turn_not_curb_lane": 69,
+      "protected_green_foes": 28,
+      "foe_movements_share_link_index": 10,
+      "left_turn_not_innermost_lane": 9
+    },
+    "permission_empty_witnesses": [
+      {
+        "corridor_key": "amsterdam-museumplein",
+        "count": 1,
+        "interpretation": "The source lane, direct connection, internal path and target lane have no common permitted mode."
+      },
+      {
+        "corridor_key": "london-tower-bridge",
+        "count": 1,
+        "interpretation": "The source lane, direct connection, internal path and target lane have no common permitted mode."
+      }
+    ]
+  },
+  "comparison_to_first_machine_run": {
+    "first_run_commit": "8ca462b",
+    "connection_mode_before": {
+      "review_required": 13,
+      "fail": 14,
+      "not-run": 3
+    },
+    "connection_mode_after": {
+      "review_required": 1,
+      "fail": 26,
+      "not-run": 3
+    },
+    "runtime_status_counts_changed": false,
+    "replay_failure_set_changed": false,
+    "old_ambiguous_cases_reclassified": [
+      {
+        "corridor_key": "amsterdam-a10-amstel",
+        "new_machine_label": "defect",
+        "calibrated_endpoint_tolerance_m": 0.02914124,
+        "path_endpoint_gap_count": 5
+      },
+      {
+        "corridor_key": "sydney-harbour-bridge",
+        "new_machine_label": "defect",
+        "calibrated_endpoint_tolerance_m": 0.03210413,
+        "path_endpoint_gap_count": 3
+      }
+    ],
+    "interpretation": "The reclassification comes from source-calibrated Connection Mode invariants, not from a change in SUMO load or routeability. It remains a machine finding until blinded human review establishes precision."
+  },
+  "netconvert_replay_failures": [
+    "london-kings-cross",
+    "melbourne-royal-parade",
+    "sydney-cross-city-tunnel"
+  ],
+  "review_package": {
+    "blinded_dataset_sha256": "f877a10ba7b1f1fc2500f4dad49c0e2cae824f8dc6cbbaf7fadb8017ffd14401",
+    "unblinding_key_sha256": "b51fa7e4804434f340fb08b4fa09b3b40528998e1eb444bcf0299dec4f7ac8b3",
+    "bound_review_case_count": 27,
+    "human_review_decision_count": 0,
+    "human_adjudication_count": 0
+  },
+  "diagnostic_runtime_seconds": 1047.9,
+  "authoritative_ingolstadt_source_sha256_after_run": "52114063a325b26f1b50ca08d4686697cc03ea1767dce1dc3815f4a5ae362f57",
+  "claims_not_supported": [
+    "All 30 corridors are human-confirmed defects",
+    "Every calibrated endpoint outlier is a real-world modeling defect",
+    "The 19513 review findings are independent defects",
+    "Independent pedestrian-aware safety is complete",
+    "Stage 1 exit conditions are complete",
+    "AutoPrecision or AutoCoverage has been measured"
+  ]
+}

@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edges>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.191_227.against" from="hh_sib.s.54c0ad4da3dd2581.227" to="hh_sib.s.54c0ad4da3dd2581.191" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="2" speed="13.888889" spreadType="right" shape="566160.503,5933154.008 566165.28,5933143.63 566175.12,5933121.27 566175.189,5933121.113">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517022" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="191" />
+    <param key="torii:station_to_m" value="227" />
+  </edge>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.191_227.with" from="hh_sib.s.54c0ad4da3dd2581.191" to="hh_sib.s.54c0ad4da3dd2581.227" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="1" speed="13.888889" spreadType="right" shape="566175.189,5933121.113 566175.12,5933121.27 566165.28,5933143.63 566160.503,5933154.008">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517022" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="191" />
+    <param key="torii:station_to_m" value="227" />
+  </edge>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.227_261.against" from="hh_sib.s.54c0ad4da3dd2581.261" to="hh_sib.s.54c0ad4da3dd2581.227" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="2" speed="13.888889" spreadType="right" shape="566146.857,5933185.177 566160.24,5933154.58 566160.503,5933154.008">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517023" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="227" />
+    <param key="torii:station_to_m" value="261" />
+  </edge>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.227_261.with" from="hh_sib.s.54c0ad4da3dd2581.227" to="hh_sib.s.54c0ad4da3dd2581.261" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="2" speed="13.888889" spreadType="right" shape="566160.503,5933154.008 566160.24,5933154.58 566146.857,5933185.177">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517023" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="227" />
+    <param key="torii:station_to_m" value="261" />
+  </edge>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.261_346.against" from="hh_sib.n.242500071" to="hh_sib.s.54c0ad4da3dd2581.261" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="2" speed="13.888889" spreadType="right" shape="566117.41,5933264.86 566123.56,5933243.51 566130.92,5933222.64 566139.11,5933202.89 566146.857,5933185.177">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517024" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="261" />
+    <param key="torii:station_to_m" value="346" />
+  </edge>
+  <edge id="hh_sib.e.54c0ad4da3dd2581.261_346.with" from="hh_sib.s.54c0ad4da3dd2581.261" to="hh_sib.n.242500071" type="hh_sib.motor_vehicle" name="Osakaallee" numLanes="3" speed="13.888889" spreadType="right" shape="566146.857,5933185.177 566139.11,5933202.89 566130.92,5933222.64 566123.56,5933243.51 566117.41,5933264.86">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517024" />
+    <param key="torii:hh_sib_road_key" value="O219" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="261" />
+    <param key="torii:station_to_m" value="346" />
+  </edge>
+  <edge id="hh_sib.e.56842a1025134032.0_176.against" from="hh_sib.n.242514481" to="hh_sib.n.242510300" type="hh_sib.motor_vehicle" name="Großer Grasbrook" numLanes="1" speed="13.888889" spreadType="right" shape="565839.4,5932992.98 565816.8,5933160.61">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242510300:242514481:G485:8568:ast-0:len-176" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517010" />
+    <param key="torii:hh_sib_road_key" value="G485" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="176" />
+  </edge>
+  <edge id="hh_sib.e.56842a1025134032.0_176.with" from="hh_sib.n.242510300" to="hh_sib.n.242514481" type="hh_sib.motor_vehicle" name="Großer Grasbrook" numLanes="1" speed="13.888889" spreadType="right" shape="565816.8,5933160.61 565839.4,5932992.98">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242510300:242514481:G485:8568:ast-0:len-176" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517010" />
+    <param key="torii:hh_sib_road_key" value="G485" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="176" />
+  </edge>
+  <edge id="hh_sib.e.717050612f6d38b4.0_99.against" from="hh_sib.s.717050612f6d38b4.99" to="hh_sib.n.242516613" type="hh_sib.motor_vehicle" name="Am Sandtorpark" numLanes="3" speed="13.888889" spreadType="right" shape="565978.838,5933091.305 565975.46,5933098.02 565960.19,5933134.14 565944.57,5933171.56 565941.55,5933179.02 565940.39,5933182.79">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517025" />
+    <param key="torii:hh_sib_road_key" value="A709" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="99" />
+  </edge>
+  <edge id="hh_sib.e.717050612f6d38b4.0_99.with" from="hh_sib.n.242516613" to="hh_sib.s.717050612f6d38b4.99" type="hh_sib.motor_vehicle" name="Am Sandtorpark" numLanes="1" speed="13.888889" spreadType="right" shape="565940.39,5933182.79 565941.55,5933179.02 565944.57,5933171.56 565960.19,5933134.14 565975.46,5933098.02 565978.838,5933091.305">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517025" />
+    <param key="torii:hh_sib_road_key" value="A709" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="99" />
+  </edge>
+  <edge id="hh_sib.e.717050612f6d38b4.99_152.against" from="hh_sib.n.242514393" to="hh_sib.s.717050612f6d38b4.99" type="hh_sib.motor_vehicle" name="Am Sandtorpark" numLanes="2" speed="13.888889" spreadType="right" shape="566003.21,5933044.08 565999.18,5933052.13 565993.91,5933061.85 565983.51,5933082.02 565978.838,5933091.305">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517026" />
+    <param key="torii:hh_sib_road_key" value="A709" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="99" />
+    <param key="torii:station_to_m" value="152" />
+  </edge>
+  <edge id="hh_sib.e.717050612f6d38b4.99_152.with" from="hh_sib.s.717050612f6d38b4.99" to="hh_sib.n.242514393" type="hh_sib.motor_vehicle" name="Am Sandtorpark" numLanes="1" speed="13.888889" spreadType="right" shape="565978.838,5933091.305 565983.51,5933082.02 565993.91,5933061.85 565999.18,5933052.13 566003.21,5933044.08">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517026" />
+    <param key="torii:hh_sib_road_key" value="A709" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="99" />
+    <param key="torii:station_to_m" value="152" />
+  </edge>
+  <edge id="hh_sib.e.8d3e3c45a0d51edc.0_138.against" from="hh_sib.n.242514394" to="hh_sib.n.242516617" type="hh_sib.motor_vehicle" name="Singapurstraße" numLanes="1" speed="13.888889" spreadType="right" shape="566065.18,5933071.94 566065.84,5933076.37 566064.14,5933082.85 566033.53,5933154.5 566014.21,5933199.42">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516617:242514394:S942:9919:ast-0:len-138" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517029" />
+    <param key="torii:hh_sib_road_key" value="S942" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="138" />
+  </edge>
+  <edge id="hh_sib.e.8d3e3c45a0d51edc.0_138.with" from="hh_sib.n.242516617" to="hh_sib.n.242514394" type="hh_sib.motor_vehicle" name="Singapurstraße" numLanes="1" speed="13.888889" spreadType="right" shape="566014.21,5933199.42 566033.53,5933154.5 566064.14,5933082.85 566065.84,5933076.37 566065.18,5933071.94">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242516617:242514394:S942:9919:ast-0:len-138" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517029" />
+    <param key="torii:hh_sib_road_key" value="S942" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="138" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.660_698.against" from="hh_sib.s.ccadcbda1162eb68.698" to="hh_sib.s.ccadcbda1162eb68.660" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="2" speed="13.888889" spreadType="right" shape="565846.046,5933171.281 565840.14,5933170.27 565808.187,5933167.032">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497212" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="660" />
+    <param key="torii:station_to_m" value="698" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.660_698.with" from="hh_sib.s.ccadcbda1162eb68.660" to="hh_sib.s.ccadcbda1162eb68.698" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="2" speed="13.888889" spreadType="right" shape="565808.187,5933167.032 565840.14,5933170.27 565846.046,5933171.281">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497212" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="660" />
+    <param key="torii:station_to_m" value="698" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.698_723.against" from="hh_sib.s.ccadcbda1162eb68.723" to="hh_sib.s.ccadcbda1162eb68.698" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="2" speed="13.888889" spreadType="right" shape="565870.756,5933175.519 565870.57,5933175.48 565846.046,5933171.281">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497213" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="698" />
+    <param key="torii:station_to_m" value="723" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.698_723.with" from="hh_sib.s.ccadcbda1162eb68.698" to="hh_sib.s.ccadcbda1162eb68.723" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="3" speed="13.888889" spreadType="right" shape="565846.046,5933171.281 565870.57,5933175.48 565870.756,5933175.519">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497213" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="698" />
+    <param key="torii:station_to_m" value="723" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.723_811.against" from="hh_sib.s.ccadcbda1162eb68.811" to="hh_sib.s.ccadcbda1162eb68.723" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="2" speed="13.888889" spreadType="right" shape="565956.447,5933196.387 565947.76,5933193.46 565930.27,5933189.14 565903.06,5933182.23 565870.756,5933175.519">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497214" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="723" />
+    <param key="torii:station_to_m" value="811" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.723_811.with" from="hh_sib.s.ccadcbda1162eb68.723" to="hh_sib.s.ccadcbda1162eb68.811" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="3" speed="13.888889" spreadType="right" shape="565870.756,5933175.519 565903.06,5933182.23 565930.27,5933189.14 565947.76,5933193.46 565956.447,5933196.387">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497214" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="723" />
+    <param key="torii:station_to_m" value="811" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.811_986.against" from="hh_sib.n.242500071" to="hh_sib.s.ccadcbda1162eb68.811" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="3" speed="13.888889" spreadType="right" shape="566117.41,5933264.86 566106.61,5933262.84 566080.33,5933249.28 566073.36,5933244.75 566030.76,5933226.71 565999.89,5933214.37 565967.35,5933201.75 565960.88,5933197.88 565956.447,5933196.387">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497215" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="811" />
+    <param key="torii:station_to_m" value="986" />
+  </edge>
+  <edge id="hh_sib.e.ccadcbda1162eb68.811_986.with" from="hh_sib.s.ccadcbda1162eb68.811" to="hh_sib.n.242500071" type="hh_sib.motor_vehicle" name="Am Sandtorkai" numLanes="3" speed="13.888889" spreadType="right" shape="565956.447,5933196.387 565960.88,5933197.88 565967.35,5933201.75 565999.89,5933214.37 566030.76,5933226.71 566073.36,5933244.75 566080.33,5933249.28 566106.61,5933262.84 566117.41,5933264.86">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16497215" />
+    <param key="torii:hh_sib_road_key" value="A326" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="811" />
+    <param key="torii:station_to_m" value="986" />
+  </edge>
+  <edge id="hh_sib.e.e9870d90276e10c9.0_68.against" from="hh_sib.n.242514394" to="hh_sib.n.242514393" type="hh_sib.motor_vehicle" name="Tokiostraße" numLanes="1" speed="13.888889" spreadType="right" shape="566065.18,5933071.94 566003.21,5933044.08">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242514393:242514394:T235:9920:ast-0:len-68" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517028" />
+    <param key="torii:hh_sib_road_key" value="T235" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="68" />
+  </edge>
+  <edge id="hh_sib.e.e9870d90276e10c9.0_68.with" from="hh_sib.n.242514393" to="hh_sib.n.242514394" type="hh_sib.motor_vehicle" name="Tokiostraße" numLanes="1" speed="13.888889" spreadType="right" shape="566003.21,5933044.08 566065.18,5933071.94">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242514393:242514394:T235:9920:ast-0:len-68" />
+    <param key="torii:carriageway_code_raw" value="1" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517028" />
+    <param key="torii:hh_sib_road_key" value="T235" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="68" />
+  </edge>
+  <edge id="hh_sib.e.eb5f18eab63a6f7b.0_225.against" from="hh_sib.n.242615095" to="hh_sib.n.242500071" type="hh_sib.motor_vehicle" name="Brooktorkai" numLanes="2" speed="13.888889" spreadType="right" shape="566319.82,5933367.23 566311.74,5933364.13 566280.43,5933349.23 566217.4,5933317.15 566166.55,5933291.7 566156.82,5933283.05 566128.09,5933268.46 566117.41,5933264.86">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500071:242615095:B623:1124:ast-0:len-225" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517481" />
+    <param key="torii:hh_sib_road_key" value="B623" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="against_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="225" />
+  </edge>
+  <edge id="hh_sib.e.eb5f18eab63a6f7b.0_225.with" from="hh_sib.n.242500071" to="hh_sib.n.242615095" type="hh_sib.motor_vehicle" name="Brooktorkai" numLanes="2" speed="13.888889" spreadType="right" shape="566117.41,5933264.86 566128.09,5933268.46 566156.82,5933283.05 566166.55,5933291.7 566217.4,5933317.15 566280.43,5933349.23 566311.74,5933364.13 566319.82,5933367.23">
+    <param key="origId" value="official.hh_sib:strassennetz_gesamt:242500071:242615095:B623:1124:ast-0:len-225" />
+    <param key="torii:carriageway_code_raw" value="2" />
+    <param key="torii:connection_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_feature_id" value="16517481" />
+    <param key="torii:hh_sib_road_key" value="B623" />
+    <param key="torii:source_sha256" value="cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16" />
+    <param key="torii:speed_rule_raw" value="50 km/h" />
+    <param key="torii:station_direction" value="with_stationing" />
+    <param key="torii:station_from_m" value="0" />
+    <param key="torii:station_to_m" value="225" />
+  </edge>
+</edges>

@@ -1,0 +1,21 @@
+Loading net-file from 'C:\Users\qhu\Documents\torii\artifacts\intersection_scene_phase1_20260710\intersection_scene.net.xml' ... done (7ms).
+Loading route-files incrementally from 'C:\Users\qhu\Documents\torii\artifacts\intersection_scene_phase1_20260710\intersection_scene.rou.xml'
+Loading done.
+Simulation version 1.25.0 started with time: 0.00.
+Simulation ended at time: 600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 0.07s
+ Real time factor: 8571.43
+ UPS: 57414.285714
+Vehicles:
+ Inserted: 78
+ Running: 0
+ Waiting: 0
+Statistics (avg of 78):
+ RouteLength: 380.79
+ Speed: 7.78
+ Duration: 51.52
+ WaitingTime: 12.53
+ TimeLoss: 23.10
+ DepartDelay: 0.00

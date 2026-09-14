@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<configuration>
+  <input>
+    <net-file value="C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference.net.xml" />
+    <route-files value="C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference.rou.xml" />
+  </input>
+  <output>
+    <summary-output value="C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference_summary.xml" />
+    <tripinfo-output value="C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference_tripinfo.xml" />
+  </output>
+  <time>
+    <begin value="0" />
+    <end value="600" />
+  </time>
+  <processing>
+    <time-to-teleport value="-1" />
+  </processing>
+  <report>
+    <duration-log.statistics value="true" />
+    <no-step-log value="true" />
+  </report>
+</configuration>

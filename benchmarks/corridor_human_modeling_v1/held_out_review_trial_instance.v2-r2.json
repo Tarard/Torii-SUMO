@@ -1,0 +1,20 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "base_review_policy_sha256": "ef32d15b9c2d7deb3c7076029db2d2acf759c47b59d8b9416e4230412eda2414",
+  "blinding_seed_sha256": "61e15ac878588d6f2e613dfa9330d09c23766499140fb2909e5ada2506e924f0",
+  "execution_parent_sha256": "0c551de8774ea94e25915239fe3c0c4a2be817d74af024952cc9b10968c3e296",
+  "finding_counts_consulted_for_sampling": false,
+  "human_decisions_present": false,
+  "machine_labels_consulted_for_sampling": false,
+  "predecessor_trial_executed": false,
+  "predecessor_trial_id": "review_d1cb2890ff41e6ebd8c03e08",
+  "sampling_not_executed_before_freeze": true,
+  "schema": "torii.corridor.held-out-review-trial-instance/v2-r2",
+  "seed_generated_once_before_sampling": true,
+  "stage_1_exit_requires_human_validation": true,
+  "stage_1m_machine_milestone_only": true,
+  "study_sampling_policy_sha256": "82e3bcbc50e4eeb352d265a34856584b905e113d7031862d8228c922be7d6be7",
+  "successor_reason": "predecessor-seed-preimage-unavailable-and-source-protocol-corrected",
+  "thresholds_inherited_without_change": true,
+  "trial_id": "review_a784b285271ca7f510ed79f2"
+}

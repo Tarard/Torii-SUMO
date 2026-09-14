@@ -1,0 +1,57 @@
+{
+  "case_id": "ingolstadt_center_reference_matched",
+  "claim_status": "construction-invalid",
+  "candidate_network_id": "torii_reference_visual_detail",
+  "teacher_network_id": "tum_reference",
+  "promotion_decision": "blocked_semantic_gaps",
+  "gaps": [
+    {
+      "gap_id": "walkingarea_crossing",
+      "status": "blocked",
+      "tum": {
+        "crossing_edge_count": 620,
+        "walkingarea_edge_count": 1648
+      },
+      "candidate": {
+        "crossing_edge_count": 0,
+        "walkingarea_edge_count": 0
+      },
+      "delta": {
+        "crossing_edge_count": -620,
+        "walkingarea_edge_count": -1648
+      },
+      "next_gate": "replay_or_template pedestrian crossing and walkingarea semantics before NetEdit promotion"
+    },
+    {
+      "gap_id": "controlled_tls_connections",
+      "status": "blocked",
+      "tum": {
+        "controlled_connection_count": 550,
+        "tlLogic_phase_count": 262
+      },
+      "candidate": {
+        "controlled_connection_count": 152,
+        "tlLogic_phase_count": 113
+      },
+      "delta": {
+        "controlled_connection_count": -398,
+        "tlLogic_phase_count": -149
+      },
+      "next_gate": "compare TLS linkIndex and phase semantics on selected small junction probes"
+    },
+    {
+      "gap_id": "turnaround_dir_t",
+      "status": "blocked",
+      "tum": {
+        "dir_t": 3740
+      },
+      "candidate": {
+        "dir_t": 4
+      },
+      "delta": {
+        "dir_t": -3736
+      },
+      "next_gate": "keep dir=t as optional turnaround semantics and audit it separately from ordinary s/l/r route completeness"
+    }
+  ]
+}

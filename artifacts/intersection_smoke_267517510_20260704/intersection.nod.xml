@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<nodes><node id="core_267517510" type="traffic_light" x="15.80" y="-23.46" /><node id="support_core_267517510" type="traffic_light" x="15.80" y="-23.46" /><node id="leg_1" x="28.85" y="41.74" type="priority" /><node id="leg_2" x="67.39" y="-45.08" type="priority" /><node id="leg_3" x="71.37" y="-56.41" type="priority" /><node id="leg_4" x="-3.45" y="-69.47" type="priority" /><node id="leg_5" x="-72.85" y="5.07" type="priority" /><node id="leg_6" x="-86.35" y="21.25" type="priority" /></nodes>

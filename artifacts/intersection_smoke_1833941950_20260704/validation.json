@@ -1,0 +1,47 @@
+{
+  "status": "blocked",
+  "sumo_load_status": "pass",
+  "route_probe_status": "skipped",
+  "approach_count": 8,
+  "movement_count": 56,
+  "missing_movement_count": 6,
+  "forbidden_movement_count": 40,
+  "internal_fragment_count": 4,
+  "duplicate_junction_count": 0,
+  "disconnected_edge_count": 6,
+  "tls_linkindex_status": "fail",
+  "approach_mode_counts": {
+    "passenger": 3,
+    "bicycle": 2,
+    "pedestrian": 2,
+    "bicycle+pedestrian": 1
+  },
+  "vehicle_approach_count": 3,
+  "vehicle_topology_type": "T3",
+  "legal_movement_mode_counts": {
+    "passenger": 6,
+    "bicycle": 6,
+    "pedestrian": 4
+  },
+  "forbidden_cross_mode_movement_count": 38,
+  "warning_records": [
+    {
+      "message": "compiled net tlLogic state length does not match controlled connection count",
+      "severity": "blocking",
+      "source": "torii"
+    },
+    {
+      "message": "custom plain tlLogic was omitted because netconvert crossing guessing was enabled",
+      "severity": "blocking",
+      "source": "torii"
+    }
+  ],
+  "warning_count_by_severity": {
+    "blocking": 2
+  },
+  "blocking_error_count": 21,
+  "warnings": [
+    "compiled net tlLogic state length does not match controlled connection count",
+    "custom plain tlLogic was omitted because netconvert crossing guessing was enabled"
+  ]
+}

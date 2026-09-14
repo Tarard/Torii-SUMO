@@ -1,0 +1,34 @@
+{
+  "allowed_technical_failure_reasons": [
+    "source-artifact-unavailable",
+    "bbox-outside-frozen-extract",
+    "source-extraction-failed",
+    "netconvert-build-failed",
+    "semantic-replay-invalid",
+    "artifact-closure-incomplete"
+  ],
+  "automatic_promotion_gate": "blocked",
+  "failed_attempts_are_retained": true,
+  "fallback_requires_prior_failure_record": true,
+  "minimum_complete_replacement_count": 3,
+  "parent_corpus_sha256": "df3480e4e6ababfce43dfd699cdcd75f41ec2dda8b2e1fa64cdf408b3460c618",
+  "policy_id": "policy_1aef9325aadb6c461cc11fd0",
+  "prohibited_selection_signals": [
+    "machine_label",
+    "finding_count",
+    "finding_severity",
+    "human_decision",
+    "reviewer_visibility"
+  ],
+  "public_selection_seed": "torii-stage1m-held-out-review-v2-deterministic-reserve-selection-20260714",
+  "ranking_algorithm": "sha256(seed|invalid-corridor-key|selection-id)-ascending",
+  "replay_invalid_excluded_from_quality_denominator": true,
+  "required_match_fields": [
+    "city_source_id",
+    "morphology",
+    "traffic_side",
+    "mode_features"
+  ],
+  "reserve_corpus_sha256": "be9b3f30ef4ac4aae3f5350d8b415edb89a31724add8c018a6b494798f9b26b5",
+  "schema": "torii.corridor.held-out-replacement-policy/v2"
+}

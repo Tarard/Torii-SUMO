@@ -1,0 +1,86 @@
+{
+  "schema": "torii.corridor.real-held-out-corpus-snapshot-evidence/v1",
+  "recorded_at": "2026-07-14",
+  "corpus_id": "manifest_e2562c4125f9f157ece520d5",
+  "corpus_spec_sha256": "df3480e4e6ababfce43dfd699cdcd75f41ec2dda8b2e1fa64cdf408b3460c618",
+  "held_out_review_policy_sha256": "d9f4b77696bcb8d9fd3ad49a84b7c254a9172e48c774a990551dadd4c552ba6a",
+  "snapshot_report_sha256": "c2138ae6ed042ae2beb7c8cd9417e3e67e1f9596970eee05e9db9d3a5f04dbe8",
+  "snapshot_manifest_sha256": "e51bfa1d5c9796205383499f9d4e2abd391eace13cfed1c68cf77dfe95a9ff6a",
+  "status": "pass",
+  "blockers": [],
+  "identity_closure": {
+    "city_extract_count": 6,
+    "provider_identity_pass_count": 6,
+    "corridor_count": 30,
+    "reference_complete_corridor_count": 30,
+    "unconfirmed_preregistered_feature_case_count": 0,
+    "manifest_artifact_count": 40,
+    "manifest_hash_failure_count": 0,
+    "source_reused_count": 0
+  },
+  "traffic_side_city_counts": {
+    "left": 3,
+    "right": 3
+  },
+  "morphology_corridor_counts": {
+    "bridge-tunnel": 10,
+    "divided-arterial": 2,
+    "historic-core": 6,
+    "multimodal": 4,
+    "ramp-interchange": 5,
+    "tram-rail": 3
+  },
+  "preregistered_feature_case_counts": {
+    "bicycle": 26,
+    "bridge": 10,
+    "pedestrian": 24,
+    "rail": 16,
+    "ramp": 6,
+    "tunnel": 6
+  },
+  "city_extracts": [
+    {
+      "source_id": "berlin-bbbike-20260711",
+      "sha256": "57bc53cca3963258350c51ac5dcc48aa17344eadcabe3dbc9a5e1562ae953032",
+      "content_length_bytes": 180357428,
+      "provider_identity_matched": true
+    },
+    {
+      "source_id": "amsterdam-bbbike-20260711",
+      "sha256": "2e6aa37582fa9b51da2938d9618e542bb79b91c5feba5c4d8c0ca1f9aed69fb5",
+      "content_length_bytes": 141948365,
+      "provider_identity_matched": true
+    },
+    {
+      "source_id": "paris-bbbike-20260711",
+      "sha256": "4f120a861b045b02ea6ae59da4131d2263d78c03c4b87099e73da77f0b8177fb",
+      "content_length_bytes": 239050771,
+      "provider_identity_matched": true
+    },
+    {
+      "source_id": "london-bbbike-20260711",
+      "sha256": "56375af82e75ec79526973615aebd46abe04e6eb70e256b6c9b8c1eae9c584cb",
+      "content_length_bytes": 196666081,
+      "provider_identity_matched": true
+    },
+    {
+      "source_id": "melbourne-bbbike-20260711",
+      "sha256": "0dca1dec1eae7248443df6aeaa5cd3fbfdcd19bf237f0e67d341a0c039cc6904",
+      "content_length_bytes": 86429050,
+      "provider_identity_matched": true
+    },
+    {
+      "source_id": "sydney-bbbike-20260711",
+      "sha256": "337d2d24e17ceed8049c1fa3e3fd7fab7b9e99911f43c87463b6133f5d39457d",
+      "content_length_bytes": 55931710,
+      "provider_identity_matched": true
+    }
+  ],
+  "license_notice": "© OpenStreetMap contributors; ODbL",
+  "claims_not_supported": [
+    "All 30 SUMO networks are correctly modeled",
+    "Any corridor has passed independent human review",
+    "Stage 1 exit conditions are complete",
+    "Automatic repair precision has been measured"
+  ]
+}

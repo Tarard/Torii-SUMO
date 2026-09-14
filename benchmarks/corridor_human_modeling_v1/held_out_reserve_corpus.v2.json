@@ -1,0 +1,329 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "frozen_before_replacement_execution": true,
+  "parent_corpus_sha256": "df3480e4e6ababfce43dfd699cdcd75f41ec2dda8b2e1fa64cdf408b3460c618",
+  "provider_attribution": "© OpenStreetMap contributors",
+  "reserve_corpus_id": "manifest_febfd93395254fd7fb28197a",
+  "schema": "torii.corridor.held-out-reserve-corpus/v2",
+  "selection_independent_of_machine_results": true,
+  "slots": [
+    {
+      "candidates": [
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": -0.124,
+              "north": 51.5342,
+              "schema": "torii.corridor.contracts/v1",
+              "south": 51.5222,
+              "west": -0.1434
+            },
+            "center_lat": 51.5282,
+            "center_lon": -0.1337,
+            "city_source_id": "london-bbbike-20260711",
+            "corridor_key": "london-euston",
+            "label": "Euston",
+            "morphology": "tram-rail",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_4a4462010fc9d8307e59153c"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": -0.0726,
+              "north": 51.5238,
+              "schema": "torii.corridor.contracts/v1",
+              "south": 51.5118,
+              "west": -0.092
+            },
+            "center_lat": 51.5178,
+            "center_lon": -0.0823,
+            "city_source_id": "london-bbbike-20260711",
+            "corridor_key": "london-liverpool-street",
+            "label": "Liverpool Street",
+            "morphology": "tram-rail",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_dc76fac5446ea7fc1e1d3003"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": -0.1344,
+              "north": 51.5012,
+              "schema": "torii.corridor.contracts/v1",
+              "south": 51.4892,
+              "west": -0.1538
+            },
+            "center_lat": 51.4952,
+            "center_lon": -0.1441,
+            "city_source_id": "london-bbbike-20260711",
+            "corridor_key": "london-victoria-station",
+            "label": "Victoria station",
+            "morphology": "tram-rail",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_7a4b149cf43ade659f5ae7f7"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        }
+      ],
+      "invalid_corridor_key": "london-kings-cross",
+      "invalid_reason": "semantic-replay-invalid",
+      "invalid_selection_id": "scope_a51954f45045f6c56b6fdc45",
+      "required_stratum": {
+        "city_source_id": "london-bbbike-20260711",
+        "mode_features": [
+          "pedestrian",
+          "bicycle",
+          "rail"
+        ],
+        "morphology": "tram-rail",
+        "schema": "torii.corridor.contracts/v1",
+        "traffic_side": "left"
+      },
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "candidates": [
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 144.9789,
+              "north": -37.8238,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -37.8358,
+              "west": 144.9637
+            },
+            "center_lat": -37.8298,
+            "center_lon": 144.9713,
+            "city_source_id": "melbourne-bbbike-20260711",
+            "corridor_key": "melbourne-st-kilda-domain",
+            "label": "St Kilda Road and Domain",
+            "morphology": "divided-arterial",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_f88f31f3d09ba6162b5a1d3e"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 144.9566,
+              "north": -37.7872,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -37.7992,
+              "west": 144.9414
+            },
+            "center_lat": -37.7932,
+            "center_lon": 144.949,
+            "city_source_id": "melbourne-bbbike-20260711",
+            "corridor_key": "melbourne-flemington-elliott",
+            "label": "Flemington Road and Elliott Avenue",
+            "morphology": "divided-arterial",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_daea99e184fa5ea023a0c0a4"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 145.0196,
+              "north": -37.8538,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -37.8658,
+              "west": 145.0044
+            },
+            "center_lat": -37.8598,
+            "center_lon": 145.012,
+            "city_source_id": "melbourne-bbbike-20260711",
+            "corridor_key": "melbourne-dandenong-orrong",
+            "label": "Dandenong Road and Orrong Road",
+            "morphology": "divided-arterial",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "rail"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_c6c5e1e65a9a552589d51319"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        }
+      ],
+      "invalid_corridor_key": "melbourne-royal-parade",
+      "invalid_reason": "semantic-replay-invalid",
+      "invalid_selection_id": "scope_78cfe45f3f16203803dd879c",
+      "required_stratum": {
+        "city_source_id": "melbourne-bbbike-20260711",
+        "mode_features": [
+          "pedestrian",
+          "bicycle",
+          "rail"
+        ],
+        "morphology": "divided-arterial",
+        "schema": "torii.corridor.contracts/v1",
+        "traffic_side": "left"
+      },
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "candidates": [
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 151.1888,
+              "north": -33.8088,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -33.8208,
+              "west": 151.1742
+            },
+            "center_lat": -33.8148,
+            "center_lon": 151.1815,
+            "city_source_id": "sydney-bbbike-20260711",
+            "corridor_key": "sydney-lane-cove-tunnel",
+            "label": "Lane Cove tunnel",
+            "morphology": "bridge-tunnel",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "tunnel"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_4fc379c495073f7625f237cd"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 151.1088,
+              "north": -33.935,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -33.947,
+              "west": 151.0942
+            },
+            "center_lat": -33.941,
+            "center_lon": 151.1015,
+            "city_source_id": "sydney-bbbike-20260711",
+            "corridor_key": "sydney-m5-east-kingsgrove",
+            "label": "M5 East at Kingsgrove",
+            "morphology": "bridge-tunnel",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "tunnel"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_703379cba90731b448de2716"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        },
+        {
+          "preregistered_before_machine_execution": true,
+          "schema": "torii.corridor.contracts/v1",
+          "selection": {
+            "bbox": {
+              "east": 151.2197,
+              "north": -33.8774,
+              "schema": "torii.corridor.contracts/v1",
+              "south": -33.8894,
+              "west": 151.2051
+            },
+            "center_lat": -33.8834,
+            "center_lon": 151.2124,
+            "city_source_id": "sydney-bbbike-20260711",
+            "corridor_key": "sydney-eastern-distributor-surry-hills",
+            "label": "Eastern Distributor at Surry Hills",
+            "morphology": "bridge-tunnel",
+            "preregistered_feature_targets": [
+              "pedestrian",
+              "bicycle",
+              "tunnel"
+            ],
+            "schema": "torii.corridor.contracts/v1",
+            "selection_basis": "Landmark-centered reserve corridor frozen before replacement machine execution. Eligibility is determined only by the declared stratum and technical reproducibility, never by findings or human visibility.",
+            "selection_id": "scope_fe7a0a420e826c470ef01f1d"
+          },
+          "selection_uses_machine_output": false,
+          "traffic_side": "left"
+        }
+      ],
+      "invalid_corridor_key": "sydney-cross-city-tunnel",
+      "invalid_reason": "semantic-replay-invalid",
+      "invalid_selection_id": "scope_f6c3767dbd66180090580eeb",
+      "required_stratum": {
+        "city_source_id": "sydney-bbbike-20260711",
+        "mode_features": [
+          "pedestrian",
+          "bicycle",
+          "tunnel"
+        ],
+        "morphology": "bridge-tunnel",
+        "schema": "torii.corridor.contracts/v1",
+        "traffic_side": "left"
+      },
+      "schema": "torii.corridor.contracts/v1"
+    }
+  ]
+}

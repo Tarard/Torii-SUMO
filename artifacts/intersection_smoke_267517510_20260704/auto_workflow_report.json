@@ -1,0 +1,247 @@
+{
+  "detected_workflow": "intersection_clean",
+  "workflow_description": "Compile a local or bbox-sourced OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, .net.xml when available, and validation artifacts.",
+  "autonomy_mode": "full-local-run",
+  "user_request": "Clean OSM node 267517510 from this OSM bbox intersection into a SUMO intersection net with TLS and connection semantics",
+  "tool_chain": [
+    "sumo_osm_build_network",
+    "sumo_intersection_clean",
+    "sumo_intersection_validate"
+  ],
+  "output_dir": "artifacts\\intersection_smoke_267517510_20260704",
+  "osm_source_build_status": "pass",
+  "osm_source_build_result": {
+    "status": "pass",
+    "claim_status": "diagnostic-demo",
+    "bbox": "11.4239610,48.7706731,11.4279610,48.7746731",
+    "road_classes": [
+      "primary",
+      "primary_link",
+      "secondary",
+      "secondary_link",
+      "tertiary",
+      "tertiary_link",
+      "trunk",
+      "trunk_link"
+    ],
+    "allowed_way_ids_count": null,
+    "source_osm_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\osm\\intersection_source_bbox.osm.xml.gz",
+    "filtered_osm_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\osm\\intersection_source_filtered.osm.xml.gz",
+    "net_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\sumo\\intersection_source.net.xml",
+    "query_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\logs\\intersection_source_overpass_query.ql",
+    "command_record": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\logs\\intersection_source_commands.txt",
+    "netconvert_log": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\logs\\intersection_source_netconvert.log",
+    "filter_stats": {
+      "kept_nodes": 11,
+      "kept_ways": 1,
+      "dropped_ways": 47,
+      "kept_relations": 1,
+      "trimmed_ways": 1,
+      "dropped_ways_outside_bbox": 0,
+      "dropped_nodes_outside_bbox": 14
+    },
+    "overpass": {
+      "strategy": "tiled-retry-merge",
+      "tile_count": 1,
+      "retry_count": 0,
+      "max_tile_area_km2": 2500.0,
+      "max_retries": 2,
+      "merged_bytes": 37057,
+      "tiles": [
+        {
+          "tile_index": 1,
+          "bbox": "11.424,48.7707,11.428,48.7747",
+          "attempts": 1,
+          "bytes": 36205
+        }
+      ]
+    },
+    "netconvert_profile": "vehicle_core",
+    "netconvert_profile_options": [],
+    "netconvert": {
+      "command": [
+        "netconvert",
+        "--osm-files",
+        "osm/intersection_source_filtered.osm.xml.gz",
+        "--output-file",
+        "sumo/intersection_source.net.xml",
+        "--proj.utm",
+        "--no-turnarounds",
+        "--osm.all-attributes",
+        "--tls.join",
+        "--tls.join-dist",
+        "35",
+        "--verbose"
+      ],
+      "cwd": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source",
+      "status": "pass",
+      "returncode": 0,
+      "stdout": "Parsing types from 'C:\\Program Files (x86)\\Eclipse\\Sumo\\/data/typemap/osmNetconvert.typ.xml' ... done.\nParsing nodes from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ... done (3ms).\nParsing edges from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ... done (1ms).\nRemoving duplicate edges ... done.\nParsing relations from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ...\n done (1ms).\n Import done:\n   6 nodes loaded.\n   38 types loaded.\n   10 edges loaded.\nProj projection parameters used: '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'.\nRemoving self-loops ... done (0ms).\nRemoving empty nodes ... done (1ms).\n   0 nodes removed.\nMoving network to origin ... done (1ms).\nComputing turning directions ... done (1ms).\nAssigning nodes to traffic lights ... done (0ms).\nSorting nodes' edges ... done (0ms).\nComputing node shapes ... done (1ms).\nComputing edge shapes ... done (0ms).\nComputing node types ... done (0ms).\nComputing priorities ... done (0ms).\nComputing approached edges ... done (1ms).\nGuessing and setting roundabouts ... done (0ms).\nComputing approaching lanes ... done (0ms).\nDividing of lanes on approached lanes ... done (0ms).\nProcessing turnarounds ... done (0ms).\nRechecking of lane endings ... done (1ms).\nJoining traffic light nodes ... done (0ms).\nComputing traffic light control information ... done (0ms).\nComputing node logics ... done (0ms).\nComputing traffic light logics ... done (1ms).\n 4 traffic light(s) computed.\nBuilding inner edges ... done (0ms).\n-----------------------------------------------------\nSummary:\n Node type statistics:\n  Unregulated junctions       : 0\n  Dead-end junctions          : 2\n  Priority junctions          : 0\n  Right-before-left junctions : 0\n  Traffic light junctions      : 4\n Network boundaries:\n  Original boundary  : 11.42,48.77,11.43,48.77\n  Applied offset     : -678111.04,-5404983.31\n  Converted boundary : 0.00,0.00,273.42,91.07\n-----------------------------------------------------\nWriting network ... done (9ms).\nSuccess.\n",
+      "stderr": "Warning: No node found for reference '371774881' in relation '17853039'.\nWarning: Ignoring restriction relation '17853039' with unknown via.\n",
+      "error": ""
+    },
+    "warnings": []
+  },
+  "intersection_source_osm_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\osm\\intersection_source_bbox.osm.xml.gz",
+  "seed_osm_node_id": "267517510",
+  "status": "blocked",
+  "claim_status": "blocked",
+  "execution_status": "executed",
+  "tool_called": "sumo_intersection_clean",
+  "workflow_result": {
+    "status": "blocked",
+    "claim_status": "blocked",
+    "intersection_id": "core_267517510",
+    "topology_type": "complex",
+    "approach_count": 6,
+    "movement_count": 30,
+    "sumo_load_status": "pass",
+    "route_probe_status": "skipped",
+    "tls_linkindex_status": "fail",
+    "missing_movement_count": 4,
+    "disconnected_edge_count": 4,
+    "internal_fragment_count": 2,
+    "approach_mode_counts": {
+      "passenger": 3,
+      "bicycle+pedestrian": 3
+    },
+    "vehicle_approach_count": 3,
+    "vehicle_topology_type": "T3",
+    "legal_movement_mode_counts": {
+      "passenger": 6,
+      "bicycle+pedestrian": 6
+    },
+    "forbidden_cross_mode_movement_count": 18,
+    "restriction_warning_count": 0,
+    "direction_blocked_approach_count": 0,
+    "custom_tllogic_applied": false,
+    "warning_count_by_severity": {
+      "blocking": 3
+    },
+    "blocking_error_count": 9,
+    "warnings": [
+      "compiled net tlLogic state length does not match controlled connection count",
+      "custom plain tlLogic was omitted because netconvert crossing guessing was enabled",
+      "missing SUMO crossing edge for OSM pedestrian crossing support"
+    ],
+    "intersection_ir_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_ir.json",
+    "validation_file": "artifacts\\intersection_smoke_267517510_20260704\\validation.json",
+    "net_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection.net.xml"
+  },
+  "intersection_id": "core_267517510",
+  "topology_type": "complex",
+  "approach_count": 6,
+  "movement_count": 30,
+  "sumo_load_status": "pass",
+  "route_probe_status": "skipped",
+  "tls_linkindex_status": "fail",
+  "missing_movement_count": 4,
+  "disconnected_edge_count": 4,
+  "internal_fragment_count": 2,
+  "approach_mode_counts": {
+    "passenger": 3,
+    "bicycle+pedestrian": 3
+  },
+  "vehicle_approach_count": 3,
+  "vehicle_topology_type": "T3",
+  "legal_movement_mode_counts": {
+    "passenger": 6,
+    "bicycle+pedestrian": 6
+  },
+  "forbidden_cross_mode_movement_count": 18,
+  "net_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection.net.xml",
+  "intersection_ir_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_ir.json",
+  "validation_file": "artifacts\\intersection_smoke_267517510_20260704\\validation.json",
+  "workflow_stage_results": [
+    {
+      "stage_name": "intersection_compile_validate",
+      "status": "blocked",
+      "input_artifacts": {
+        "osm": "artifacts\\intersection_smoke_267517510_20260704\\intersection_source\\osm\\intersection_source_bbox.osm.xml.gz"
+      },
+      "output_artifacts": {
+        "net_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection.net.xml",
+        "intersection_ir_file": "artifacts\\intersection_smoke_267517510_20260704\\intersection_ir.json",
+        "validation_file": "artifacts\\intersection_smoke_267517510_20260704\\validation.json"
+      },
+      "before_quality": {
+        "connectivity": null,
+        "routeability": null,
+        "topology_fragmentation": null,
+        "tls_semantic_delta": null,
+        "junction_pattern_delta": null,
+        "reference_scope_delta": null,
+        "manual_review_load": null
+      },
+      "after_quality": {
+        "connectivity": {
+          "missing_movement_count": 4,
+          "disconnected_edge_count": 4
+        },
+        "routeability": {
+          "route_probe_status": "skipped"
+        },
+        "topology_fragmentation": {
+          "internal_fragment_count": 2
+        },
+        "tls_semantic_delta": {
+          "tls_linkindex_status": "fail"
+        },
+        "junction_pattern_delta": null,
+        "reference_scope_delta": null,
+        "manual_review_load": null
+      },
+      "delta_quality": {},
+      "promotion_decision": "blocked",
+      "claim_status": "blocked",
+      "evidence_files": [
+        "artifacts\\intersection_smoke_267517510_20260704\\intersection_ir.json",
+        "artifacts\\intersection_smoke_267517510_20260704\\validation.json"
+      ],
+      "warnings": [
+        "compiled net tlLogic state length does not match controlled connection count",
+        "custom plain tlLogic was omitted because netconvert crossing guessing was enabled",
+        "missing SUMO crossing edge for OSM pedestrian crossing support"
+      ]
+    }
+  ],
+  "workflow_promotion_trace": {
+    "case_id": "intersection_clean",
+    "claim_status": "blocked",
+    "stages": [
+      {
+        "stage_id": "intersection_compile_validate",
+        "before_quality": {
+          "connectivity": null,
+          "routeability": null,
+          "topology_fragmentation": null,
+          "tls_semantic_delta": null,
+          "junction_pattern_delta": null,
+          "reference_scope_delta": null,
+          "manual_review_load": null
+        },
+        "after_quality": {
+          "connectivity": {
+            "missing_movement_count": 4,
+            "disconnected_edge_count": 4
+          },
+          "routeability": {
+            "route_probe_status": "skipped"
+          },
+          "topology_fragmentation": {
+            "internal_fragment_count": 2
+          },
+          "tls_semantic_delta": {
+            "tls_linkindex_status": "fail"
+          },
+          "junction_pattern_delta": null,
+          "reference_scope_delta": null,
+          "manual_review_load": null
+        },
+        "delta_quality": {},
+        "promotion_decision": "blocked"
+      }
+    ],
+    "source_artifact": "artifacts\\intersection_smoke_267517510_20260704\\validation.json"
+  }
+}

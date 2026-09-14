@@ -1,0 +1,118 @@
+{
+  "case_id": "ingolstadt_center_reference_matched",
+  "claim_status": "diagnostic-demo",
+  "purpose": "NetEdit-relevant full-network semantic count baseline for TUM versus committed Torii variants.",
+  "networks": {
+    "tum_reference": {
+      "network_file": "examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml",
+      "edge_function_counts": {
+        "crossing": 620,
+        "internal": 7484,
+        "plain": 3577,
+        "walkingarea": 1648
+      },
+      "junction_type_counts": {
+        "dead_end": 484,
+        "internal": 969,
+        "priority": 788,
+        "right_before_left": 444,
+        "traffic_light": 29,
+        "unregulated": 2,
+        "zipper": 5
+      },
+      "connection_count": 19899,
+      "top_external_connection_count": 6973,
+      "internal_related_connection_count": 19899,
+      "controlled_connection_count": 550,
+      "connection_dir_counts": {
+        "L": 194,
+        "R": 171,
+        "l": 2892,
+        "r": 2992,
+        "s": 9910,
+        "t": 3740
+      },
+      "tlLogic_count": 28,
+      "tlLogic_phase_count": 262,
+      "request_count": 7580,
+      "internal_edge_count": 7484,
+      "crossing_edge_count": 620,
+      "walkingarea_edge_count": 1648,
+      "internal_junction_count": 969,
+      "traffic_light_junction_count": 29
+    },
+    "torii_vehicle_core": {
+      "network_file": "examples/02_one_prompt_osm_network/networks/torii_5_5_connected_core_tls_aggregated.net.xml",
+      "edge_function_counts": {
+        "internal": 3979,
+        "plain": 2493
+      },
+      "junction_type_counts": {
+        "dead_end": 192,
+        "internal": 164,
+        "priority": 698,
+        "right_before_left": 296,
+        "traffic_light": 34
+      },
+      "connection_count": 8870,
+      "top_external_connection_count": 4353,
+      "internal_related_connection_count": 8870,
+      "controlled_connection_count": 93,
+      "connection_dir_counts": {
+        "L": 45,
+        "R": 54,
+        "l": 2085,
+        "r": 1974,
+        "s": 4708,
+        "t": 4
+      },
+      "tlLogic_count": 34,
+      "tlLogic_phase_count": 103,
+      "request_count": 4353,
+      "internal_edge_count": 3979,
+      "crossing_edge_count": 0,
+      "walkingarea_edge_count": 0,
+      "internal_junction_count": 164,
+      "traffic_light_junction_count": 34
+    },
+    "torii_reference_visual_detail": {
+      "network_file": "examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml",
+      "edge_function_counts": {
+        "internal": 7852,
+        "plain": 6126
+      },
+      "junction_type_counts": {
+        "dead_end": 1111,
+        "internal": 319,
+        "priority": 1216,
+        "right_before_left": 636,
+        "traffic_light": 34
+      },
+      "connection_count": 16491,
+      "top_external_connection_count": 8086,
+      "internal_related_connection_count": 16491,
+      "controlled_connection_count": 152,
+      "connection_dir_counts": {
+        "L": 139,
+        "R": 142,
+        "l": 4094,
+        "r": 3806,
+        "s": 8306,
+        "t": 4
+      },
+      "tlLogic_count": 34,
+      "tlLogic_phase_count": 113,
+      "request_count": 8086,
+      "internal_edge_count": 7852,
+      "crossing_edge_count": 0,
+      "walkingarea_edge_count": 0,
+      "internal_junction_count": 319,
+      "traffic_light_junction_count": 34
+    }
+  },
+  "known_semantic_gaps": {
+    "walkingarea_and_crossing": "TUM has crossing/walkingarea edge functions in this bbox; the committed Torii 5.5 variants have zero.",
+    "controlled_connections": "Torii TLS aggregation count is close to TUM, but controlled connection and phase counts still differ substantially.",
+    "turnaround_dir_t": "TUM has many dir=t connections; Torii variants only retain four, so turnaround handling must stay audited separately from ordinary s/l/r movement completeness."
+  }
+}

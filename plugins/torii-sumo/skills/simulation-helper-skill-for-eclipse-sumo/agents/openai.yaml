@@ -1,0 +1,6 @@
+interface:
+  display_name: "Torii SUMO Expert Skill"
+  short_description: "Reason about SUMO intent, route Torii MCP tools, diagnose feedback, and bound simulation claims."
+  default_prompt: "Use Torii ($simulation-helper-skill-for-eclipse-sumo) to understand the SUMO task, run MCP tools only when evidence is needed, and treat bad metrics as model feedback."
+policy:
+  allow_implicit_invocation: true

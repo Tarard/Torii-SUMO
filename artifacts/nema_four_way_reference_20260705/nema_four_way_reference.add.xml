@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='utf-8'?>
+<additional>
+  <tlLogic id="J0" offset="0" programID="NEMA" type="NEMA">
+    <param key="detector-length" value="20" />
+    <param key="detector-length-leftTurnLane" value="10" />
+    <param key="total-cycle-length" value="90" />
+    <param key="ring1" value="1,2,3,4" />
+    <param key="ring2" value="5,6,7,8" />
+    <param key="barrierPhases" value="2,6" />
+    <param key="coordinate-mode" value="false" />
+    <param key="barrier2Phases" value="4,8" />
+    <param key="minRecall" value="2,6" />
+    <param key="maxRecall" value="" />
+    <param key="whetherOutputState" value="true" />
+    <param key="fixForceOff" value="false" />
+    <phase duration="99" minDur="5" maxDur="20" vehext="2" yellow="3" red="1" name="1" state="Grrrrrrr" />
+    <phase duration="99" minDur="5" maxDur="35" vehext="2" yellow="3" red="1" name="2" state="rGrrrrrr" />
+    <phase duration="99" minDur="5" maxDur="20" vehext="2" yellow="3" red="1" name="3" state="rrGrrrrr" />
+    <phase duration="99" minDur="5" maxDur="35" vehext="2" yellow="3" red="1" name="4" state="rrrGrrrr" />
+    <phase duration="99" minDur="5" maxDur="20" vehext="2" yellow="3" red="1" name="5" state="rrrrGrrr" />
+    <phase duration="99" minDur="5" maxDur="35" vehext="2" yellow="3" red="1" name="6" state="rrrrrGrr" />
+    <phase duration="99" minDur="5" maxDur="20" vehext="2" yellow="3" red="1" name="7" state="rrrrrrGr" />
+    <phase duration="99" minDur="5" maxDur="35" vehext="2" yellow="3" red="1" name="8" state="rrrrrrrG" />
+  </tlLogic>
+</additional>

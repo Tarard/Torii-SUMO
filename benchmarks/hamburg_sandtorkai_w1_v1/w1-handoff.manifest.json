@@ -1,0 +1,87 @@
+{
+  "artifacts": {
+    "manifest": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w1_osm_feedback_topology_handoff_v1\\hamburg_official_corridor_geometry.manifest.json",
+    "network": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\hamburg_2403_two_conflict_core_semantic_prune.net.xml"
+  },
+  "automatic_promotion_gate": "blocked",
+  "claim_boundary": {
+    "does_not_prove": [
+      "official 2403 signal topology or historical signal timing",
+      "that detector streams sharing a SUMO lane are additive or redundant",
+      "full corridor demand calibration or final digital-twin promotion",
+      "human approval from NetEdit screenshots alone"
+    ],
+    "proves": [
+      "the exact candidate passes the recorded road-topology machine gates",
+      "all declared physical review owners have current non-mutating NetEdit review material",
+      "the candidate may feed fail-closed signal and detector diagnostics"
+    ]
+  },
+  "claim_status": "osm-continuous-official-evidence-road-topology-review-candidate",
+  "evidence": {
+    "connection_mode": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\connection-mode\\2403-two-conflict-cores-semantic-prune.manifest.json",
+      "sha256": "cb7a3354b2bf769a3ad97d78e94b3f9c71e51dad48074ccb0be8dd08f83504f1"
+    },
+    "movement_smoke": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\boundary-movement-smoke-audit.json",
+      "sha256": "40a777f3014474bbde9352cab0d921f43e66d11cdc19e5f27b7062b0ed708ae0"
+    },
+    "sumo_load": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\sumo-load\\sumo-load-audit.json",
+      "sha256": "93f47de291d3c9b0c964da54388d4483b77fd7cfce2ca011f9595e9e7c0a7c68"
+    },
+    "surface_comparison": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\surface-audit.json",
+      "sha256": "b7b15f2c53f9d2a24db0ef2d7cf87f166715eaeddd609e88f0d59f68b5c5f661"
+    },
+    "topology_feedback": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\preservation-audit.json",
+      "sha256": "609718ae83ffe9758e2430a51ff51054546b2fe1411be0f9bd1af7e3005ed0de"
+    }
+  },
+  "execution_gate": "pass",
+  "execution_gate_reason": "hash-bound topology, SUMO, surface, connection, movement-smoke, and NetEdit-material checks pass",
+  "gates": {
+    "automatic_promotion": "blocked",
+    "connection_mode": "pass",
+    "movement_smoke": "pass",
+    "netedit_review_material": "pass",
+    "official_2403_signal_assets": "blocked",
+    "sumo_load": "pass",
+    "surface_overlap": "pass",
+    "topology_feedback": "pass"
+  },
+  "netedit_review": {
+    "automatic_promotion_gate": "blocked",
+    "junction_ids": [
+      "cluster_1272392464_2761334292_5241629952_757036853",
+      "cluster_249707791_757036954"
+    ],
+    "report_count": 2,
+    "reports": [
+      {
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\netedit-review-south\\review-f0d04fc131.json",
+        "sha256": "e9a161481a8e2edda3cdb4c8dffa040646cb1f1bf46120270edfbf68f571ff25"
+      },
+      {
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\netedit-review-north\\review-dd701117af.json",
+        "sha256": "ead5e65a25c714a0d08dc39f8aa20f8e19bf259f482a19468228519ebc2a5cb7"
+      }
+    ],
+    "status": "review_material_ready"
+  },
+  "network": {
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\hamburg_2403_two_conflict_core_semantic_prune.net.xml",
+    "sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33"
+  },
+  "routeability": {
+    "collisions": 0,
+    "movement_count": 23,
+    "scope": "23 source-authorized 2403 lane-level boundary movements only",
+    "status": "pass",
+    "teleports": 0
+  },
+  "schema": "torii.hamburg-official-corridor-geometry/v1",
+  "status": "review_ready"
+}

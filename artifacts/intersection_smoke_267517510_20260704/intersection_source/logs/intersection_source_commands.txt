@@ -1,0 +1,13 @@
+bbox=11.4239610,48.7706731,11.4279610,48.7746731
+source_osm=artifacts\intersection_smoke_267517510_20260704\intersection_source\osm\intersection_source_bbox.osm.xml.gz
+filtered_osm=artifacts\intersection_smoke_267517510_20260704\intersection_source\osm\intersection_source_filtered.osm.xml.gz
+net_file=artifacts\intersection_smoke_267517510_20260704\intersection_source\sumo\intersection_source.net.xml
+allowed_highways=primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,trunk,trunk_link
+allowed_way_ids_count=not_applied
+overpass_strategy=tiled-retry-merge
+overpass_tile_count=1
+overpass_retry_count=0
+netconvert_profile=vehicle_core
+netconvert_profile_options=
+netconvert_type_options=
+netconvert_command=netconvert --osm-files osm/intersection_source_filtered.osm.xml.gz --output-file sumo/intersection_source.net.xml --proj.utm --no-turnarounds --osm.all-attributes --tls.join --tls.join-dist 35 --verbose

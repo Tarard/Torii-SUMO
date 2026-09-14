@@ -1,0 +1,29 @@
+{
+  "stage_id": "raw_netconvert",
+  "label": "Raw OSM netconvert vehicle network before Torii scope promotion",
+  "claim_status": "diagnostic-demo",
+  "source_artifact": "examples/02_one_prompt_osm_network/validation/run_2026-06-24_5_5/summary.json",
+  "counts": {
+    "edges": 2541,
+    "lanes": 3093,
+    "junctions": 1249,
+    "traffic_light_junctions": 202,
+    "tlLogic": 146
+  },
+  "quality": {
+    "connectivity": {
+      "raw_connectivity_status": "fail",
+      "raw_passenger_component_count": 13
+    },
+    "routeability": null,
+    "topology_fragmentation": {
+      "raw_traffic_light_junctions": 202,
+      "raw_tlLogic": 146
+    },
+    "tls_semantic_delta": null,
+    "junction_pattern_delta": null,
+    "reference_scope_delta": null,
+    "manual_review_load": null
+  },
+  "promotion_decision": "do_not_promote_raw_import"
+}

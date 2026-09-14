@@ -1,0 +1,45 @@
+{
+  "schema": "torii.corridor.contracts/v1",
+  "toolchain_id": "toolchain_48d9790480acc11e5c4b6b5d",
+  "frozen_at": "2026-07-14T00:00:00+02:00",
+  "platform": "portable-contract; runtime manifests must record OS, build features, executable paths, and executable hashes",
+  "python_version": "3.12",
+  "dependencies": {
+    "pydantic": "2.13.4",
+    "pytest": "9.1.1",
+    "ruff": "0.15.21",
+    "sumolib": "1.27.1",
+    "torii-sumo": "1.0.2"
+  },
+  "tools": [
+    {
+      "name": "netconvert",
+      "executable": "netconvert",
+      "version": "1.27.1",
+      "build_features": [],
+      "required": true
+    },
+    {
+      "name": "sumo",
+      "executable": "sumo",
+      "version": "1.27.1",
+      "build_features": [],
+      "required": true
+    }
+  ],
+  "command_parameters": {
+    "contract-tests": [
+      "-m",
+      "pytest",
+      "-q"
+    ],
+    "schema-export": [
+      "plugins/torii-sumo/scripts/export_corridor_schema.py"
+    ]
+  },
+  "random_seeds": [
+    0,
+    1,
+    42
+  ]
+}
