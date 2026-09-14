@@ -70,7 +70,8 @@ Use the catalog's reference first. This table selects further reading, not execu
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/route-project-workflow.md` | `Project Control Screen` and next-step plan |
 | New, vague, or assumption-heavy experiment | `references/interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
 | Confirmed experiment intake ready for planning | `references/plan-experiment.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
-| SUMO/TraCI failure, suspicious behavior, warnings, or broken run evidence | `references/route-project-workflow.md` plus `references/develop-and-verify-code.md` | root-cause hypothesis, next probe, fix/rerun/demotion |
+| Confusing experiment result, unexplained performance change, uncertain mechanism, or unfair comparison | `references/experiment-problem-solving.md` | smallest paired diagnostic contrast, stopping condition, and claim boundary |
+| SUMO/TraCI failure, suspicious behavior, warnings, or broken run evidence | `references/debug-sumo-traci.md` plus `references/develop-and-verify-code.md` | root-cause class, next probe, fix/rerun/demotion |
 | Controller, parser, runner, validator, or audit-code change | `references/develop-and-verify-code.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
 | Controller/TLS/NEMA/TraCI boundary question | `references/audit-sumo-controllers.md` | controller identity, API boundary, and missing evidence |
 | Applying controller families inspired by sumolights, including max-pressure, Webster, SOTL, fixed-time, actuated, or custom TLS control | `references/sumolights-controller-patterns.md` plus `references/audit-sumo-controllers.md` | `Controller Application Plan` and `Controller Identity Record` |
@@ -105,7 +106,8 @@ Load these only when the scenario requires them:
 
 - Ongoing project routing, state screening, or "what next?": `references/route-project-workflow.md`.
 - Torii MCP execution, tool-output interpretation, feedback diagnosis, and installable plugin behavior: `references/mcp-tool-routing.md`.
-- SUMO/TraCI failure, suspicious behavior, warnings, or broken run evidence: start with `references/route-project-workflow.md`; use `references/develop-and-verify-code.md` before code, parser, runner, validator, or controller changes.
+- SUMO/TraCI failure, suspicious behavior, warnings, or broken run evidence: start with `references/debug-sumo-traci.md`; use `references/develop-and-verify-code.md` before code, parser, runner, validator, or controller changes.
+- Confusing experiment results, unexplained regressions, trigger-vs-actuator questions, or mechanism uncertainty: `references/experiment-problem-solving.md`.
 - SUMO executable environment, `SUMO_HOME`, Python tooling, or smoke-test proof: `references/preflight-sumo-environment.md`.
 - Interactive intake for vague, ambitious, or assumption-heavy experiments: `references/interactive-experiment-intake.md`.
 - Confirmed experiment intake and planning: `references/plan-experiment.md`.
