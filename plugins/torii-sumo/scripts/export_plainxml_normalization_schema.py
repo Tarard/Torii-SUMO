@@ -19,6 +19,8 @@ from torii_sumo.corridor.schema import build_plainxml_normalization_report_schem
 DEFAULT_OUTPUT = (
     REPOSITORY_ROOT
     / "schemas"
+    / "research"
+    / "corridor"
     / "torii.corridor.plainxml-normalization-report.v1.schema.json"
 )
 

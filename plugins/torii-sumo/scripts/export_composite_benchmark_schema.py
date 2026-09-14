@@ -19,7 +19,7 @@ from torii_sumo.corridor.schema import (
 )
 
 
-SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas" / "research" / "corridor"
 DEFAULT_SPEC_OUTPUT = (
     SCHEMA_DIR / "torii.corridor.composite-fault-benchmark.v1.schema.json"
 )

@@ -21,7 +21,7 @@ from torii_sumo.corridor.schema import (
 )
 
 
-SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas" / "research" / "corridor"
 
 
 def main() -> None:
@@ -36,10 +36,7 @@ def main() -> None:
     parser.add_argument(
         "--applicability-output",
         type=Path,
-        default=(
-            SCHEMA_DIR
-            / "torii.corridor.certification-applicability-report.v1.schema.json"
-        ),
+        default=SCHEMA_DIR / "torii.corridor.certification-applicability-report.v1.schema.json",
     )
     parser.add_argument(
         "--spec-output",
@@ -54,10 +51,7 @@ def main() -> None:
     args = parser.parse_args()
     for path, schema in (
         (args.envelope_output, build_certification_envelope_schema()),
-        (
-            args.applicability_output,
-            build_certification_applicability_report_schema(),
-        ),
+        (args.applicability_output, build_certification_applicability_report_schema()),
         (args.spec_output, build_ood_benchmark_schema()),
         (args.report_output, build_ood_benchmark_report_schema()),
     ):

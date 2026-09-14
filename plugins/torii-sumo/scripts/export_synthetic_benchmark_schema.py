@@ -19,16 +19,9 @@ from torii_sumo.corridor.schema import (
 )
 
 
-DEFAULT_SPEC_OUTPUT = (
-    REPOSITORY_ROOT
-    / "schemas"
-    / "torii.corridor.synthetic-fault-benchmark.v1.schema.json"
-)
-DEFAULT_REPORT_OUTPUT = (
-    REPOSITORY_ROOT
-    / "schemas"
-    / "torii.corridor.synthetic-fault-benchmark-report.v1.schema.json"
-)
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas" / "research" / "corridor"
+DEFAULT_SPEC_OUTPUT = SCHEMA_DIR / "torii.corridor.synthetic-fault-benchmark.v1.schema.json"
+DEFAULT_REPORT_OUTPUT = SCHEMA_DIR / "torii.corridor.synthetic-fault-benchmark-report.v1.schema.json"
 
 
 def main() -> None:
@@ -38,16 +31,8 @@ def main() -> None:
     parser.add_argument("--spec-output", type=Path, default=DEFAULT_SPEC_OUTPUT)
     parser.add_argument("--report-output", type=Path, default=DEFAULT_REPORT_OUTPUT)
     args = parser.parse_args()
-    write_json_atomic(
-        args.spec_output,
-        build_synthetic_fault_benchmark_schema(),
-        sort_keys=True,
-    )
-    write_json_atomic(
-        args.report_output,
-        build_synthetic_fault_benchmark_report_schema(),
-        sort_keys=True,
-    )
+    write_json_atomic(args.spec_output, build_synthetic_fault_benchmark_schema(), sort_keys=True)
+    write_json_atomic(args.report_output, build_synthetic_fault_benchmark_report_schema(), sort_keys=True)
 
 
 if __name__ == "__main__":

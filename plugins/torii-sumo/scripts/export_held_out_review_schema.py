@@ -26,7 +26,7 @@ from torii_sumo.corridor.schema import (
 )
 
 
-SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas" / "research" / "corridor"
 
 
 def main() -> None:
