@@ -22,8 +22,8 @@
 
 <p align="center">
   <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.de.md">Deutsch</a>
+  <a href="docs/readme/README.zh-CN.md">简体中文</a> ·
+  <a href="docs/readme/README.de.md">Deutsch</a>
 </p>
 
 <p align="center">
@@ -87,7 +87,7 @@ The current Hamburg calibration matches the aggregate detector count exactly, wi
 
 ## Documentation
 
-[Architecture](ARCHITECTURE.md) ·
+[Architecture](docs/architecture.md) ·
 [Installation](docs/codex-plugin-install.md) ·
 [Documentation](docs/README.md) ·
 [Examples](examples/01_signal_control_audit/task.md)

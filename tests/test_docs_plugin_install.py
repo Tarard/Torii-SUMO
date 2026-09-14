@@ -9,7 +9,7 @@ def test_readme_links_plugin_install_doc() -> None:
 
     assert "docs/codex-plugin-install.md" in readme
     assert "docs/README.md" in readme
-    assert "ARCHITECTURE.md" in readme
+    assert "docs/architecture.md" in readme
     assert "## Quick Start" in readme
     assert "## Documentation" in readme
     assert "docs/repository-guide.md" not in readme
@@ -82,8 +82,8 @@ def test_osm_source_patterns_doc_tracks_external_projects_without_vendoring() ->
 def test_public_docs_do_not_reference_internal_superpowers_paths() -> None:
     public_files = [
         ROOT / "README.md",
-        ROOT / "README.zh-CN.md",
-        ROOT / "README.de.md",
+        ROOT / "docs" / "readme" / "README.zh-CN.md",
+        ROOT / "docs" / "readme" / "README.de.md",
         ROOT / "docs" / "README.md",
         ROOT / "docs" / "index.html",
         ROOT / "docs" / "release" / "mailing-list-announcement.md",
@@ -97,9 +97,13 @@ def test_public_docs_do_not_reference_internal_superpowers_paths() -> None:
         assert "superpowers/specs" not in body
 
     manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
-    assert "ARCHITECTURE.md" in manifest
+    assert "docs/architecture.md" in manifest
     assert "benchmarks/" in manifest
     assert "docs/superpowers" not in manifest
     assert "LICENSE-CODE" not in manifest
     assert "LICENSE-DOCS" not in manifest
     assert not (ROOT / "docs" / "superpowers").exists()
+    assert not (ROOT / "ARCHITECTURE.md").exists()
+    assert not (ROOT / "NOTICE.md").exists()
+    assert not (ROOT / "README.zh-CN.md").exists()
+    assert not (ROOT / "README.de.md").exists()

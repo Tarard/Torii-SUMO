@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Torii for SUMO" width="100%">
+  <img src="../assets/banner.png" alt="Torii for SUMO" width="100%">
 </p>
 
 # Torii
@@ -14,20 +14,20 @@
 
 <p align="center">
   <a href="https://tarard.github.io/Torii-SUMO/">网站</a> ·
-  <a href="docs/codex-plugin-install.md">安装</a> ·
-  <a href="docs/README.md">文档</a> ·
-  <a href="examples/01_signal_control_audit/task.md">示例</a> ·
-  <a href="LICENSE">MIT 许可证</a>
+  <a href="../codex-plugin-install.md">安装</a> ·
+  <a href="../README.md">文档</a> ·
+  <a href="../../examples/01_signal_control_audit/task.md">示例</a> ·
+  <a href="../../LICENSE">MIT 许可证</a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
   <a href="README.de.md">Deutsch</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/torii-agent-architecture.svg" alt="Torii agent 驱动的交通场景构建工作流" width="100%">
+  <img src="../assets/torii-agent-architecture.svg" alt="Torii agent 驱动的交通场景构建工作流" width="100%">
 </p>
 
 ## Torii 能做什么
@@ -70,7 +70,7 @@ Torii 需要 Python 3.11+ 和 Eclipse SUMO。
 Torii 正被用于重建和验证汉堡市中心的一段真实交通走廊。
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Torii V1 在航拍影像上重建的汉堡走廊，包含车道连接和虚拟传感器" width="100%">
+  <img src="../assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Torii V1 在航拍影像上重建的汉堡走廊，包含车道连接和虚拟传感器" width="100%">
 </p>
 
 <p align="center"><sub>Torii V1 走廊叠加在航拍影像上，包含车道连接和虚拟传感器。</sub></p>
@@ -78,7 +78,7 @@ Torii 正被用于重建和验证汉堡市中心的一段真实交通走廊。
 Torii 在同一工作流中结合官方交通数据、航拍影像和 SUMO 路网重建。
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118 四阶段重建：官方 MAP 端点与朝向、重建曲线，以及清洗前后的 SUMO 车道连接" width="100%">
+  <img src="../assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118 四阶段重建：官方 MAP 端点与朝向、重建曲线，以及清洗前后的 SUMO 车道连接" width="100%">
 </p>
 
 <p align="center"><sub>LSA118 重建：官方 MAP 端点与朝向、重建曲线，以及清洗前后的车道连接。</sub></p>
@@ -87,13 +87,13 @@ Torii 在同一工作流中结合官方交通数据、航拍影像和 SUMO 路�
 
 ## 文档
 
-[架构](ARCHITECTURE.md) ·
-[安装](docs/codex-plugin-install.md) ·
-[文档](docs/README.md) ·
-[示例](examples/01_signal_control_audit/task.md)
+[架构](../architecture.md) ·
+[安装](../codex-plugin-install.md) ·
+[文档](../README.md) ·
+[示例](../../examples/01_signal_control_audit/task.md)
 
 ## 许可证
 
-Torii-SUMO 使用 [MIT License](LICENSE) 许可。
+Torii-SUMO 使用 [MIT License](../../LICENSE) 许可。
 
 早期版本已归档至 [Zenodo](https://doi.org/10.5281/zenodo.20627976)。

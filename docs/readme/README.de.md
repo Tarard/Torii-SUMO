@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Torii for SUMO" width="100%">
+  <img src="../assets/banner.png" alt="Torii for SUMO" width="100%">
 </p>
 
 # Torii
@@ -14,20 +14,20 @@
 
 <p align="center">
   <a href="https://tarard.github.io/Torii-SUMO/">Website</a> ·
-  <a href="docs/codex-plugin-install.md">Installation</a> ·
-  <a href="docs/README.md">Dokumentation</a> ·
-  <a href="examples/01_signal_control_audit/task.md">Beispiele</a> ·
-  <a href="LICENSE">MIT-Lizenz</a>
+  <a href="../codex-plugin-install.md">Installation</a> ·
+  <a href="../README.md">Dokumentation</a> ·
+  <a href="../../examples/01_signal_control_audit/task.md">Beispiele</a> ·
+  <a href="../../LICENSE">MIT-Lizenz</a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> ·
+  <a href="../../README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·
   <a href="README.de.md">Deutsch</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/torii-agent-architecture.svg" alt="Agent-gesteuerter Torii-Workflow zur Konstruktion von Verkehrsszenarien" width="100%">
+  <img src="../assets/torii-agent-architecture.svg" alt="Agent-gesteuerter Torii-Workflow zur Konstruktion von Verkehrsszenarien" width="100%">
 </p>
 
 ## Was Torii macht
@@ -70,7 +70,7 @@ Torii benötigt Python 3.11+ und Eclipse SUMO.
 Torii wird verwendet, um einen realen Verkehrskorridor in der Hamburger Innenstadt zu rekonstruieren und zu validieren.
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Mit Torii V1 rekonstruierter Hamburger Korridor auf Luftbilddaten mit Fahrspurverbindungen und virtuellen Sensoren" width="100%">
+  <img src="../assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Mit Torii V1 rekonstruierter Hamburger Korridor auf Luftbilddaten mit Fahrspurverbindungen und virtuellen Sensoren" width="100%">
 </p>
 
 <p align="center"><sub>Torii-V1-Korridor auf Luftbilddaten mit Fahrspurverbindungen und virtuellen Sensoren.</sub></p>
@@ -78,7 +78,7 @@ Torii wird verwendet, um einen realen Verkehrskorridor in der Hamburger Innensta
 Torii kombiniert offizielle Verkehrsdaten, Luftbilder und die Rekonstruktion von SUMO-Netzen in einem einzigen Workflow.
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118-Rekonstruktion in vier Stufen: offizielle MAP-Endpunkte und Fahrtrichtungen, rekonstruierte Kurven sowie SUMO-Fahrspurverbindungen vor und nach der Bereinigung" width="100%">
+  <img src="../assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118-Rekonstruktion in vier Stufen: offizielle MAP-Endpunkte und Fahrtrichtungen, rekonstruierte Kurven sowie SUMO-Fahrspurverbindungen vor und nach der Bereinigung" width="100%">
 </p>
 
 <p align="center"><sub>LSA118-Rekonstruktion: offizielle MAP-Endpunkte und Fahrtrichtungen, rekonstruierte Kurven sowie Fahrspurverbindungen vor und nach der Bereinigung.</sub></p>
@@ -87,13 +87,13 @@ Die aktuelle Hamburg-Kalibrierung stimmt exakt mit der aggregierten Detektoranza
 
 ## Dokumentation
 
-[Architektur](ARCHITECTURE.md) ·
-[Installation](docs/codex-plugin-install.md) ·
-[Dokumentation](docs/README.md) ·
-[Beispiele](examples/01_signal_control_audit/task.md)
+[Architektur](../architecture.md) ·
+[Installation](../codex-plugin-install.md) ·
+[Dokumentation](../README.md) ·
+[Beispiele](../../examples/01_signal_control_audit/task.md)
 
 ## Lizenz
 
-Torii-SUMO steht unter der [MIT-Lizenz](LICENSE).
+Torii-SUMO steht unter der [MIT-Lizenz](../../LICENSE).
 
 Frühere Releases sind auf [Zenodo](https://doi.org/10.5281/zenodo.20627976) archiviert.

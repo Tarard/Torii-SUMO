@@ -1,13 +1,13 @@
 # Torii Documentation
 
-This is the current documentation index for Torii. Product behavior and claims are defined by the top-level `README.md` and `ARCHITECTURE.md`; research snapshots and historical development records are indexed separately below.
+This is the current documentation index for Torii. Product behavior and claims are defined by the top-level `README.md` and `docs/architecture.md`; research snapshots and historical development records are indexed separately below.
 
 ## Start by Goal
 
 | Goal | Start here |
 |---|---|
 | Install Torii | [Codex Plugin Installation](codex-plugin-install.md) |
-| Understand the system and claim boundary | [Architecture](../ARCHITECTURE.md) |
+| Understand the system and claim boundary | [Architecture](architecture.md) |
 | Find an MCP tool | [MCP Tool Catalog](mcp-tool-catalog.md) |
 | Understand how skills are selected and invoked | [Skill Integration](skill-integration.md) |
 | Select a workflow from a task and available sources | [Workflow Selection](workflow-selection.md) |
@@ -21,7 +21,7 @@ This is the current documentation index for Torii. Product behavior and claims a
 
 ## Current Product Documentation
 
-- [Architecture](../ARCHITECTURE.md) — system boundary, major layers, and allowed claims.
+- [Architecture](architecture.md) — system boundary, major layers, and allowed claims.
 - [Codex Plugin Installation](codex-plugin-install.md) — installation and first-run setup.
 - [MCP Tool Catalog](mcp-tool-catalog.md) — registered tool surface grouped by user intent.
 - [Skill Integration](skill-integration.md) — skill discovery, reasoning, and execution handoff.
@@ -48,7 +48,7 @@ Draft public announcements and release-positioning notes live under [`release/`]
 ## Documentation Rules
 
 1. Put stable user navigation in this file and the top-level README.
-2. Put system invariants and claim boundaries in `ARCHITECTURE.md`.
+2. Put system invariants and claim boundaries in `docs/architecture.md`.
 3. Put current installation, tool, skill, and workflow guidance in focused documents under `docs/`.
 4. Index research evidence through `docs/research/README.md`.
 5. Index dated or superseded development records through `docs/development-history/README.md`.

@@ -12,11 +12,11 @@ The public project is Torii: Task-Oriented Road Infrastructure Intelligence for 
 
 ```text
 README.md
-README.zh-CN.md
-README.de.md
-ARCHITECTURE.md
+docs/readme/README.zh-CN.md
+docs/readme/README.de.md
+docs/architecture.md
+docs/legal/NOTICE.md
 LICENSE
-NOTICE.md
 CITATION.cff
 .zenodo.json
 pyproject.toml
@@ -27,14 +27,14 @@ AGENTS.md
 .agents/plugins/marketplace.json
 .github/
 plugins/
-skills/
 docs/
 examples/
 benchmarks/
+schemas/
 tests/
 ```
 
-The repository uses a single MIT License. `LICENSE` is the authoritative project license; `NOTICE.md` records third-party and attribution notices.
+The repository uses a single MIT License. `LICENSE` is the authoritative project license; `docs/legal/NOTICE.md` records third-party and attribution notices.
 
 ## Exclude
 

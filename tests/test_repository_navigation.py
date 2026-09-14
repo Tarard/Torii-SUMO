@@ -38,7 +38,7 @@ def test_readme_exposes_stable_navigation() -> None:
     expected_links = {
         "docs/README.md",
         "docs/codex-plugin-install.md",
-        "ARCHITECTURE.md",
+        "docs/architecture.md",
         "examples/01_signal_control_audit/task.md",
         "LICENSE",
     }
@@ -65,7 +65,7 @@ def test_documentation_index_links_current_guides() -> None:
         "mcp-tool-catalog.md",
         "research/README.md",
         "development-history/README.md",
-        "../ARCHITECTURE.md",
+        "architecture.md",
         "codex-plugin-install.md",
     ):
         assert link in docs_index
@@ -108,7 +108,7 @@ def test_repository_guide_is_archived() -> None:
 
     assert "Repository Guide (Archived)" in guide
     assert "AGENTS.md" in guide
-    assert "ARCHITECTURE.md" in guide
+    assert "docs/architecture.md" in guide
     assert "no longer the current repository contract" in guide
 
 
@@ -117,6 +117,7 @@ def test_agent_instructions_preserve_repository_and_evidence_boundaries() -> Non
 
     for required in (
         "docs/README.md",
+        "docs/architecture.md",
         "docs/mcp-tool-catalog.md",
         "src/torii_sumo/tools/",
         "src/torii_sumo/core/",

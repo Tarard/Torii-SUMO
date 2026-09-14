@@ -22,14 +22,14 @@ New public capabilities should fit one of these groups unless the product archit
 Before changing structure or adding a public capability, read:
 
 1. `README.md` for the user-facing promise;
-2. `ARCHITECTURE.md` for claim and promotion boundaries;
+2. `docs/architecture.md` for claim and promotion boundaries;
 3. `docs/README.md` for the current documentation map;
 4. `docs/mcp-tool-catalog.md` for the registered public tool surface.
 
 ## Repository Layout
 
 - `README.md` — product entry point and current public promise.
-- `ARCHITECTURE.md` — system architecture, boundaries, and promotion logic.
+- `docs/architecture.md` — system architecture, boundaries, and promotion logic.
 - `plugins/torii-sumo/src/` — implementation.
 - `plugins/torii-sumo/skills/` — reasoning, domain knowledge, and workflow-selection guidance.
 - `plugins/torii-sumo/scripts/` — reproducible CLI entry points.
