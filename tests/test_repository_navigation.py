@@ -37,22 +37,21 @@ def test_readme_exposes_stable_navigation() -> None:
 
     expected_links = {
         "docs/README.md",
-        "docs/repository-guide.md",
-        "docs/mcp-tool-catalog.md",
+        "docs/codex-plugin-install.md",
         "ARCHITECTURE.md",
+        "examples/01_signal_control_audit/task.md",
+        "LICENSE",
     }
     for link in expected_links:
         assert link in readme
 
+    assert "docs/repository-guide.md" not in readme
+
     section_order = (
-        "## How Torii Works",
-        "## Hamburg Corridor Digital Twin",
-        "## Design",
-        "## What You Can Do",
-        "## Installation",
+        "## What Torii Does",
         "## Quick Start",
-        "## Repository Structure",
-        "## More",
+        "## Hamburg Digital Twin",
+        "## Documentation",
         "## License",
     )
     positions = [readme.index(heading) for heading in section_order]
