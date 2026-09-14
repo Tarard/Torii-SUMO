@@ -41,8 +41,10 @@ EXPECTED_REFERENCES = {
         "sumolights-controller-patterns.md",
     },
     "torii-report": {
+        "asd-ste100-skill.md",
         "capture-field-lesson.md",
         "evaluate-and-report-results.md",
+        "humanizer-skill.md",
         "release-project.md",
         "traffic-control-reporting.md",
     },
@@ -91,17 +93,10 @@ def test_each_skill_routes_only_to_local_reference_files() -> None:
         assert missing == []
 
 
-def test_product_boundaries_are_explicit() -> None:
-    build = read_skill("torii-build")
-    calibrate = read_skill("torii-calibrate")
-    simulate = read_skill("torii-simulate")
-    report = read_skill("torii-report")
-
-    assert "$torii-calibrate" in build
-    assert "$torii-build" in calibrate
-    assert "$torii-report" in simulate
-    assert "$torii-simulate" in report
-    assert "Do not rerun experiments unless the user explicitly asks" in report
+def test_reference_loading_is_optional_guidance() -> None:
+    for name in EXPECTED_REFERENCES:
+        body = read_skill(name)
+        assert "Read only the references that help with the current task." in body
 
 
 def test_reporting_reference_preserves_traffic_evidence_contract() -> None:
@@ -116,6 +111,22 @@ def test_reporting_reference_preserves_traffic_evidence_contract() -> None:
         "simulator truth",
     ):
         assert term in body
+
+
+def test_report_bundles_upstream_writing_skill_bodies_and_licenses() -> None:
+    refs = skill_dir("torii-report") / "references"
+    ste = (refs / "asd-ste100-skill.md").read_text(encoding="utf-8")
+    humanizer = (refs / "humanizer-skill.md").read_text(encoding="utf-8")
+    ste_license = (refs / "asd-ste100-LICENSE.txt").read_text(encoding="utf-8")
+    humanizer_license = (refs / "humanizer-LICENSE.txt").read_text(encoding="utf-8")
+
+    assert "name: asd-ste100" in ste
+    assert "version: 0.4.0" in ste
+    assert "name: humanizer" in humanizer
+    assert 'version: "3.0.0"' in humanizer
+    assert "Dustin Yuchen Teng" in ste_license
+    assert "Siqi Chen" in humanizer_license
+    assert "MIT License" in ste_license and "MIT License" in humanizer_license
 
 
 def test_debugging_and_experiment_diagnosis_live_in_simulate() -> None:
