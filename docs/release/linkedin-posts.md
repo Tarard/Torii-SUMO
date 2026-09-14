@@ -1,43 +1,38 @@
 # LinkedIn Post Drafts
 
+> Draft release material. Use the top-level `README.md` for the current product wording.
+
 ## Release Post
 
 ```text
 I have been turning my SUMO workflow into Torii: Task-Oriented Road Infrastructure Intelligence.
 
-Torii is an agent plugin for SUMO. It gives Codex/Claude-style coding agents both a SUMO expert skill and local MCP tools.
+Torii turns real-world traffic data and natural-language tasks into SUMO simulations.
 
-Current tools cover:
-- OSM-to-SUMO network construction from bbox or extracts
-- tiled Overpass import, retry, XML deduplication, and road-class filtering
-- TLS candidate review with Google Maps temporal-scope checks
-- routeability probes for named roads and bridges
-- SUMO environment checks, config preflight, smoke runs, output comparison, and evidence bundles
+The workflow is organized around three jobs:
+- Build SUMO networks from OpenStreetMap, trajectory data, and road-construction information.
+- Calibrate traffic demand and simulation behavior against measured observations.
+- Run further SUMO experiments from natural-language instructions.
 
-The design principle is simple: bad metrics are feedback about the model. The agent should diagnose what the metric means before changing the network, demand, controller, or code.
+The important part is the evidence boundary. A network loading in SUMO is not treated as proof that its topology, traffic signals, demand, or field behavior are correct. Torii keeps source and candidate artifacts separate and records the checks used to support each result.
 
-Repository: [GitHub link]
+A current case is a digital-twin corridor in central Hamburg, where official traffic data and reconstructed SUMO artifacts are combined in one traceable workflow.
 
-Independent project; not affiliated with Eclipse SUMO, Eclipse Foundation, DLR, Google, OpenAI, Anthropic, or external OSM tool projects.
+Repository: https://github.com/Tarard/Torii-SUMO
+
+Torii is an independent project and is not affiliated with or endorsed by Eclipse SUMO, the Eclipse Foundation, DLR, OpenAI, Anthropic, or OpenStreetMap.
 ```
 
-## Specific Case Post
+## Technical Case Post
 
 ```text
-Common SUMO network-building failure:
+A common traffic-simulation failure is to stop at “the network loads.”
 
-The OSM import succeeds, netconvert writes a network, and SUMO runs. But routes are disconnected, TLS are duplicated or misclustered, and the result metric becomes meaningless.
+A runnable SUMO network can still contain wrong lane connections, signal ownership, routeability, demand, or calibration assumptions.
 
-Torii's current workflow treats this as feedback:
+Torii treats those mismatches as evidence to inspect, not as details to hide. The workflow keeps the original source separate from generated candidates, records validation artifacts, and can stop at review instead of forcing an automatic answer.
 
-- inspect OSM import warnings
-- check road-class filtering
-- deduplicate merged OSM objects
-- cluster TLS candidates into physical-intersection review groups
-- use Google Maps only after current-vs-historical scope is clear
-- generate routeability probes before result claims
+That makes the useful output more than a .net.xml file: it is the network plus the evidence needed to understand what is supported and what still needs review.
 
-This is the kind of boring infrastructure that makes agent-driven SUMO work less fragile.
-
-Repository: [GitHub link]
+Repository: https://github.com/Tarard/Torii-SUMO
 ```

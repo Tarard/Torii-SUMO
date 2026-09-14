@@ -58,17 +58,40 @@ def test_readme_exposes_stable_navigation() -> None:
     assert positions == sorted(positions)
 
 
-def test_documentation_index_links_core_guides() -> None:
+def test_documentation_index_links_current_guides() -> None:
     docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
 
     for link in (
-        "repository-guide.md",
         "mcp-tool-catalog.md",
-        "research-paper-blueprint.md",
+        "research/README.md",
+        "development-history/README.md",
         "../ARCHITECTURE.md",
         "codex-plugin-install.md",
     ):
         assert link in docs_index
+
+    assert "repository-guide.md" not in docs_index
+    assert "superpowers" not in docs_index
+
+
+def test_documentation_indexes_separate_research_and_history() -> None:
+    research_index = (ROOT / "docs" / "research" / "README.md").read_text(encoding="utf-8")
+    for link in (
+        "../research-paper-blueprint.md",
+        "../stage1-machine-review-ready-plan.md",
+        "../teacher-free-topology-discrimination-v4.md",
+        "../held-out-corridor-blind-review-protocol-v2.md",
+    ):
+        assert link in research_index
+
+    history_index = (ROOT / "docs" / "development-history" / "README.md").read_text(encoding="utf-8")
+    for link in (
+        "../architecture-audit-2026-07-13.md",
+        "../research-plan-handoff-2026-07-14.md",
+        "../hamburg-digital-twin-development-log.md",
+        "../repository-guide.md",
+    ):
+        assert link in history_index
 
 
 def test_mcp_catalog_covers_every_registered_tool() -> None:
@@ -80,32 +103,29 @@ def test_mcp_catalog_covers_every_registered_tool() -> None:
     assert missing == []
 
 
-def test_repository_guide_defines_primary_code_boundaries() -> None:
+def test_repository_guide_is_archived() -> None:
     guide = (ROOT / "docs" / "repository-guide.md").read_text(encoding="utf-8")
 
-    for path in (
-        "plugins/torii-sumo/skills/",
-        "src/torii_sumo/tools/",
-        "src/torii_sumo/core/",
-        "plugins/torii-sumo/scripts/",
-        "schemas/",
-        "examples/",
-        "benchmarks/",
-        "tests/",
-    ):
-        assert f"`{path}`" in guide
+    assert "Repository Guide (Archived)" in guide
+    assert "AGENTS.md" in guide
+    assert "ARCHITECTURE.md" in guide
+    assert "no longer the current repository contract" in guide
 
 
 def test_agent_instructions_preserve_repository_and_evidence_boundaries() -> None:
     instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
     for required in (
-        "docs/repository-guide.md",
+        "docs/README.md",
         "docs/mcp-tool-catalog.md",
         "src/torii_sumo/tools/",
         "src/torii_sumo/core/",
         "source artifacts immutable",
         "review_required",
         "tests/test_repository_navigation.py",
+        "docs/research/README.md",
+        "docs/development-history/README.md",
     ):
         assert required in instructions
+
+    assert "docs/repository-guide.md" not in instructions

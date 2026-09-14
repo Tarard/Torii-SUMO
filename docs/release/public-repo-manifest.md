@@ -6,12 +6,7 @@ Use this manifest for the public Torii repository hosted at:
 Tarard/Torii-SUMO
 ```
 
-The repository keeps the original starred URL while presenting the product as:
-
-```text
-Torii: Task-Oriented Road Infrastructure Intelligence
-Agent plugin for SUMO
-```
+The public project is Torii: Task-Oriented Road Infrastructure Intelligence for Eclipse SUMO.
 
 ## Include
 
@@ -21,8 +16,6 @@ README.zh-CN.md
 README.de.md
 ARCHITECTURE.md
 LICENSE
-LICENSE-CODE
-LICENSE-DOCS
 NOTICE.md
 CITATION.cff
 .zenodo.json
@@ -34,30 +27,18 @@ AGENTS.md
 .agents/plugins/marketplace.json
 .github/
 plugins/
-  torii-sumo/
 skills/
-  simulation-helper-skill-for-eclipse-sumo/
-  debugging-helper-skill-for-eclipse-sumo/
-  sumo-experiment-problem-solving/
 docs/
-  index.html
-  assets/
-  codex-plugin-install.md
-  mcp-host-config.md
-  osm-source-patterns.md
-  workflow-selection.md
-  skill-integration.md
-  common-sumo-signal-control-failures.md
-  release/
 examples/
 benchmarks/
 tests/
 ```
 
+The repository uses a single MIT License. `LICENSE` is the authoritative project license; `NOTICE.md` records third-party and attribution notices.
+
 ## Exclude
 
 ```text
-docs/superpowers/
 runs/
 outputs/
 sumo/
@@ -79,6 +60,7 @@ untracked local research reports and captured run bundles
 - No vendored third-party source from OSMnx, OSMNet, pyrosm, SUMO, osm-to-xodr, SUMO Lights, or Google Maps.
 - No claim that Google Maps is always the correct target; current versus historical map scope must be confirmed by the user.
 - Full OSM cleanup is CLI-only. MCP does not expose it as a tool. Place resolution must produce a bbox before cleanup.
+- Internal agent execution plans do not belong under public `docs/`.
 
 ## GitHub Topics
 

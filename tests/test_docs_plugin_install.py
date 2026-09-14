@@ -13,8 +13,7 @@ def test_readme_links_plugin_install_doc() -> None:
     assert "## Quick Start" in readme
     assert "## Documentation" in readme
     assert "docs/repository-guide.md" not in readme
-    assert "docs/superpowers/specs/2026-06-20-torii-sumo-design.md" not in readme
-    assert "docs/superpowers/plans/2026-06-20-torii-sumo.md" not in readme
+    assert "docs/superpowers" not in readme
 
 
 def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
@@ -80,11 +79,12 @@ def test_osm_source_patterns_doc_tracks_external_projects_without_vendoring() ->
     assert "not a substitute for TUM-style teacher replay" in doc
 
 
-def test_internal_superpowers_plans_are_not_public_release_content() -> None:
+def test_public_docs_do_not_reference_internal_superpowers_paths() -> None:
     public_files = [
         ROOT / "README.md",
         ROOT / "README.zh-CN.md",
         ROOT / "README.de.md",
+        ROOT / "docs" / "README.md",
         ROOT / "docs" / "index.html",
         ROOT / "docs" / "release" / "mailing-list-announcement.md",
         ROOT / "docs" / "release" / "linkedin-posts.md",
@@ -99,6 +99,7 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
     manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
     assert "ARCHITECTURE.md" in manifest
     assert "benchmarks/" in manifest
-    assert "docs/superpowers/" in manifest
-    assert "docs/superpowers/plans/" not in manifest
-    assert "docs/superpowers/specs/" not in manifest
+    assert "docs/superpowers" not in manifest
+    assert "LICENSE-CODE" not in manifest
+    assert "LICENSE-DOCS" not in manifest
+    assert not (ROOT / "docs" / "superpowers").exists()

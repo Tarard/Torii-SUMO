@@ -13,7 +13,7 @@ Before changing structure or adding a public capability, read:
 
 1. `README.md` for the user-facing promise;
 2. `ARCHITECTURE.md` for claim and promotion boundaries;
-3. `docs/repository-guide.md` for directory ownership;
+3. `docs/README.md` for the current documentation map;
 4. `docs/mcp-tool-catalog.md` for the registered public tool surface.
 
 ## Code Placement
@@ -40,6 +40,8 @@ Before changing structure or adding a public capability, read:
 - Put generated runs in `outputs/` or an explicit artifact directory; do not place generated data in `docs/`.
 - Do not create a new top-level directory when an existing ownership category fits.
 - Add dated research snapshots without silently rewriting historical protocols.
+- Index research material through `docs/research/README.md` and dated or superseded development records through `docs/development-history/README.md`.
+- Do not store internal agent execution plans, scratch plans, or coding checklists under public `docs/`.
 - Preserve unrelated dirty-worktree changes and avoid broad formatting of files outside the active task.
 
 ## Public Surface Changes
