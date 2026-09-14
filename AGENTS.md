@@ -3,6 +3,16 @@
 These instructions apply to the whole repository.
 Read this file before starting work on Torii.
 
+## Product Boundary
+
+Torii's public product is organized around three capability groups:
+
+- **Build** — construct SUMO networks and traffic infrastructure from sources such as OpenStreetMap, trajectory data, and road or signal records.
+- **Calibrate** — reconstruct demand, bind observations, and calibrate simulation inputs against measured traffic data.
+- **Simulate** — run, inspect, compare, and audit SUMO experiments from structured or natural-language tasks.
+
+New public capabilities should fit one of these groups unless the product architecture itself is intentionally changed.
+
 ## NetEdit Default
 
 - Use TORII's CLI by default to open NetEdit and capture screenshots. Open networks with `torii-netedit`. Capture screenshots with `plugins/torii-sumo/scripts/netedit_background_review.py`, using the repository's `.venv` Python. Do not default to desktop clicking, typing, or menu navigation. If the CLI cannot perform the task, explain the limitation before using another method.
@@ -15,6 +25,21 @@ Before changing structure or adding a public capability, read:
 2. `ARCHITECTURE.md` for claim and promotion boundaries;
 3. `docs/README.md` for the current documentation map;
 4. `docs/mcp-tool-catalog.md` for the registered public tool surface.
+
+## Repository Layout
+
+- `README.md` — product entry point and current public promise.
+- `ARCHITECTURE.md` — system architecture, boundaries, and promotion logic.
+- `plugins/torii-sumo/src/` — implementation.
+- `plugins/torii-sumo/skills/` — reasoning, domain knowledge, and workflow-selection guidance.
+- `plugins/torii-sumo/scripts/` — reproducible CLI entry points.
+- `examples/` — curated user-facing demonstrations.
+- `benchmarks/` — frozen evaluation datasets and benchmark evidence.
+- `tests/` — unit, contract, integration, and regression verification.
+- `docs/` — current public documentation.
+- `docs/research/` — research plans, protocols, and manuscript-oriented material.
+- `docs/development-history/` — dated or superseded development records.
+- `outputs/` — generated local run results.
 
 ## Code Placement
 
