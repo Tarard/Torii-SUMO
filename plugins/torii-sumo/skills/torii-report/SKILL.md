@@ -19,14 +19,18 @@ Use this skill as a compact knowledge base for interpreting and communicating co
 
 ## Reference Library
 
-Read only the references that help with the current task.
+Read only the references that help with the current task. The two bundled writing skills below are optional editing tools. Use them when they improve the requested output. They do not override technical accuracy, source fidelity, or the user's requested voice.
 
 | Topic | Reference |
 |---|---|
 | Metrics, baselines, completion, and claim wording | `references/evaluate-and-report-results.md` |
 | Traffic-control experiment reporting | `references/traffic-control-reporting.md` |
+| Clear controlled English for technical or agent-facing text | `references/asd-ste100-skill.md` |
+| Remove AI-writing patterns while preserving the writer's voice | `references/humanizer-skill.md` |
 | Capturing a reusable lesson from a resolved case | `references/capture-field-lesson.md` |
 | Public repository or release review | `references/release-project.md` |
+
+`asd-ste100-skill.md` is bundled from `danyuchn/asd-ste100-skill` and `humanizer-skill.md` is bundled from `blader/humanizer`. Both upstream skills are MIT licensed. Their license notices are stored beside the bundled copies.
 
 ## Available Torii Support
 
