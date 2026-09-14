@@ -35,6 +35,8 @@ Before changing structure or adding a public capability, read:
 - `plugins/torii-sumo/scripts/` — reproducible CLI entry points.
 - `examples/` — curated user-facing demonstrations.
 - `benchmarks/` — frozen evaluation datasets and benchmark evidence.
+- `schemas/product/` — current product-facing JSON Schemas.
+- `schemas/research/corridor/` — frozen corridor research and benchmark schemas.
 - `tests/` — unit, contract, integration, and regression verification.
 - `docs/` — current public documentation.
 - `docs/research/` — research plans, protocols, and manuscript-oriented material.
