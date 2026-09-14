@@ -1,111 +1,99 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Torii Agent Plugin fuer SUMO Banner">
+  <img src="docs/assets/banner.png" alt="Torii for SUMO" width="100%">
 </p>
 
-# <img src="docs/assets/app-logo.png" width="42" alt="Torii Logo"> Torii
+# Torii
 
-<div align="center">
+<p align="center">
+  <strong>Task-Oriented Road Infrastructure Intelligence für Eclipse SUMO</strong>
+</p>
 
-**Task-Oriented Road Infrastructure Intelligence**
+<p align="center">
+  Torii verwandelt reale Verkehrsdaten und natürlichsprachliche Aufgaben in SUMO-Simulationen.
+</p>
 
-**Agent plugin for SUMO**
+<p align="center">
+  <a href="https://tarard.github.io/Torii-SUMO/">Website</a> ·
+  <a href="docs/codex-plugin-install.md">Installation</a> ·
+  <a href="docs/README.md">Dokumentation</a> ·
+  <a href="examples/01_signal_control_audit/task.md">Beispiele</a> ·
+  <a href="LICENSE">MIT-Lizenz</a>
+</p>
 
-<p><strong>Codex / Claude agent plugin</strong> · SUMO/TraCI Workflows · OSM-zu-SUMO Cleanup · lokale MCP Tools</p>
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.de.md">Deutsch</a>
+</p>
 
-<a href="https://tarard.github.io/Torii-SUMO/"><strong>Webseite</strong></a> |
-<a href="docs/codex-plugin-install.md"><strong>Installation</strong></a> |
-<a href="examples/01_signal_control_audit/task.md"><strong>Signal-Control Audit</strong></a> |
-<a href="examples/02_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
-<a href="LICENSE"><strong>Lizenz</strong></a>
+<p align="center">
+  <img src="docs/assets/torii-agent-architecture.svg" alt="Agent-gesteuerter Torii-Workflow zur Konstruktion von Verkehrsszenarien" width="100%">
+</p>
 
-[English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
+## Was Torii macht
 
-</div>
+<table>
+<tr>
+<td width="33%" valign="top">
+<h3>Erstellen</h3>
+Erstellt SUMO-Netze aus OpenStreetMap, Fahrzeugtrajektorien und Straßenbauplänen.
+</td>
+<td width="33%" valign="top">
+<h3>Kalibrieren</h3>
+Rekonstruiert Verkehrsnachfrage und kalibriert Simulationen mit realen Sensormessungen.
+</td>
+<td width="33%" valign="top">
+<h3>Simulieren</h3>
+Führt weitere SUMO-Experimente anhand natürlichsprachlicher Anweisungen aus.
+</td>
+</tr>
+</table>
 
-## Evidence-Aware OSM-to-SUMO Construction
-
-Torii unterstützt ausschließlich 64-Bit-Windows. Tests und Veröffentlichungen richten sich nach dieser Plattform.
-
-Torii ist fuer SUMO-Netzkonstruktion gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten, evidence-aware und reference-comparable OSM-zu-SUMO-Workflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks, Review-Artefakten und klarer Aussagegrenze.
-
-Das Plugin startet jetzt mit einem Workflow Router: `torii_auto_workflow` klassifiziert die Anfrage, waehlt Skills, erstellt Plaene und fuehrt sichere MCP-Schritte aus, um das SUMO-Netz zu erzeugen oder zu aendern.
-
-Torii hat zwei Schichten:
-
-| Schicht | Rolle |
-|---|---|
-| Reasoning layer | SUMO Expert Skills stellen die richtigen Fragen, waehlen einen Workflow und begrenzen Aussagen. |
-| Execution layer | Lokale sichere stdio MCP Tools fuehren begrenzte SUMO-Checks aus und liefern strukturierte Beobachtungen. |
-
-Forschungsstand (2026-07-14): Stage 1-M ist **Machine REVIEW_READY**. Dreissig verblindete Held-out-Korridorpakete, der vollstaendige maschinelle Witness-Census, deterministisches Sampling und Provenance sind fuer die menschliche Validierung eingefroren. Das ist weder ein Stage-1-Abschluss noch eine Zertifizierung automatischer Reparaturen oder ein Nachweis, dass beliebige OSM-Netze bereits Expertenqualitaet in NetEdit erreichen. Details stehen im [Stage-1-M-Nachweis](docs/stage1-machine-review-ready-plan.md).
-
-Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router, Planner, Executor und Reviewer.
-
-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
-
-Der vollstaendige OSM-Cleanup laeuft nur ueber die CLI und ist kein MCP Tool.
-Zuerst muss ein Ortsname in eine bbox aufgeloest werden. Der Request hat sieben
-Felder: `output_dir`, `bbox`, `profile`, `source_osm_path`, `traffic_layers`,
-`reference_net_file` und `timeout_seconds`. `standard` verwendet
-`traffic_layers`. `reference_matched` verwendet `reference_net_file`, prueft
-nur Unterschiede und fuehrt keine Reparatur aus.
-
-## Example
-
-Mit diesem Prompt kann Torii getestet werden:
-
-```text
-Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
-```
-
-Dieses Demo nutzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein Torii OSM-derived Workflow besser auditierbar ist und naeher an ein manuell bereinigtes Referenznetz kommt als reiner OSM-Import-Erfolg.
-
-![TUM-bbox-Referenz im Vergleich mit Torii 5.5 TLS-aggregated visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
-
-| Evidenz | Ergebnis |
-|---|---:|
-| Torii vehicle core | 2,493 Kanten, 3,045 Spuren, 1,220 Knoten im Vergleichs-bbox nach Connected-Core-Extraktion |
-| Torii reference visual-detail | 6,126 Kanten, 6,695 Spuren, 2,997 Knoten im Vergleichs-bbox |
-| TUM bereinigter Referenzausschnitt | 3,577 Kanten, 4,955 Spuren, 1,752 Knoten im selben bbox |
-| Ampel-Knoten | Torii visual-detail raw 217; TLS-Aggregation Review-Variante 34 vs TUM 29 |
-| Verbleibendes Bereinigungsziel | Google-Maps-Pruefung der zusaetzlichen TLS-Kandidaten und wiederverwendbare physische Kreuzungsaggregation |
-| Claim status | `diagnostic-demo` |
-
-Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die 5.5-Vergleichsnetze und Screenshots sind dort committed; erzeugte OSM-Extracts, Routen und vollstaendige Logs bleiben rebuild-only Artefakte.
-
-## Quick Start
-
-Installation von GitHub:
+## Schnellstart
 
 ```powershell
 codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 
-Nach der Installation einen neuen Codex- oder Claude-Code-Thread starten, damit Skills und MCP Tools erkannt werden.
+Danach kann Codex zum Beispiel so angewiesen werden:
 
-Vollstaendige Anleitung: [Codex Plugin Installation](docs/codex-plugin-install.md).
+```text
+Use Torii to build a SUMO network from this OSM area.
+Check connectivity, traffic signals, and routeability.
+```
 
-## What You Can Ask Me
+Torii benötigt Python 3.11+ und Eclipse SUMO.
 
-| Prompt | Was Torii tut |
-|---|---|
-| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Baut aus OSM, prueft Konnektivitaet und Routeability, vergleicht Topologie/TLS-Evidenz mit der Referenz und oeffnet Netedit. |
-| "Audit this TraCI signal controller before I compare it with fixed-time or max-pressure." | Prueft Controller-Identitaet, gepaarte demand/seeds/horizon, TLS-Mapping, Ausgaben und Fertigstellung vor jeder Performance-Aussage. |
-| "This SUMO run finishes, but tripinfo and summary disagree." | Diagnostiziert Ausgabe-Konsistenz, unfertige Fahrzeuge, Teleports, Routenfehler und Aussagegrenze. |
+## Hamburg Digital Twin
 
-## Boundaries
+Torii wird verwendet, um einen realen Verkehrskorridor in der Hamburger Innenstadt zu rekonstruieren und zu validieren.
 
-Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als korrekt.
+<p align="center">
+  <img src="docs/assets/hamburg-digital-twin/torii-v1-corridor-aerial-sensors.png" alt="Mit Torii V1 rekonstruierter Hamburger Korridor auf Luftbilddaten mit Fahrspurverbindungen und virtuellen Sensoren" width="100%">
+</p>
 
-- OSM-Importe bleiben diagnostisch, bis Strassenumfang, Konnektivitaet, Routeability, TLS-Realitaet und Kartenbaseline-Evidenz geprueft sind.
-- `connected-core` Netze sind fuer Smoke Tests nuetzlich, aber verworfene Fragmente und Topologie-Warnungen bleiben Teil der Aussagegrenze.
-- Es beweist keine Ampel-Timings, Phasen, demand realism, controller correctness oder vollstaendige Experimentgueltigkeit.
+<p align="center"><sub>Torii-V1-Korridor auf Luftbilddaten mit Fahrspurverbindungen und virtuellen Sensoren.</sub></p>
 
-## License and Notices
+Torii kombiniert offizielle Verkehrsdaten, Luftbilder und die Rekonstruktion von SUMO-Netzen in einem einzigen Workflow.
 
-Quelltext ist unter [PolyForm Noncommercial 1.0.0](LICENSE-CODE) lizenziert. Vom Projekt erstellte Skill-Dateien, Dokumentation, Checklisten, Beispiele, Manifeste, Schemata, Protokolltexte, Prompts und visuelle Inhalte sind unter [CC BY-NC 4.0](LICENSE-DOCS) lizenziert. Diese Bedingungen erlauben keine kommerzielle Nutzung. Den Geltungsbereich beschreibt [`LICENSE`](LICENSE).
+<p align="center">
+  <img src="docs/assets/hamburg-digital-twin/torii-v1-four-stage-comparison.png" alt="LSA118-Rekonstruktion in vier Stufen: offizielle MAP-Endpunkte und Fahrtrichtungen, rekonstruierte Kurven sowie SUMO-Fahrspurverbindungen vor und nach der Bereinigung" width="100%">
+</p>
 
-Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
+<p align="center"><sub>LSA118-Rekonstruktion: offizielle MAP-Endpunkte und Fahrtrichtungen, rekonstruierte Kurven sowie Fahrspurverbindungen vor und nach der Bereinigung.</sub></p>
 
-Fruehere skill-only Releases sind auf Zenodo archiviert: https://doi.org/10.5281/zenodo.20627976
+Die aktuelle Hamburg-Kalibrierung stimmt exakt mit der aggregierten Detektoranzahl überein, mit **0,15 Fahrzeugen MAE pro 15-Minuten-Intervall**.
+
+## Dokumentation
+
+[Architektur](ARCHITECTURE.md) ·
+[Installation](docs/codex-plugin-install.md) ·
+[Dokumentation](docs/README.md) ·
+[Beispiele](examples/01_signal_control_audit/task.md)
+
+## Lizenz
+
+Torii-SUMO steht unter der [MIT-Lizenz](LICENSE).
+
+Frühere Releases sind auf [Zenodo](https://doi.org/10.5281/zenodo.20627976) archiviert.
