@@ -16,7 +16,13 @@ from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.corridor.schema import build_corridor_schema
 
 
-DEFAULT_OUTPUT = REPOSITORY_ROOT / "schemas" / "torii.corridor.research-bundle.v1.schema.json"
+DEFAULT_OUTPUT = (
+    REPOSITORY_ROOT
+    / "schemas"
+    / "research"
+    / "corridor"
+    / "torii.corridor.research-bundle.v1.schema.json"
+)
 
 
 def build_schema() -> dict[str, object]:
