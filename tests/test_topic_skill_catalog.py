@@ -5,21 +5,24 @@ from torii_sumo.core.workflow_catalog import get_workflow_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "torii-sumo"
-TOPIC_SKILLS = {"torii-build", "torii-calibrate", "torii-simulate", "torii-report"}
+REFERENCE_BUNDLES = {"torii-build", "torii-calibrate", "torii-simulate", "torii-report"}
 
 
-def test_workflow_catalog_points_to_bundled_topic_skills() -> None:
+def test_workflow_catalog_points_to_bundled_reference_bundles() -> None:
     catalog = get_workflow_catalog()
     assert catalog["status"] == "pass"
     for row in catalog["scenarios"]:
-        assert row["skill"] in TOPIC_SKILLS
-        assert row["reference"].startswith(f"skills/{row['skill']}/references/")
+        assert row["reference_bundle"] in REFERENCE_BUNDLES
+        assert row["reference"].startswith(
+            f"skills/{row['reference_bundle']}/references/"
+        )
         assert (PLUGIN / row["reference"]).is_file()
+        assert "skill" not in row
 
 
-def test_catalog_routes_product_stages_to_expected_skill() -> None:
+def test_catalog_suggests_expected_reference_bundle_for_product_stages() -> None:
     rows = {row["scenario_id"]: row for row in get_workflow_catalog()["scenarios"]}
-    assert rows["osm_network"]["skill"] == "torii-build"
-    assert rows["detector_calibration"]["skill"] == "torii-calibrate"
-    assert rows["environment_preflight"]["skill"] == "torii-simulate"
-    assert rows["run_comparison"]["skill"] == "torii-report"
+    assert rows["osm_network"]["reference_bundle"] == "torii-build"
+    assert rows["detector_calibration"]["reference_bundle"] == "torii-calibrate"
+    assert rows["environment_preflight"]["reference_bundle"] == "torii-simulate"
+    assert rows["run_comparison"]["reference_bundle"] == "torii-report"
