@@ -16,63 +16,63 @@ from pydantic import TypeAdapter
 # The only callable names accepted by this dispatcher are maintained here.
 # A scenario is not necessarily a complete workflow: checks and guidance are explicit.
 SCENARIOS = {
-    'environment_preflight': dict(kind='check', skill='torii-simulate', description='Check Python, SUMO and the available execution environment.',
+    'environment_preflight': dict(kind='check', reference_bundle='torii-simulate', description='Check Python, SUMO and the available execution environment.',
         entrypoint='torii_sumo.tools.environment_tools:sumo_preflight', reference='preflight-sumo-environment.md'),
-    'hamburg_network': dict(kind='workflow', skill='torii-build', description='Rebuild Hamburg road topology from user-supplied construction drawings or official MAP data, including continuous corridor lanes declared as road_runs. Check local connections and complete lane paths. Preserve the chosen year and source authority; do not calibrate counts.',
+    'hamburg_network': dict(kind='workflow', reference_bundle='torii-build', description='Rebuild Hamburg road topology from user-supplied construction drawings or official MAP data, including continuous corridor lanes declared as road_runs. Check local connections and complete lane paths. Preserve the chosen year and source authority; do not calibrate counts.',
         entrypoint='torii_sumo.core.hamburg_topology_workflow:build_hamburg_topology_workflow', reference='hamburg-five-intersection-aerial-workflow.md'),
-    'osm_network': dict(kind='workflow', skill='torii-build', description='Build and clean an OSM network for a declared area and traffic layers. Use hamburg_network when the task is led by Hamburg construction drawings.',
+    'osm_network': dict(kind='workflow', reference_bundle='torii-build', description='Build and clean an OSM network for a declared area and traffic layers. Use hamburg_network when the task is led by Hamburg construction drawings.',
         entrypoint='torii_sumo.tools.osm_tools:sumo_osm_cleanup_workflow', reference='osm-to-sumo-workflow.md'),
-    'intersection_scene': dict(kind='workflow', skill='torii-build', description='Build a synthetic intersection from a scene description. Do not use it to reconstruct a supplied real-road drawing.',
+    'intersection_scene': dict(kind='workflow', reference_bundle='torii-build', description='Build a synthetic intersection from a scene description. Do not use it to reconstruct a supplied real-road drawing.',
         entrypoint='torii_sumo.tools.intersection_tools:sumo_intersection_scene_workflow', reference='osm-to-sumo-workflow.md'),
-    'intersection_clean': dict(kind='workflow', skill='torii-build', description='Clean and compile one local OSM intersection patch.',
+    'intersection_clean': dict(kind='workflow', reference_bundle='torii-build', description='Clean and compile one local OSM intersection patch.',
         entrypoint='torii_sumo.tools.intersection_tools:sumo_intersection_clean', reference='osm-to-sumo-workflow.md'),
-    'network_audit': dict(kind='check', skill='torii-build', description='Inspect an existing network and its lane connections without rebuilding it.',
+    'network_audit': dict(kind='check', reference_bundle='torii-build', description='Inspect an existing network and its lane connections without rebuilding it.',
         entrypoint='torii_sumo.mcp_contract_tools:torii_network_audit', reference='osm-to-sumo-workflow.md'),
-    'network_compare': dict(kind='check', skill='torii-build', description='Compare a source network and a candidate network, preserving their identities.',
+    'network_compare': dict(kind='check', reference_bundle='torii-build', description='Compare a source network and a candidate network, preserving their identities.',
         entrypoint='torii_sumo.mcp_contract_tools:torii_network_compare', reference='osm-to-sumo-workflow.md'),
-    'signal_classification': dict(kind='check', skill='torii-build', description='Classify signal devices and groups from an OCIT-C supply file; this does not generate field timing.',
+    'signal_classification': dict(kind='check', reference_bundle='torii-build', description='Classify signal devices and groups from an OCIT-C supply file; this does not generate field timing.',
         entrypoint='torii_sumo.tools.signal_tools:sumo_signal_device_profile_classify', reference='composable-signal-device-classification.md'),
-    'tls_review': dict(kind='check', skill='torii-build', description='Review traffic signals using an existing network, OSM, and supplied inventory or field evidence.',
+    'tls_review': dict(kind='check', reference_bundle='torii-build', description='Review traffic signals using an existing network, OSM, and supplied inventory or field evidence.',
         entrypoint='torii_sumo.tools.osm_tools:sumo_tls_multisource_review', reference='model-osm-detectors.md'),
-    'intersection_classification': dict(kind='check', skill='torii-build', description='Classify physical intersection structure before node joining or signal binding.',
+    'intersection_classification': dict(kind='check', reference_bundle='torii-build', description='Classify physical intersection structure before node joining or signal binding.',
         entrypoint='torii_sumo.tools.intersection_tools:sumo_intersection_archetype_classify', reference='composable-intersection-classification.md'),
-    'detector_audit': dict(kind='check', skill='torii-calibrate', description='Compare expected detector counts and observed detector outputs.',
+    'detector_audit': dict(kind='check', reference_bundle='torii-calibrate', description='Compare expected detector counts and observed detector outputs.',
         entrypoint='torii_sumo.tools.demand_tools:sumo_detector_count_audit', reference='detector-constrained-demand-reconstruction.md'),
-    'experiment_pair_audit': dict(kind='check', skill='torii-report', description='Check whether baseline and variant SUMO configurations form a valid comparison pair.',
+    'experiment_pair_audit': dict(kind='check', reference_bundle='torii-report', description='Check whether baseline and variant SUMO configurations form a valid comparison pair.',
         entrypoint='torii_sumo.tools.evidence_tools:sumo_config_pair_preflight', reference='evaluate-and-report-results.md'),
-    'run_comparison': dict(kind='check', skill='torii-report', description='Compare already completed baseline and variant outputs. Do not start new simulations.',
+    'run_comparison': dict(kind='check', reference_bundle='torii-report', description='Compare already completed baseline and variant outputs. Do not start new simulations.',
         entrypoint='torii_sumo.tools.evidence_tools:sumo_compare_outputs', reference='evaluate-and-report-results.md',
         required_any=[['baseline_summary', 'baseline_tripinfo'], ['variant_summary', 'variant_tripinfo']]),
-    'network_review': dict(kind='check', skill='torii-build', description='Create review HTML for an existing network and available audit outputs.',
+    'network_review': dict(kind='check', reference_bundle='torii-build', description='Create review HTML for an existing network and available audit outputs.',
         entrypoint='torii_sumo.tools.osm_tools:sumo_network_review_html', reference='osm-to-sumo-workflow.md',
         required_any=[['net_file', 'raw_net_file', 'connected_core_file', 'tls_review_file', 'topology_audit_report_file', 'routeability_audit_report_file']]),
-    'road_design_review': dict(kind='check', skill='torii-build', description='Review source-bound engineering-plan width observations against the implemented rule fragments. Check edition, year and applicability; do not overwrite the user drawing.',
+    'road_design_review': dict(kind='check', reference_bundle='torii-build', description='Review source-bound engineering-plan width observations against the implemented rule fragments. Check edition, year and applicability; do not overwrite the user drawing.',
         entrypoint='torii_sumo.road_network.design_review:build_road_design_review', reference='hamburg-five-intersection-aerial-workflow.md'),
-    'rigid_vehicle_sweep': dict(kind='check', skill='torii-build', description='Check a declared rigid vehicle along a front-bumper path against supplied road and obstacle polygons. Missing boundaries do not prove clearance; articulated vehicles are unsupported.',
+    'rigid_vehicle_sweep': dict(kind='check', reference_bundle='torii-build', description='Check a declared rigid vehicle along a front-bumper path against supplied road and obstacle polygons. Missing boundaries do not prove clearance; articulated vehicles are unsupported.',
         entrypoint='torii_sumo.road_network.rigid_vehicle_sweep:rigid_vehicle_sweep', reference='hamburg-five-intersection-aerial-workflow.md'),
-    'detector_calibration': dict(kind='stage', skill='torii-calibrate', description='Fit route demand from detector constraints using routeSampler. This stage is not a complete simulation replay.',
+    'detector_calibration': dict(kind='stage', reference_bundle='torii-calibrate', description='Fit route demand from detector constraints using routeSampler. This stage is not a complete simulation replay.',
         entrypoint='torii_sumo.tools.digital_twin_tools:sumo_detector_route_sampler_calibrate', reference='detector-constrained-demand-reconstruction.md'),
-    'hamburg_demand': dict(kind='stage', skill='torii-calibrate', description='Generate and check Hamburg demand on a fixed network from bound counts and route candidates. Do not rebuild roads; SUMO replay is separate.',
+    'hamburg_demand': dict(kind='stage', reference_bundle='torii-calibrate', description='Generate and check Hamburg demand on a fixed network from bound counts and route candidates. Do not rebuild roads; SUMO replay is separate.',
         entrypoint='torii_sumo.core.hamburg_aerial_demand:generate_hamburg_aerial_demand', reference='hamburg-count-calibration-workflow.md'),
-    'hamburg_replay': dict(kind='workflow', skill='torii-calibrate', description='Run the named Hamburg corridor replay from a fixed network, detector and signal bindings, and count snapshots.',
+    'hamburg_replay': dict(kind='workflow', reference_bundle='torii-calibrate', description='Run the named Hamburg corridor replay from a fixed network, detector and signal bindings, and count snapshots.',
         entrypoint='torii_sumo.tools.digital_twin_tools:sumo_hamburg_sandtorkai_named_replay', reference='hamburg-sandtorkai-digital-twin.md'),
-    'experiment_planning': dict(kind='guidance', skill='torii-simulate', description='Clarify an experiment objective, inputs and comparison design before choosing an execution workflow.',
+    'experiment_planning': dict(kind='guidance', reference_bundle='torii-simulate', description='Clarify an experiment objective, inputs and comparison design before choosing an execution workflow.',
         entrypoint=None, reference='interactive-experiment-intake.md'),
-    'project_triage': dict(kind='guidance', skill='torii-simulate', description='Inspect a project or a bad run, identify the actual deviation, and then select the smallest relevant check.',
+    'project_triage': dict(kind='guidance', reference_bundle='torii-simulate', description='Inspect a project or a bad run, identify the actual deviation, and then select the smallest relevant check.',
         entrypoint=None, reference='route-project-workflow.md'),
-    'controller_design': dict(kind='guidance', skill='torii-simulate', description='Choose or develop a controller family with explicit observations, actions and comparison conditions.',
+    'controller_design': dict(kind='guidance', reference_bundle='torii-simulate', description='Choose or develop a controller family with explicit observations, actions and comparison conditions.',
         entrypoint=None, reference='sumolights-controller-patterns.md'),
-    'code_development': dict(kind='guidance', skill='torii-simulate', description='Implement or repair code using a failing check, the smallest change, and fresh verification.',
+    'code_development': dict(kind='guidance', reference_bundle='torii-simulate', description='Implement or repair code using a failing check, the smallest change, and fresh verification.',
         entrypoint=None, reference='develop-and-verify-code.md'),
-    'sumo_knowledge': dict(kind='guidance', skill='torii-simulate', description='Explain SUMO semantics or investigate a source-supported question without claiming a simulation was run.',
+    'sumo_knowledge': dict(kind='guidance', reference_bundle='torii-simulate', description='Explain SUMO semantics or investigate a source-supported question without claiming a simulation was run.',
         entrypoint=None, reference='learn-sumo-knowledge.md'),
-    'release_review': dict(kind='guidance', skill='torii-report', description='Review release readiness and exposure. Selecting this guide does not authorize publication.',
+    'release_review': dict(kind='guidance', reference_bundle='torii-report', description='Review release readiness and exposure. Selecting this guide does not authorize publication.',
         entrypoint=None, reference='release-project.md'),
 }
 
 
 def _reference_path(entry):
-    return f"skills/{entry['skill']}/references/{entry['reference']}"
+    return f"skills/{entry['reference_bundle']}/references/{entry['reference']}"
 
 
 def _resolve(entry):
@@ -126,7 +126,7 @@ def get_workflow_catalog(scenario_id=None):
     return dict(schema='torii.workflow-catalog/v1', status='pass', selection_provider='host_llm', scenarios=rows,
         selection_fields=['user_request', 'scenario_id', 'reason', 'arguments'],
         instructions='Choose from user intent and supplied evidence. Preserve target year and primary source. '
-                     'A check or stage is not a complete workflow. Skill references are optional supporting material; '
+                     'A check or stage is not a complete workflow. Reference bundles are optional supporting material; '
                      'consult them when useful. Do not invent missing inputs or claim guidance-only entries were executed.')
 
 
@@ -153,13 +153,13 @@ def run_selected_workflow(selection, *, execute=False):
     except (TypeError, ValueError) as error:
         return {**report, 'error': f'arguments must contain finite JSON values: {error}'}
     entry = SCENARIOS[identifier]
-    report.update(selection=selection, scenario_id=identifier, kind=entry['kind'], skill=entry['skill'], entrypoint=entry['entrypoint'],
+    report.update(selection=selection, scenario_id=identifier, kind=entry['kind'], reference_bundle=entry['reference_bundle'], entrypoint=entry['entrypoint'],
                   reference=_reference_path(entry))
     if entry['kind'] == 'guidance':
         if arguments:
             return {**report, 'error': 'Guidance entries do not accept callable arguments.'}
         return {**report, 'status': 'review_required', 'execution_status': 'guidance_only',
-                'next_action': 'Use the associated skill or reference if it is useful for the requested reasoning.'}
+                'next_action': 'Use the associated reference bundle or reference if it is useful for the requested reasoning.'}
     try:
         function = _resolve(entry)
         signature, hints = _parameters(function)
