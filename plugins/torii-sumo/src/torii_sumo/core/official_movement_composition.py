@@ -179,7 +179,7 @@ def _collapse_serial_lane_candidates(index, choices, members, role):
 
 
 def _original_lane_bindings(index, lanes, members, maximum_error, margin):
-    from .hamburg_aerial_corridor_candidate import _lane_overlap_error
+    from .hamburg_junctions.lanes import _lane_overlap_error
 
     bindings, reviews = {}, []
     for lane_id, lane in lanes.items():
@@ -284,7 +284,7 @@ def _official_geometry(plan, root, points):
     from pathlib import Path
     from pyproj import Transformer
     from .hamburg_map_kml import parse_hamburg_map_kml
-    from .hamburg_aerial_corridor_candidate import fit_movement_shape_to_anchors
+    from .hamburg_junctions.geometry import fit_movement_shape_to_anchors
 
     artifact = plan.get("inputs", {}).get("map_kml")
     if not artifact:
@@ -508,7 +508,7 @@ def _carried_source_sections(pieces, boundary, *, reverse, limit):
 def _source_boundary_extensions(original, candidate, *, lanes, source_lanes, source_bindings, members,
                                 bindings, boundary_candidates, links, aliases, transform,
                                 geometry_limit, anchor_limit, source_binding_reviews=()):
-    from .hamburg_aerial_corridor_candidate import _lane_overlap_error
+    from .hamburg_junctions.lanes import _lane_overlap_error
 
     extensions, reviews = [], []
     carriers = {row["lane_id"]: row["source_boundary_carrier"] for row in source_binding_reviews if row.get("source_boundary_carrier")}
@@ -630,8 +630,9 @@ def compose_official_movements(
     official path. ``candidate_allowed_vehicle_classes`` is the full SUMO set.
     Excess permissions are checked against all official paths for the same pair.
     """
-    # Runtime import reuses the existing binder without an import-time cycle.
-    from .hamburg_aerial_corridor_candidate import _bind_official_lanes, _project_plan_to_network, fit_movement_shape_to_anchors
+    from .hamburg_junctions.lanes import _bind_official_lanes
+    from .hamburg_junctions.source import _project_plan_to_network
+    from .hamburg_junctions.geometry import fit_movement_shape_to_anchors
 
     if any(not math.isfinite(value) or value <= 0 for value in (maximum_lane_error_m, minimum_match_margin_m, maximum_continuation_gap_m, maximum_source_anchor_error_m)):
         raise ValueError("composition limits must be finite and positive")

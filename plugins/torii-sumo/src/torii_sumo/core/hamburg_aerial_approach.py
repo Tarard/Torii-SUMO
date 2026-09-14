@@ -222,7 +222,7 @@ def build_hamburg_aerial_approach_candidate(
         ET.indent(traffic_lights)
         ET.ElementTree(traffic_lights).write(paths["traffic_lights"], encoding="utf-8", xml_declaration=True)
     candidate = destination / "approach-candidate.net.xml"
-    command = [netconvert_binary, "--sumo-net-file", str(source), "--node-files", str(paths["nodes"]), "--edge-files", str(paths["edges"]), "--connection-files", str(paths["connections"]), *(["--tllogic-files", str(paths["traffic_lights"])] if touched_controller_ids else []), "--offset.disable-normalization", "true", "--output-file", str(candidate)]
+    command = [netconvert_binary, "--sumo-net-file", str(source), "--node-files", str(paths["nodes"]), "--edge-files", str(paths["edges"]), "--connection-files", str(paths["connections"]), *(["--tllogic-files", str(paths["traffic_lights"])] if touched_controller_ids else []), "--offset.disable-normalization", "true", "--junctions.internal-link-detail", "25", "--output-file", str(candidate)]
     compiled = run_command(command, cwd=destination, timeout_seconds=timeout_seconds)
     (destination / "netconvert.log").write_text(compiled.stdout + compiled.stderr, encoding="utf-8")
     if compiled.returncode != 0 or not candidate.is_file():

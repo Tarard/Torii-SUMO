@@ -957,7 +957,7 @@ def materialize_corridor_edit_variant(
             if str(record.get("node_id", ""))
         )
         try:
-            from .junction_rebuild_candidate import restore_scoped_pedestrian_internal_semantics_after_normalize
+            from .junction_rebuild.pedestrians import restore_scoped_pedestrian_internal_semantics_after_normalize
 
             for junction_id in sorted(touched_junction_ids):
                 pedestrian_restore_report.append(

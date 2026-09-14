@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .command_runner import run_command
-from .junction_rebuild_candidate import _restore_replayed_geometry_attrs
+from .junction_rebuild.restoration import _restore_replayed_geometry_attrs
 from .network_plan import NETWORK_PLAN_QUESTION
 from .osm_area import osm_preview_url
 from .road_connectivity_teacher_model import (

@@ -299,7 +299,8 @@ def build_engineering_topology(*, topology_file, source_osm, output_dir, target_
     network = destination / "engineering.net.xml"
     command = [str(netconvert_binary), "--node-files", str(paths["nodes"]), "--edge-files", str(paths["edges"]),
                "--connection-files", str(paths["connections"]), "--tllogic-files", str(paths["signals"]),
-               "--no-turnarounds", "true", "--precision", "6", "--output-file", str(network)]
+               "--no-turnarounds", "true", "--junctions.internal-link-detail", "25",
+               "--precision", "6", "--output-file", str(network)]
     compiled = run_command(command, cwd=destination, timeout_seconds=60)
     report["netconvert_result"] = compiled.to_dict()
     (destination / "netconvert.log").write_text(compiled.stdout + compiled.stderr, encoding="utf-8")

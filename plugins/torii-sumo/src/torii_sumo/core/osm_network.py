@@ -356,6 +356,8 @@ def filter_osm_by_highways(
     allowed_railways: set[str] | None = None,
 ) -> dict[str, Any]:
     """Select complete source ways; bbox selection never cuts their geometry."""
+    from .road_scope import HIGHWAY_CLASS_PRESETS
+
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
 
@@ -379,6 +381,7 @@ def filter_osm_by_highways(
     dropped_ways_outside_bbox = 0
     dropped_ways_outside_reference_scope = 0
     kept_railway_ways = 0
+    dropped_vehicle_area_way_ids = []
     for way in root.findall("way"):
         way_id = way.attrib.get("id", "")
         highway = _highway_value(way)
@@ -398,6 +401,13 @@ def filter_osm_by_highways(
             # also supplied construction in allowed_highways.
             keep_by_category = False
         if force_way or keep_by_category:
+            # A drivable surface is not a road along its perimeter. Keep
+            # pedestrian areas and independent railway geometry unchanged.
+            if (highway in HIGHWAY_CLASS_PRESETS["full_vehicle"]
+                    and _tag_value(way, "area") == "yes" and not railway):
+                dropped_vehicle_area_way_ids.append(way_id)
+                dropped_ways += 1
+                continue
             if (
                 not force_way
                 and allowed_way_ids is not None
@@ -451,6 +461,8 @@ def filter_osm_by_highways(
         "dropped_ways": dropped_ways,
         "kept_relations": len(kept_relations),
     }
+    if dropped_vehicle_area_way_ids:
+        stats["dropped_vehicle_area_way_ids"] = sorted(dropped_vehicle_area_way_ids)
     if bbox is not None:
         stats.update(
             {
@@ -947,6 +959,8 @@ def build_osm_network(
             "--output-file",
             _relative_to_root(net_file, root),
             "--proj.utm",
+            "--junctions.internal-link-detail",
+            "25",
             *traffic_side_options,
             *turnaround_options,
             "--osm.all-attributes",

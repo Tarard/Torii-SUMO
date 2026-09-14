@@ -16,6 +16,8 @@ from .connection_mode_audit import build_network_connection_mode_audit
 
 REPAIR_SCHEMA = "torii.hamburg-lane-connection-repair/v1"
 
+HAMBURG_DIVERGE_LANE_SHAPE = ((609.03, 607.10), (632.40, 601.61), (714.80, 583.52))
+
 LSA119_OLD_STATE_INDICES = (0, 1, 2, 7, 8, 9, 10, 11, 14, 15, 17)
 
 LSA119_ONE_TO_ONE_LINKS = (
@@ -342,7 +344,7 @@ def write_hamburg_diverge_geometry_patch(path: Path) -> None:
         edge,
         "lane",
         index="0",
-        shape="609.03,607.10 632.40,601.61 714.80,583.52",
+        shape=" ".join(f"{x:.2f},{y:.2f}" for x, y in HAMBURG_DIVERGE_LANE_SHAPE),
     )
     destination = Path(path).resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)

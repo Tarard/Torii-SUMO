@@ -10,6 +10,7 @@
 #   "pydantic>=2.7",
 #   "pywin32>=306; platform_system == 'Windows'",
 #   "scipy>=1.11",
+#   "shapely>=2.1,<3",
 #   "sumolib>=1.27.1",
 #   "traci>=1.20",
 #   "tzdata>=2024.1; platform_system == 'Windows'",

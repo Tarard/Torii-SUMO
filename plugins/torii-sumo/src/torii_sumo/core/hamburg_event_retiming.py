@@ -15,8 +15,13 @@ from .candidate_contracts import file_sha256
 from .command_runner import run_command
 
 
-def read_passages(path, detector_station, vehicle_ids, *, expected_entries=None, period=900):
+def read_passages(path, detector_station, vehicle_ids, *, expected_entries=None, period=900, step_length=None):
     """Keep enter events; deduplicate only during the V1 station/bin count."""
+    if not math.isfinite(period) or period <= 0:
+        raise ValueError("Detector period must be positive and finite.")
+    if step_length is not None and (not math.isfinite(step_length) or step_length <= 0
+            or not math.isclose(period / step_length, round(period / step_length), rel_tol=0, abs_tol=1e-9)):
+        raise ValueError("Simulation step must be positive, finite, and divide the detector period.")
     events = defaultdict(set)
     entries = Counter()
     root = ET.parse(path).getroot()
@@ -32,6 +37,10 @@ def read_passages(path, detector_station, vehicle_ids, *, expected_entries=None,
         time = float(row.attrib["time"])
         if vehicle not in vehicle_ids or not math.isfinite(time) or time < 0:
             raise ValueError("instant E1 event has an invalid vehicle or time")
+        if step_length is not None:
+            # Instantaneous enter times interpolate within a step; periodic
+            # E1 nVehEntered counts the notification at the step boundary.
+            time = math.ceil(math.nextafter(time / step_length, -math.inf)) * step_length
         entries[detector, math.floor(time / period) * period] += 1
         events[vehicle].add((detector_station[detector], time))
     if expected_entries is not None and any(entries[key] != count for key, count in expected_entries.items()):
@@ -157,7 +166,7 @@ def calibrate_departures(*, source_run, canonical_counts, output_dir,
         command = [str(sumo_binary), "-n", "network.net.xml", "-r", "demand.rou.xml",
                    "-a", "e1.add.xml,instant.add.xml", "--end", str(horizon), "--seed", str(seed),
                    "--summary-output", "summary.xml", "--tripinfo-output", "tripinfo.xml",
-                   "--tripinfo-output.write-unfinished", "true", "--precision", "12",
+                   "--tripinfo-output.write-unfinished", "true", "--precision", "12", "--step-length", "1",
                    "--collision-output", "collisions.xml", "--collision.check-junctions", "true",
                    "--log", "sumo.log", "--error-log", "sumo-error.log",
                    "--duration-log.statistics", "true", "--no-step-log", "true"]
@@ -191,7 +200,7 @@ def calibrate_departures(*, source_run, canonical_counts, output_dir,
                for v in trips if v.attrib["id"] in expected_factors):
             raise ValueError("SUMO changed a fixed vehicle speed factor")
         events = read_passages(run / "instant-e1.xml", detector_station, vehicle_ids,
-                               expected_entries=expected_entries, period=period)
+                               expected_entries=expected_entries, period=period, step_length=1)
         report = compare_passages(events, targets, begin, period)
         report.update(run_directory=str(run), completion=health,
                       healthy=(all(health[k] == len(vehicle_ids) for k in ("loaded", "inserted", "arrived"))
@@ -257,7 +266,8 @@ def calibrate_departures(*, source_run, canonical_counts, output_dir,
     result = dict(status="exact_fit" if current["total_absolute_error"] == 0 else "bounded_search_complete",
                   claim_status="diagnostic-demo", source_run=str(source), seed=seed,
                   speed_factors="fixed per vehicle from 12-digit V1 reproduction output",
-                  window=window, max_shift_from_baseline_seconds=max_shift, max_trials=max_trials,
+                  window=window, count_time_basis="periodic E1 notification bins, 1-second simulation steps",
+                  max_shift_from_baseline_seconds=max_shift, max_trials=max_trials,
                   source_hashes={name: file_sha256(source / name) for name in (*required_files, "demand.rou.xml")},
                   canonical_counts=dict(path=str(count_path), sha256=file_sha256(count_path)),
                   source_limitations=audit.get("limitations", []), baseline=baseline, best=current,

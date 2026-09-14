@@ -11,10 +11,8 @@ import xml.etree.ElementTree as ET
 from torii_sumo.intersection import compile_plain as plain_compiler
 from torii_sumo.intersection.schema import IntersectionIR, TLSPhase
 
-from .junction_rebuild_candidate import (
-    build_shared_teacher_tls_controller_replay_plan,
-    write_shared_teacher_tls_controller_replay_net,
-)
+from .junction_rebuild.replay_plans import build_shared_teacher_tls_controller_replay_plan
+from .junction_rebuild.controller_replay import write_shared_teacher_tls_controller_replay_net
 from .tls_aggregation import build_tls_signal_grouping_variant
 
 if TYPE_CHECKING:

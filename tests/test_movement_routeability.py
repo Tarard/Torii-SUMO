@@ -9,6 +9,35 @@ from torii_sumo import cli
 from torii_sumo.core.candidate_contracts import file_sha256
 
 
+@pytest.mark.skipif(not shutil.which("netconvert") or not shutil.which("sumo"), reason="SUMO binaries required")
+def test_context_paths_are_probed_separately_and_bound_to_the_construction_source(tmp_path):
+    from torii_sumo.core.movement_routeability import run_candidate_movement_probes
+
+    nodes, edges, network = tmp_path / 'nodes.xml', tmp_path / 'edges.xml', tmp_path / 'net.xml'
+    nodes.write_text('<nodes><node id="w" x="0" y="0"/><node id="j" x="50" y="0"/><node id="n" x="50" y="50"/><node id="e" x="100" y="0"/></nodes>', encoding='utf-8')
+    edges.write_text('<edges><edge id="a" from="w" to="j"/><edge id="b" from="n" to="j"/><edge id="out" from="j" to="e"/></edges>', encoding='utf-8')
+    subprocess.run(['netconvert', '-n', str(nodes), '-e', str(edges), '-o', str(network)], check=True, capture_output=True, timeout=30)
+    identity = {'path': str(network), 'sha256': file_sha256(network)}
+    manifest, context = tmp_path / 'manifest.json', tmp_path / 'context.json'
+    manifest.write_text(json.dumps({'schema': 'torii.hamburg-aerial-corridor-candidate/v1',
+        'artifacts': {'network': identity}, 'inputs': {'source_net': identity},
+        'counts': {'official_vehicle_movements': 1},
+        'official_connection_audit': {'required': [{'sumo_connection': ['a', 0, 'out', 0]}]}}), encoding='utf-8')
+    record = {'schema': 'torii.junction-boundary-rebuild/v1', 'status': 'pass', 'candidate_network': identity,
+              'plan': {'movements': [{'join_id': 'j', 'connection': ['b', 0, 'out', 0], 'vehicle_classes': ['passenger']}]}}
+    context.write_text(json.dumps(record), encoding='utf-8')
+    result = run_candidate_movement_probes(candidate_manifest=manifest, context_manifest=context, output_dir=tmp_path / 'probes')
+    assert result['status'] == 'pass'
+    assert result['official_total'] == 1
+    assert result['context_boundary_probe_count'] == 1
+    assert result['probe_count'] == 2
+    assert all(row['connection_chain_proof']['pass'] for row in result['results'])
+    record['candidate_network'] = {'path': str(network), 'sha256': '0' * 64}
+    context.write_text(json.dumps(record), encoding='utf-8')
+    with pytest.raises(ValueError, match='construction source'):
+        run_candidate_movement_probes(candidate_manifest=manifest, context_manifest=context, output_dir=tmp_path / 'wrong-source')
+
+
 def test_complete_chain_rejects_a_wrong_internal_lane_even_with_correct_endpoints():
     module = importlib.import_module("torii_sumo.core.movement_routeability")
     movement = {"sumo_connection": ["in", 0, "out", 0]}
