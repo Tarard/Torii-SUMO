@@ -9,11 +9,10 @@ def test_readme_links_plugin_install_doc() -> None:
 
     assert "docs/codex-plugin-install.md" in readme
     assert "docs/README.md" in readme
-    assert "docs/repository-guide.md" in readme
     assert "ARCHITECTURE.md" in readme
-    assert "## Installation" in readme
     assert "## Quick Start" in readme
-    assert "## More" in readme
+    assert "## Documentation" in readme
+    assert "docs/repository-guide.md" not in readme
     assert "docs/superpowers/specs/2026-06-20-torii-sumo-design.md" not in readme
     assert "docs/superpowers/plans/2026-06-20-torii-sumo.md" not in readme
 
