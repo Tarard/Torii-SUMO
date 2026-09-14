@@ -5,309 +5,133 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "plugins" / "torii-sumo" / "skills" / "simulation-helper-skill-for-eclipse-sumo"
+SKILLS = ROOT / "plugins" / "torii-sumo" / "skills"
 
-
-EXISTING_PUBLIC_REFERENCES = {
-    "audit-sumo-controllers.md",
-    "capture-field-lesson.md",
-    "compare-corridor-perturbations.md",
-    "develop-and-verify-code.md",
-    "detector-constrained-demand-reconstruction.md",
-    "evaluate-and-report-results.md",
-    "hamburg-count-calibration-workflow.md",
-    "hamburg-five-intersection-aerial-workflow.md",
-    "hamburg-sandtorkai-digital-twin.md",
-    "interactive-experiment-intake.md",
-    "learn-sumo-knowledge.md",
-    "model-osm-detectors.md",
-    "osm-to-sumo-workflow.md",
-    "osm-source-patterns.md",
-    "plan-experiment.md",
-    "preflight-sumo-environment.md",
-    "release-project.md",
-    "route-project-workflow.md",
+EXPECTED_REFERENCES = {
+    "torii-build": {
+        "composable-intersection-classification.md",
+        "composable-signal-device-classification.md",
+        "hamburg-five-intersection-aerial-workflow.md",
+        "hamburg-count-calibration-workflow.md",
+        "model-osm-detectors.md",
+        "osm-source-patterns.md",
+        "osm-to-sumo-workflow.md",
+        "osm-way-fragmentation-and-road-axis-reconstruction.md",
+        "road-arm-and-connection-classification.md",
+    },
+    "torii-calibrate": {
+        "cached-detector-demand.md",
+        "detector-constrained-demand-reconstruction.md",
+        "hamburg-count-calibration-workflow.md",
+        "hamburg-five-intersection-aerial-workflow.md",
+        "hamburg-sandtorkai-digital-twin.md",
+    },
+    "torii-simulate": {
+        "audit-sumo-controllers.md",
+        "compare-corridor-perturbations.md",
+        "debug-sumo-traci.md",
+        "develop-and-verify-code.md",
+        "experiment-problem-solving.md",
+        "interactive-experiment-intake.md",
+        "learn-sumo-knowledge.md",
+        "mcp-tool-routing.md",
+        "plan-experiment.md",
+        "preflight-sumo-environment.md",
+        "route-project-workflow.md",
+        "sumolights-controller-patterns.md",
+    },
+    "torii-report": {
+        "capture-field-lesson.md",
+        "evaluate-and-report-results.md",
+        "release-project.md",
+        "traffic-control-reporting.md",
+    },
 }
 
 
-def read_skill() -> str:
-    return (SKILL / "SKILL.md").read_text(encoding="utf-8")
+def skill_dir(name: str) -> Path:
+    return SKILLS / name
 
 
-def read_openai_agent() -> dict:
-    return yaml.safe_load((SKILL / "agents" / "openai.yaml").read_text(encoding="utf-8"))
+def read_skill(name: str) -> str:
+    return (skill_dir(name) / "SKILL.md").read_text(encoding="utf-8")
 
 
-def test_public_skill_files_are_bundled() -> None:
-    assert (SKILL / "SKILL.md").is_file()
-    assert (SKILL / "agents" / "openai.yaml").is_file()
-
-    bundled = {path.name for path in (SKILL / "references").glob("*.md")}
-    assert EXISTING_PUBLIC_REFERENCES <= bundled
+def test_plugin_bundles_four_topic_skills() -> None:
+    actual = {path.name for path in SKILLS.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()}
+    assert actual == set(EXPECTED_REFERENCES)
+    assert not (SKILLS / "simulation-helper-skill-for-eclipse-sumo").exists()
 
 
-def test_skill_routes_only_to_existing_reference_files() -> None:
-    body = read_skill()
-    routed = set(re.findall(r"`references/([^`]+\.md)`", body))
+def test_each_skill_has_matching_frontmatter_and_agent_metadata() -> None:
+    for name in EXPECTED_REFERENCES:
+        body = read_skill(name)
+        frontmatter = yaml.safe_load(body.split("---", 2)[1])
+        assert frontmatter["name"] == name
+        assert frontmatter["description"]
 
-    missing = sorted(ref for ref in routed if not (SKILL / "references" / ref).is_file())
-    assert missing == []
-
-
-def test_openai_agent_exposes_required_fields() -> None:
-    agent = read_openai_agent()
-
-    assert agent["interface"]["display_name"]
-    assert agent["interface"]["short_description"]
-    assert "$simulation-helper-skill-for-eclipse-sumo" in agent["interface"]["default_prompt"]
-    assert agent["policy"]["allow_implicit_invocation"] is True
+        agent = yaml.safe_load((skill_dir(name) / "agents" / "openai.yaml").read_text(encoding="utf-8"))
+        assert agent["interface"]["display_name"]
+        assert agent["interface"]["short_description"]
+        assert f"${name}" in agent["interface"]["default_prompt"]
+        assert agent["policy"]["allow_implicit_invocation"] is True
 
 
-def test_skill_bundle_has_no_external_debugging_skill_route() -> None:
-    needles = {
-        "debugging-helper-skill-for-eclipse-sumo",
-        "debugging helper",
-    }
-    hits = {
-        (path.relative_to(SKILL).as_posix(), needle)
-        for path in SKILL.rglob("*")
-        for needle in needles
-        if path.is_file() and needle in path.read_text(encoding="utf-8")
-    }
-
-    assert hits == set()
+def test_topic_reference_sets_are_present() -> None:
+    for name, expected in EXPECTED_REFERENCES.items():
+        bundled = {path.name for path in (skill_dir(name) / "references").glob("*.md")}
+        assert bundled == expected
 
 
-def test_release_project_documents_plugin_bundle_boundary() -> None:
-    body = (SKILL / "references" / "release-project.md").read_text(encoding="utf-8")
-
-    assert "Bundle Context" in body
-    assert "plugin bundle" in body
-    assert "standalone public skill repository" in body
-
-
-def test_skill_preserves_claim_boundary_language() -> None:
-    body = read_skill()
-
-    assert "formal-evidence" in body
-    assert "diagnostic-demo" in body
-    assert "construction-invalid" in body
-    assert "Compare controllers only with paired route" in body
+def test_each_skill_routes_only_to_local_reference_files() -> None:
+    for name in EXPECTED_REFERENCES:
+        body = read_skill(name)
+        routed = set(re.findall(r"`references/([^`]+\.md)`", body))
+        missing = sorted(ref for ref in routed if not (skill_dir(name) / "references" / ref).is_file())
+        assert missing == []
 
 
-def test_skill_routes_mcp_tools_and_feedback_diagnosis() -> None:
-    body = read_skill()
-    reference = (SKILL / "references" / "mcp-tool-routing.md").read_text(encoding="utf-8")
+def test_product_boundaries_are_explicit() -> None:
+    build = read_skill("torii-build")
+    calibrate = read_skill("torii-calibrate")
+    simulate = read_skill("torii-simulate")
+    report = read_skill("torii-report")
 
-    assert "references/mcp-tool-routing.md" in body
-    assert "MCP Tool Use Record" in body
-    assert "feedback signals" in body
-    assert "sumo_preflight" in reference
-    assert "sumo_compare_outputs" in reference
-    assert "sumo_osm_resolve_place" in reference
-    assert "sumo_network_routeability_audit" in reference
-    assert "sumo_hamburg_sandtorkai_digital_twin" in reference
-    assert "sumo_signal_device_profile_classify" in reference
-    assert "sumo_detector_route_sampler_calibrate" in reference
-    assert "sumo_digital_twin_replay_validate" in reference
-    assert "MCP tool output is observation" in reference
-    assert "diagnose what the metric implies" in reference
+    assert "$torii-calibrate" in build
+    assert "$torii-build" in calibrate
+    assert "$torii-report" in simulate
+    assert "$torii-simulate" in report
+    assert "Do not rerun experiments unless the user explicitly asks" in report
 
 
-def test_skill_routes_sumolights_controller_patterns_without_source_copy() -> None:
-    body = read_skill()
-    reference = (SKILL / "references" / "sumolights-controller-patterns.md").read_text(encoding="utf-8")
-
-    assert "references/sumolights-controller-patterns.md" in body
-    assert "Controller Application Plan" in body
-    assert "Controller Identity Record" in reference
-    assert "max-pressure" in reference
-    assert "Webster" in reference
-    assert "SOTL" in reference
-    assert "Do not copy GPL-3.0 source code" in reference
-    assert "implementation-pattern evidence only" in reference
-    assert "unsupported by existing MCP tools" in reference
-    assert "create a code-development plan instead of pretending the controller was applied" in reference
-
-
-def test_skill_routes_osm_to_sumo_workflow_separately() -> None:
-    body = read_skill()
-    workflow_reference = (SKILL / "references" / "osm-to-sumo-workflow.md").read_text(encoding="utf-8")
-    model_reference = (SKILL / "references" / "model-osm-detectors.md").read_text(encoding="utf-8")
-
-    assert "references/osm-to-sumo-workflow.md" in body
-    assert "sumo_osm_cleanup_workflow" in workflow_reference
-    assert "network_plan_status" in workflow_reference
-    assert "Google Maps TLS review" in workflow_reference
-    assert "SUMO-GUI" in workflow_reference
-    assert "Netedit" in workflow_reference
-    assert "workflow_review_html" in workflow_reference
-    assert "OSM Cleanup Hard Gates" not in model_reference
-    assert "One-Sentence Autopilot Contract" not in model_reference
-
-
-def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -> None:
-    body = read_skill()
-    model_reference = (SKILL / "references" / "model-osm-detectors.md").read_text(encoding="utf-8")
-    source_reference = (SKILL / "references" / "osm-source-patterns.md").read_text(encoding="utf-8")
-
-    assert "references/osm-source-patterns.md" in body
-    assert "user's stated historical target controls the baseline" in model_reference
-    assert "Region-Aware Reality Baseline" in model_reference
-    assert "regional map/TLS reality evidence" in model_reference
-    assert "Amap/Gaode" in model_reference
-    assert "WGS84/GCJ-02/BD-09" in model_reference
-    assert "current map or a historical target date" in model_reference
-    assert "map_temporal_scope" in model_reference
-    assert "OSMnx" in source_reference
-    assert "OSMNet" in source_reference
-    assert "pyrosm" in source_reference
-    assert "SUMO osmGet/osmBuild" in source_reference
-    assert "osm-to-xodr" in source_reference
-    assert "Do not vendor external source code" in source_reference
-    assert "Observed OSM-to-SUMO Cleanup Profiles" in source_reference
-    assert "sumo-berlin" in source_reference
-    assert "MoSTScenario" in source_reference
-    assert "actrys" in source_reference
-    assert "not a substitute for TUM-style teacher replay" in source_reference
-
-
-def test_skill_routes_detector_constrained_demand_reconstruction() -> None:
-    body = read_skill()
-    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
-
-    assert "references/detector-constrained-demand-reconstruction.md" in body
-    assert "references/sensor-to-od-route-reconstruction.md" not in body
-    assert "references/detector-constrained-od-reconstruction.md" not in body
-    assert "Detector counts are route constraints, not OD observations" in reference
-    assert "Field Pattern: Sensor-Only Demand Reconstruction" in reference
-    assert "RouteSampler Ladder" in reference
-    assert "Month-Long Daily Workflow" in reference
-    assert "Tool Boundary" in reference
-    assert "Public Data Boundary" in reference
-    assert "Treat detector-matched routes as a plausible demand reconstruction" in reference
-    assert "large-scale real-world detector observations" in reference
-    assert "simulated detector measurements match the real detector measurements over time" in reference
-
-
-def test_detector_constrained_demand_reference_is_workflow_first() -> None:
-    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
-
-    required_sections = [
-        "## Workflow Contract",
-        "## Gate 0: Target Declaration",
-        "## Gate 1: Detector Alignment",
-        "## Gate 2: Route Support Coverage",
-        "## Gate 3: Time-Bin Constraint Construction",
-        "## Gate 4: Baseline Reconstruction",
-        "## Gate 5: Residual-Correction Calibration",
-        "## Gate 6: Hourly And Daily Audit",
-        "## Month-Long Workflow Exit Criteria",
-        "## Failure Feedback Rules",
-        "## March Field Lesson",
-    ]
-
-    for section in required_sections:
-        assert section in reference
-
-    required_artifacts = [
-        "target_record",
-        "detector_manifest",
-        "route_candidate_manifest",
-        "route_detector_incidence",
-        "time_bin_count_constraints",
-        "baseline_comparison",
-        "calibrated_comparison",
-        "hourly_audit",
-        "daily_summary",
-        "workflow_status",
-    ]
-
-    for artifact in required_artifacts:
-        assert artifact in reference
-
-    assert "Workflow first, tools second" in reference
-    assert "underflow" in reference
-    assert "route support" in reference
-    assert "Do not call a detector-entry smoke test OD reconstruction" in reference
-
-
-def test_detector_constrained_demand_reference_lists_reusable_python_executors() -> None:
-    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
-
-    assert "## Reusable Python Executors" in reference
-    assert "sumo_detector_route_support" in reference
-    assert "sumo_detector_count_constraints" in reference
-    assert "sumo_detector_count_audit" in reference
-    assert "sumo_hamburg_sandtorkai_digital_twin" in reference
-    assert "sumo_detector_route_sampler_calibrate" in reference
-    assert "sumo_digital_twin_replay_validate" in reference
-    assert "The bundled code contains no project-specific detector data" in reference
-    assert "Public outputs require anonymized inputs" in reference
-
-
-def test_skill_routes_fixed_hamburg_sandtorkai_digital_twin() -> None:
-    body = read_skill()
-    reference = (SKILL / "references" / "hamburg-sandtorkai-digital-twin.md").read_text(encoding="utf-8")
-
-    assert "references/hamburg-sandtorkai-digital-twin.md" in body
-    required_contract_terms = [
-        "https://iot.hamburg.de/v1.1/",
-        "https://tld.iot.hamburg.de/v1.1/",
-        "https://daten-hamburg.de/tlf_public/",
-        "9.9780,53.5390,10.0005,53.5475",
-        "count_node_ids: 0228, 2421, 2394",
-        "signal_node_ids: 228, 2421, 2394",
-        "Europe/Berlin",
-        "strict complete",
-        "300-second source cells",
-        "15-minute",
-        "official MAP ingress lane",
-        "virtual_detector_mapping.csv",
-        "virtual_expected_counts_15min.csv",
-        "(physical node, SUMO lane)",
-        "route_sampler_edge_constraints.csv",
-        "partial-lane",
-        "--edgedata-attribute count",
-        "nVehContrib",
-        "A measured zero is a valid matched value",
-        "measurement, not zero",
-        "Non-identifiability statement",
-        "Many route/OD assignments",
-        "Datenlizenz Deutschland Namensnennung 2.0",
-        "sumo_hamburg_sandtorkai_digital_twin",
-        "sumo_detector_route_sampler_calibrate",
-        "sumo_digital_twin_replay_validate",
-    ]
-    for term in required_contract_terms:
-        assert term in reference
-
-
-def test_skill_routes_five_intersection_aerial_workflow() -> None:
-    body = read_skill()
-    reference = (
-        SKILL / "references" / "hamburg-five-intersection-aerial-workflow.md"
-    ).read_text(encoding="utf-8")
-
-    assert "references/hamburg-five-intersection-aerial-workflow.md" in body
+def test_reporting_reference_preserves_traffic_evidence_contract() -> None:
+    body = (skill_dir("torii-report") / "references" / "traffic-control-reporting.md").read_text(encoding="utf-8")
     for term in (
-        "torii hamburg build-network",
-        "torii hamburg aerial-movements",
-        "torii hamburg combine-aerial-movements",
-        "netedit_background_review.py",
-        "Connection -> Inspect",
-        "MAP/KML lane",
-        "Hamburg aerial imagery",
-        "review_required",
-        "diagnostic-demo",
-        "CLI-only",
+        "network and demand",
+        "Controller Information Contract",
+        "TraCI` is an interface, not a sensor model",
+        "minimum and maximum green",
+        "unfinished-vehicle treatment",
+        "algorithm benefit from information benefit",
+        "simulator truth",
     ):
-        assert term in reference
+        assert term in body
 
-    calibration = (SKILL / "references" / "hamburg-count-calibration-workflow.md").read_text(encoding="utf-8")
-    assert "references/hamburg-count-calibration-workflow.md" in body
-    assert "hamburg-count-calibration-workflow.md" in reference
-    assert "network-handoff.json" in reference and "network-handoff.json" in calibration
-    for command in ("bind-aerial-signals", "bind-aerial-counts", "generate-aerial-demand"):
-        assert f"torii hamburg {command}" in calibration
-        assert f"torii hamburg {command}" not in reference
+
+def test_debugging_and_experiment_diagnosis_live_in_simulate() -> None:
+    refs = skill_dir("torii-simulate") / "references"
+    debug = (refs / "debug-sumo-traci.md").read_text(encoding="utf-8")
+    diagnosis = (refs / "experiment-problem-solving.md").read_text(encoding="utf-8")
+    assert "environment-fault" in debug
+    assert "controller-logic-fault" in debug
+    assert "blocking_uncertainty" in diagnosis
+    assert "smallest_next_step" in diagnosis
+
+
+def test_release_reference_matches_current_bundle_and_license() -> None:
+    body = (skill_dir("torii-report") / "references" / "release-project.md").read_text(encoding="utf-8")
+    assert "MIT License" in body
+    for name in EXPECTED_REFERENCES:
+        assert f"`{name}`" in body
+    assert "PolyForm" not in body
+    assert "main bundled skill name remains" not in body

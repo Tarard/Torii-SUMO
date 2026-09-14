@@ -1,40 +1,43 @@
-# SUMO Skill Integration
+# Torii Skill Integration
 
-Torii is the execution actuator for `simulation-helper-skill-for-eclipse-sumo`. The skill should decide the workflow route and evidence boundary; Torii MCP tools should run bounded local checks and return structured observations.
+Torii bundles four topic skills with one shared CLI/MCP execution layer. The skills decide how to reason about a task and which evidence matters. Torii tools execute bounded operations and return structured observations.
 
-## Codex Plugin Boundary
+## Skill Map
 
-When installed as a plugin, `Torii` provides skills and MCP tools together.
+| Skill | Owns |
+|---|---|
+| `torii-build` | OSM and drawing-based network construction, roads, lanes, junctions, signal-device structure, map/source review |
+| `torii-calibrate` | detector/count binding, demand reconstruction, fixed-network calibration, digital-twin replay |
+| `torii-simulate` | environment checks, experiment planning, workflow execution, controllers, debugging, code and mechanism diagnosis |
+| `torii-report` | completed-result interpretation, traffic-control reports, claim boundaries, field lessons, release review |
 
-- The skill is the reasoning layer: it classifies the request, loads minimal references, diagnoses bad metrics as feedback, and bounds claims.
-- The MCP server is the execution layer: it returns structured observations from local SUMO checks.
+The old `simulation-helper-skill-for-eclipse-sumo` bundle is retired. Do not create another top-level copy of these skills.
 
-Do not describe this as skills being inside MCP. The Codex plugin bundles both components.
+## Product and Skill Boundaries
 
-## Recommended Routing
+The product still uses the three public capability groups **Build**, **Calibrate**, and **Simulate**. `torii-report` is a reasoning/reporting skill that works across completed outputs from those capabilities; it is not a fourth product capability.
 
-- unknown environment => `sumo_preflight`
-- baseline/variant configs => `sumo_config_pair_preflight` before running/comparing
-- single config => `sumo_run_config` then inspect declared outputs
-- baseline/variant metrics => `sumo_compare_outputs` before interpreting duration/waiting/time loss/throughput/delay
-- OSM cleanup => resolve a place to a bbox, write the seven-field request, and run `torii workflow sumo_osm_cleanup_workflow <request.json> --json`. This workflow is CLI-only. Use `standard` with traffic layers. Use `reference_matched` with a reference `.net.xml`; treat its output as audit evidence and do not claim an automatic repair.
-- bbox-only low-level OSM network construction => `sumo_osm_build_network`, then inspect tiled Overpass, retry, deduplication, netconvert status, and artifact paths
-- OSM/netconvert TLS cleanup review => `sumo_tls_audit`, then treat Google Maps review as a hard gate for unresolved TLS candidates; regional map links or official sources can supplement the review, with current vs historical map scope still recorded
-- redundant TLS cleanup review variant => `sumo_network_tls_aggregation_variant`, using a `sumo_tls_audit` JSON report to produce a separate `*_tls_aggregated.net.xml` review network with one TLS representative per physical cluster; compare this artifact in Netedit and Google Maps before adopting it
-- overlapping top-level junction audit => `sumo_network_overlapping_junction_audit` before destructive junction edits, then inspect co-planar vehicle junctions, pedestrian/bike layers, TLS nodes, and reference-join support while ignoring valid internal crossing/walkingarea layers
-- reference-matched junction cleanup => `sumo_network_reference_join_audit` on the candidate `reference_visual_detail` network, then inspect source-node matches, internal edges, approach counts, map-review URLs, and routeability/topology gates before adopting any aggregated variant
-- reference-matched high-road cleanup => `sumo_network_reference_hierarchy_audit` on the candidate `reference_visual_detail` network, then inspect over-split corridors, out-of-scope high roads, hierarchy mismatches, and link/slip-lane cases before any merge, prune, or downgrade
-- reference-matched scope cleanup => `sumo_network_reference_scope_audit` on the candidate `reference_visual_detail` network, then inspect type-count deltas and short detail-fragment candidates before any pruning
-- junction aggregation review variant => `sumo_network_junction_aggregation_variant`, using topology, reference-join, or overlapping-junction audit reports to produce a separate `*_junction_aggregated.net.xml` review network without overwriting the source network; overlapping groups require reference or human confirmation before join
-- scope pruning review variant => `sumo_network_scope_pruning_variant`, using a reference-scope audit report to produce a separate `*_scope_pruned.net.xml` review network without overwriting the source network
-- teacher-guided single-junction repair probe => `sumo_network_teacher_guided_junction_variant`, using a reference `.net.xml`, candidate plain `.nod/.edg/.con/.typ` files, an explicit edge map, and optional crossing overrides to replay the teacher target internal subgraph by default; inspect parity deltas and Netedit connection mode before adoption
-- named-road connectivity check => `sumo_network_routeability_probe`, then run or inspect the generated `.sumocfg`
-- evidence handoff => `sumo_collect_evidence`
+Use the most specific topic skill for the user's current task. Handoff is expected when the task changes. For example, road reconstruction may finish in `torii-build`, count fitting then moves to `torii-calibrate`, a controller experiment moves to `torii-simulate`, and the completed comparison moves to `torii-report`.
 
-## Claim Boundaries
+## Execution Boundary
 
-- preflight construction check only
-- minimal smoke diagnostic demo only
-- output comparison remains diagnostic unless the skill has separate evidence for matched route, demand, seed, horizon, controller identity, output interval, completion criteria
-- GUI/screenshot evidence not part of MVP and must not be used as performance evidence
-- Google Maps TLS review is a hard current-network gate, but the latest public map must not override a historical modeling target without time-aligned evidence
+For executable work, read:
+
+```powershell
+torii workflows --json
+torii workflows --scenario <ID> --json
+```
+
+The workflow catalog is the executable mapping. Each entry exposes its owning skill and a plugin-relative reference path. The host model selects from user intent and supplied evidence. Missing inputs remain `needs_input`; unknown scenarios or arguments remain `blocked`.
+
+MCP and CLI output is observation, not final interpretation. Preserve child decisions such as `review_required` and `blocked`.
+
+## Evidence Boundary
+
+- Network load does not prove physical network correctness.
+- Count fit does not uniquely identify OD demand.
+- A successful simulation does not prove controller superiority.
+- A completed-result review does not authorize a rerun.
+- GUI or screenshot inspection is supporting review evidence, not performance evidence by itself.
+
+Keep source authority, target year, comparison pairing, completion status, and non-identifiability explicit in the skill that owns the task.
