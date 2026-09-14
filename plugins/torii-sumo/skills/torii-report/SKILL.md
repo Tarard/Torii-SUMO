@@ -18,6 +18,7 @@ Interpret completed evidence. This skill owns result comparison, traffic-control
 
 ## Rules
 
+- Do not rerun experiments unless the user explicitly asks for another run.
 - Use completed artifacts as the reporting basis and state when evidence is incomplete.
 - Check completion and comparison fairness before ranking controller metrics.
 - Distinguish traffic outcomes from controller rewards, pressure, losses, estimator scores, or internal objectives.
