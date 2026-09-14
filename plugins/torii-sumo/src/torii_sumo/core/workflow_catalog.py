@@ -126,8 +126,8 @@ def get_workflow_catalog(scenario_id=None):
     return dict(schema='torii.workflow-catalog/v1', status='pass', selection_provider='host_llm', scenarios=rows,
         selection_fields=['user_request', 'scenario_id', 'reason', 'arguments'],
         instructions='Choose from user intent and supplied evidence. Preserve target year and primary source. '
-                     'A check or stage is not a complete workflow. Read the owning topic skill and reference. '
-                     'Do not invent missing inputs or claim guidance-only entries were executed.')
+                     'A check or stage is not a complete workflow. Skill references are optional supporting material; '
+                     'consult them when useful. Do not invent missing inputs or claim guidance-only entries were executed.')
 
 
 def run_selected_workflow(selection, *, execute=False):
@@ -153,13 +153,13 @@ def run_selected_workflow(selection, *, execute=False):
     except (TypeError, ValueError) as error:
         return {**report, 'error': f'arguments must contain finite JSON values: {error}'}
     entry = SCENARIOS[identifier]
-    report.update(selection=selection, scenario_id=identifier, kind=entry['kind'], skill=entry['skill'],
-                  entrypoint=entry['entrypoint'], reference=_reference_path(entry))
+    report.update(selection=selection, scenario_id=identifier, kind=entry['kind'], skill=entry['skill'], entrypoint=entry['entrypoint'],
+                  reference=_reference_path(entry))
     if entry['kind'] == 'guidance':
         if arguments:
             return {**report, 'error': 'Guidance entries do not accept callable arguments.'}
         return {**report, 'status': 'review_required', 'execution_status': 'guidance_only',
-                'next_action': 'The host model should read the owning topic skill reference and perform the requested reasoning or intake.'}
+                'next_action': 'Use the associated skill or reference if it is useful for the requested reasoning.'}
     try:
         function = _resolve(entry)
         signature, hints = _parameters(function)
