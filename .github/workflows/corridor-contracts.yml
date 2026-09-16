@@ -3,11 +3,10 @@ name: Corridor Contract Freeze
 on:
   push:
     branches:
-      - html
-      - "codex/**"
+      - main
   pull_request:
     branches:
-      - html
+      - main
 
 permissions:
   contents: read
