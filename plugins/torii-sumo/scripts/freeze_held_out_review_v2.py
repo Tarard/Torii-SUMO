@@ -27,7 +27,7 @@ from torii_sumo.corridor.held_out_review_v2_preregistration import (  # noqa: E4
 
 
 BENCHMARK_DIR = REPOSITORY_ROOT / "benchmarks" / "corridor_human_modeling_v1"
-SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas" / "research" / "corridor"
 
 
 def main() -> None:
